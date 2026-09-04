@@ -104,6 +104,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
   const [accPw, setAccPw] = useState("");
   const [accBlog, setAccBlog] = useState("");
   const [accBusy, setAccBusy] = useState(false);
+  const [showPw, setShowPw] = useState(false);  // 👁️ 비번 미리보기
   const naverAccs = accounts.filter(a => a.platform === "naver");
   async function connectAccount() {
     if (!accId.trim() || !accPw.trim()) { showToast("아이디·비밀번호를 입력하세요", "error"); return; }
@@ -217,7 +218,10 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
                 </div>
               )}
               <input placeholder="네이버 아이디" value={accId} onChange={e => setAccId(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: `1px solid ${C.line2}`, borderRadius: 8, background: C.panel, color: C.ink, fontSize: 13, fontFamily: "inherit", marginBottom: 8, boxSizing: "border-box" }} />
-              <input type="password" placeholder="네이버 비밀번호" value={accPw} onChange={e => setAccPw(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: `1px solid ${C.line2}`, borderRadius: 8, background: C.panel, color: C.ink, fontSize: 13, fontFamily: "inherit", marginBottom: 8, boxSizing: "border-box" }} />
+              <div style={{ position: "relative", marginBottom: 8 }}>
+                <input type={showPw ? "text" : "password"} placeholder="네이버 비밀번호" value={accPw} onChange={e => setAccPw(e.target.value)} style={{ width: "100%", padding: "10px 40px 10px 12px", border: `1px solid ${C.line2}`, borderRadius: 8, background: C.panel, color: C.ink, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" }} />
+                <span onClick={() => setShowPw(v => !v)} style={{ position: "absolute", right: 11, top: "50%", transform: "translateY(-50%)", cursor: "pointer", fontSize: 16, userSelect: "none" }}>{showPw ? "🙈" : "👁️"}</span>
+              </div>
               <input placeholder="블로그 주소/이름 (선택)" value={accBlog} onChange={e => setAccBlog(e.target.value)} style={{ width: "100%", padding: "10px 12px", border: `1px solid ${C.line2}`, borderRadius: 8, background: C.panel, color: C.ink, fontSize: 13, fontFamily: "inherit", marginBottom: 12, boxSizing: "border-box" }} />
               <button onClick={connectAccount} disabled={accBusy || !botOnline} style={{ width: "100%", padding: 13, borderRadius: 11, border: "none", background: accBusy || !botOnline ? C.line2 : `linear-gradient(135deg,${C.accent},${C.accent2})`, color: "#fff", fontSize: 14, fontWeight: 900, cursor: accBusy || !botOnline ? "default" : "pointer", fontFamily: "inherit" }}>{accBusy ? "연결 중…" : "계정 연결"}</button>
             </div>
