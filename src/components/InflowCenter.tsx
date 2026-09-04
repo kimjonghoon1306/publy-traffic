@@ -1270,8 +1270,12 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                 );
               })}
             </div>
-            <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 7, lineHeight: 1.5 }}>등급·기간은 관리자가 정해요. 무료 없이 <b style={{ color: C.accent }}>대여 기간 동안만</b> 사용돼요.</div>
-            <button onClick={() => { try { window.open("https://open.kakao.com/o/s5wAJ1Li", "_blank"); } catch {} }} style={{ width: "100%", marginTop: 9, padding: "11px", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 13, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>💬 연장 · 업그레이드 문의 (카카오톡)</button>
+            {/* 결제·사용 문의 안내 박스 — 버튼만 있으면 뭔지 모르니 설명을 눈에 띄게 */}
+            <div style={{ marginTop: 10, padding: "11px 13px", borderRadius: 11, background: C.glow, border: `1.5px solid ${C.accent}` }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: C.accent, marginBottom: 3 }}>💳 결제 · 사용 문의</div>
+              <div style={{ fontSize: 11.5, color: C.sub, fontWeight: 600, lineHeight: 1.55 }}>이 프로그램은 <b style={{ color: C.ink }}>무료 없이 대여 기간</b> 동안만 쓸 수 있어요. <b style={{ color: C.ink }}>처음 사용·기간 연장·등급 업그레이드·한도 상향</b>이 필요하면 아래로 문의하세요. 관리자가 확인 후 열어드려요.</div>
+              <button onClick={() => { try { window.open("https://open.kakao.com/o/s5wAJ1Li", "_blank"); } catch {} }} style={{ width: "100%", marginTop: 9, padding: "12px", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 13.5, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>💬 카카오톡으로 결제·사용 문의하기</button>
+            </div>
           </div>
 
           {/* 기록 그래프 + 기간 설정 (주단위·기간별 과거 데이터) */}
