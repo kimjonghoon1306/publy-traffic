@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { saveSession, sessionExists, removeSession, crawlBlogIds, crawlBuddyPosts, analyzeBuddyKeywords, addNeighbors, NeighborResult, donePath, engageBlogs, EngageResult, engageDonePath, crawlMyPosts, crawlPublicPosts, replyToComments, crawlPlaceReviews, generatePlaceReviewReply, replyToPlaceReviews, crawlBlogStats, checkSelectedBlogExposure, pumasiEngage, crawlPumasiReport, pumasiPreview, updatePostTitle, checkProxy, analyzeBlogAuthenticity, fetchPostBody, crawlPostViews, sendWebmail, sendBlogComments, crawlPlaces, crawlPlaceBloggers, crawlPlaceDetail, crawlPlaceByUrl, suggestPlaceKeywords, parsePlaceUrl, resolvePlaceUrl, searchInflow, diagnosePlace, diagnoseStore, measurePlaceRank, measureBlogRank, collectPlaceReviews, InflowTarget } from "./naver";
-import { checkNeighborQuota, incrementNeighborQuota, getNeighborDailyUsage, incrementEngageQuota, getEngageDailyUsage, getUserPlan, checkMembershipAccess, NEIGHBOR_DAILY_LIMIT, ENGAGE_DAILY_LIMIT, REPLY_DAILY_LIMIT, getReplyDailyUsage, incrementReplyQuota, PLACE_REPLY_DAILY_LIMIT, getPlaceReplyDailyUsage, incrementPlaceReplyQuota, addNeighborHistory, addReplyHistory, addPlaceReplyHistory, addBlogscoreHistory, incrementPumasiQuota, TITLE_EDIT_DAILY_LIMIT, getTitleEditDailyUsage, incrementTitleEditQuota, getProxyForAccount, supabase, getOutreachSender, getOutreachSentToday, addOutreachLog, checkPlaceDetailQuota, incrementPlaceDetailQuota, checkInflowQuota, incrementInflowQuota, incrementInflowStat, inflowReviewAllowed, verifyInflowSession, verifyAdminSession, consumeInflowQuota, INFLOW_DAILY_LIMIT } from "./supabase";
+import { checkNeighborQuota, incrementNeighborQuota, getNeighborDailyUsage, incrementEngageQuota, getEngageDailyUsage, getUserPlan, checkMembershipAccess, NEIGHBOR_DAILY_LIMIT, ENGAGE_DAILY_LIMIT, REPLY_DAILY_LIMIT, getReplyDailyUsage, incrementReplyQuota, PLACE_REPLY_DAILY_LIMIT, getPlaceReplyDailyUsage, incrementPlaceReplyQuota, addNeighborHistory, addReplyHistory, addPlaceReplyHistory, addBlogscoreHistory, incrementPumasiQuota, TITLE_EDIT_DAILY_LIMIT, getTitleEditDailyUsage, incrementTitleEditQuota, getProxyForAccount, supabase, getOutreachSender, getOutreachSentToday, addOutreachLog, checkPlaceDetailQuota, incrementPlaceDetailQuota, checkInflowQuota, incrementInflowQuota, incrementInflowStat, inflowReviewAllowed, verifyInflowSession, verifyAdminSession, consumeInflowQuota, INFLOW_DAILY_LIMIT, getTrafficLicenseForTool } from "./supabase";
 import nodemailer from "nodemailer";
 import fs from "fs";
 import { acquireAccountLock } from "./account-lock";
@@ -1141,6 +1141,14 @@ app.post("/api/inflow", async (req, res) => {
   const isVerifiedAdmin = adminToken ? await verifyAdminSession(adminToken) : false;
   if (!isVerifiedAdmin && (!userId || !await verifyInflowSession(memberToken, userId))) return res.status(401).json({ error: "회원 세션이 올바르지 않습니다" });
   const inflowPlan = isVerifiedAdmin ? "admin" : (userId ? await getUserPlan(userId) : "free");
+  // 🔐 트래픽 라이선스 서버검증 — 회원(비관리자)은 승인된 대상만·승인된 행동만(로컬 요청 조작 우회 차단).
+  let licActionSet: Set<string> | null = null;
+  if (!isVerifiedAdmin && userId) {
+    const lic = await getTrafficLicenseForTool(userId, String(targetType));
+    if (!lic || !lic.ok) return res.status(403).json({ error: "승인되지 않았거나 만료된 트래픽 대상입니다. 관리자에게 문의하세요." });
+    licActionSet = new Set(lic.actions);
+  }
+  const licAllow = (k: string) => isVerifiedAdmin || !licActionSet || licActionSet.has(k);
   sseSetup(res);
   let releaseAccount = () => {};
   try {
@@ -1236,8 +1244,8 @@ app.post("/api/inflow", async (req, res) => {
       rounds: n,
       device: (device === "pc" || device === "mix") ? device : "mobile",
       intervalSec: [tmin, tmax],
-      actions: { save: doSave === "true", like: doLike === "true", share: doShare === "true", directions: doDir === "true", call: doCall === "true", booking: doBook === "true", talk: doTalk === "true", wish: doWish === "true", cart: doCart === "true", optionView: doOption === "true", review: doReview === "true" && reviewOk, reviewText: reviewText || "" },
-      fullFunnel: fullFunnel === "true",
+      actions: { save: doSave === "true" && licAllow("save"), like: doLike === "true" && licAllow("like"), share: doShare === "true" && licAllow("share"), directions: doDir === "true" && licAllow("dir"), call: doCall === "true" && licAllow("call"), booking: doBook === "true" && licAllow("book"), talk: doTalk === "true" && licAllow("talk"), wish: doWish === "true" && licAllow("wish"), cart: doCart === "true" && licAllow("cart"), optionView: doOption === "true" && licAllow("option"), review: doReview === "true" && reviewOk && licAllow("review"), reviewText: reviewText || "" },
+      fullFunnel: fullFunnel === "true" && licAllow("funnel"),
       spreadHours: spreadHours ? Math.max(0, parseFloat(spreadHours)) : 0,
       visible: visible === "true",
       actionRate: actionRate ? Math.max(0, Math.min(1, parseFloat(actionRate))) : 1,

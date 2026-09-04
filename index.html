@@ -36,12 +36,16 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       input, textarea, select { -webkit-user-select: text !important; user-select: text !important; }
-      body { overflow: hidden; background: #02040a; }
-      /* iOS safe area */
-      body { padding-top: env(safe-area-inset-top); }
+      /* 최초 라이트 배경(검은 화면 방지) — 앱 열자마자 밝게 + 로딩 스피너 */
+      body { overflow: hidden; background: #f3eef2; padding-top: env(safe-area-inset-top); }
+      #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #f3eef2; z-index: 1; }
+      #boot .s { width: 42px; height: 42px; border-radius: 50%; border: 3px solid rgba(109,40,217,.2); border-top-color: #6d28d9; animation: bspin .8s linear infinite; }
+      @keyframes bspin { to { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
+    <!-- React 마운트 전 즉시 보이는 로딩(검은 화면 대신). 앱 뜨면 root가 덮어써 사라짐 -->
+    <div id="boot"><div class="s"></div></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>

@@ -353,6 +353,21 @@ export async function getUserPlan(userId: string): Promise<string> {
   return (await checkMembershipAccess(userId)).plan;
 }
 
+// 🔐 트래픽 라이선스 서버검증 — 회원이 로컬요청 조작해도 미승인 대상/잠긴 행동 우회 못하게.
+//   userId→email(publy_users)→tool_licenses(customer,tool). 만료·status·행동·등급을 서버가 판단.
+export async function getTrafficLicenseForTool(userId: string, tool: string): Promise<{ ok: boolean; plan: string; actions: string[]; bonus: number } | null> {
+  try {
+    const { data: u } = await supabase.from("publy_users").select("email").eq("id", userId).maybeSingle();
+    const email = (u as any)?.email;
+    if (!email) return null;
+    const { data } = await supabase.from("tool_licenses").select("plan,allowed_actions,bonus_quota,expire_at,status").eq("customer", email).eq("tool", tool).maybeSingle();
+    if (!data) return { ok: false, plan: "", actions: [], bonus: 0 };
+    const exp = (data as any).expire_at ? new Date((data as any).expire_at).getTime() : 0;
+    const ok = ((data as any).status === "active") && exp > Date.now();
+    return { ok, plan: (data as any).plan || "basic", actions: Array.isArray((data as any).allowed_actions) ? (data as any).allowed_actions : [], bonus: (data as any).bonus_quota || 0 };
+  } catch { return null; }
+}
+
 /* ── 관리자 블로그 검색 API 키 조회 ── */
 export async function getAdminBlogSearchKeys(): Promise<{ clientId: string; clientSecret: string } | null> {
   try {
