@@ -998,6 +998,106 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     </div>
   );
 
+  // 📚 글 불러오기 팝업(글주소 직접 / 로그인해 내 글) — 관리자·회원 공용 렌더 변수
+  const postPopupUI = (<>
+    {postPopup === "manual" && (
+      <div onClick={() => setPostPopup(null)} style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 460, background: C.panel, borderRadius: 18, border: `2px solid ${C.accent}`, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.45)" }}>
+          <div style={{ padding: "16px 18px", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff" }}>
+            <div style={{ fontSize: 16, fontWeight: 900 }}>📝 글 주소 직접 넣기</div>
+            <div style={{ fontSize: 12, fontWeight: 600, opacity: .92, marginTop: 2 }}>로그인 없이 · 원하는 글 링크를 넣어 그 글에 트래픽을 걸어요</div>
+          </div>
+          <div style={{ padding: 18 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, lineHeight: 1.6, marginBottom: 9, background: "rgba(16,133,107,.08)", border: "1.5px solid #16a34a", borderRadius: 10, padding: "9px 12px" }}>
+              <b style={{ color: "#16a34a" }}>✅ 로그인 필요 없어요.</b> 글 주소만 있으면 방문·체류·읽기·공유가 돼요. <b>한 줄에 하나씩</b> 여러 개 넣으면 방문마다 번갈아 방문해요(로테이션).
+            </div>
+            <textarea value={manualPostUrls} onChange={(e) => setManualPostUrls(e.target.value)} rows={5}
+              placeholder={"blog.naver.com/아이디/글번호\nblog.naver.com/아이디/글번호2\n... (한 줄에 하나씩)"}
+              style={{ ...inputStyle, resize: "vertical", fontSize: 13, lineHeight: 1.6 }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button onClick={() => setPostPopup(null)} style={{ flex: 1, padding: "12px", borderRadius: 11, border: `1.5px solid ${C.line2}`, background: C.panel2, color: C.sub, fontSize: 13.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>취소</button>
+              <button onClick={() => { const urls = manualPostUrls.split(/[\n,]/).map((s) => s.trim()).filter((s) => parseBlogUrl(s)); if (!urls.length) { toast("올바른 블로그 글 주소를 넣어주세요", "error"); return; } applyPostsAsTargets(urls); }} style={{ flex: 2, padding: "12px", borderRadius: 11, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 13.5, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>🎯 이 글들을 유입 대상으로</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    {postPopup === "login" && (
+      <div onClick={() => setPostPopup(null)} style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto", background: C.panel, borderRadius: 18, border: "2px solid #d97706", boxShadow: "0 24px 60px rgba(0,0,0,.45)" }}>
+          <div style={{ padding: "16px 18px", background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#fff" }}>
+            <div style={{ fontSize: 16, fontWeight: 900 }}>🔐 로그인해서 내 글 불러오기</div>
+            <div style={{ fontSize: 12, fontWeight: 600, opacity: .92, marginTop: 2 }}>연결한 계정으로 내 글 목록을 불러와 골라서 트래픽을 걸어요</div>
+          </div>
+          <div style={{ padding: 18 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, lineHeight: 1.7, marginBottom: 11, background: "rgba(245,158,11,.10)", border: "1.5px solid #d97706", borderRadius: 10, padding: "10px 13px" }}>
+              <b style={{ color: "#d97706" }}>🔑 로그인이 필요해요.</b> 내 글 목록은 로그인해야 볼 수 있어요.<br />
+              <b>① 오른쪽 위 ‘🔗 계정’</b>에서 네이버 아이디·비밀번호로 연결한 뒤<br />
+              <b>② 여기서 그 계정을 선택</b>하면 목록이 나와요. <span style={{ color: C.sub }}>(한 번 연결하면 다음부턴 비번 없이 바로)</span>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: C.sub, marginBottom: 6 }}>불러올 계정 (계정 연결한 것)</div>
+            {accounts.length === 0 ? (
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#dc2626", padding: "11px 13px", borderRadius: 10, background: "rgba(220,38,38,.06)", border: "1px solid rgba(220,38,38,.3)", lineHeight: 1.6 }}>⚠️ 아직 연결된 네이버 계정이 없어요.<br /><b>오른쪽 위 ‘🔗 계정’으로 연결</b>한 뒤 다시 오세요.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {accounts.map((a) => { const on = popupAccountId === a.id; return (
+                  <button key={a.id} onClick={() => setPopupAccountId(a.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 10, background: on ? C.glow : C.panel2, border: `1.5px solid ${on ? C.accent : C.line}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: on ? C.accent : C.line2, flexShrink: 0 }} />
+                    <span style={{ fontSize: 13.5, fontWeight: 800, color: on ? C.accent : C.ink }}>{on ? "✓ " : ""}{a.username}</span>
+                    {a.blog_name && <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· {a.blog_name}</span>}
+                  </button>
+                ); })}
+              </div>
+            )}
+            <div style={{ marginTop: 12, padding: "11px 13px", borderRadius: 11, background: C.panel2, border: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: C.sub, marginBottom: 7 }}>📅 어느 기간 글을 불러올까요</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: postDateMode === "all" ? 0 : 9 }}>
+                {([["all", "전체"], ["recent", "최근 N일"], ["range", "날짜 지정"]] as const).map(([k, lb]) => (
+                  <button key={k} onClick={() => setPostDateMode(k)} style={{ flex: 1, padding: "8px 6px", borderRadius: 9, border: `1.5px solid ${postDateMode === k ? C.accent : C.line2}`, background: postDateMode === k ? C.glow : C.panel, color: postDateMode === k ? C.accent : C.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{postDateMode === k ? "✓ " : ""}{lb}</button>
+                ))}
+              </div>
+              {postDateMode === "recent" && (
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[7, 30, 90, 180].map((d) => (
+                    <button key={d} onClick={() => setPostRecentDays(d)} style={{ flex: 1, padding: "7px 4px", borderRadius: 8, border: `1.5px solid ${postRecentDays === d ? C.accent : C.line2}`, background: postRecentDays === d ? C.glow : C.panel, color: postRecentDays === d ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{d}일</button>
+                  ))}
+                </div>
+              )}
+              {postDateMode === "range" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <input type="date" value={postFrom} max={postTo || undefined} onChange={(e) => setPostFrom(e.target.value)} style={{ ...inputStyle, flex: 1, padding: "8px 10px", fontSize: 12.5 }} />
+                  <span style={{ fontSize: 12, fontWeight: 800, color: C.sub }}>~</span>
+                  <input type="date" value={postTo} min={postFrom || undefined} onChange={(e) => setPostTo(e.target.value)} style={{ ...inputStyle, flex: 1, padding: "8px 10px", fontSize: 12.5 }} />
+                </div>
+              )}
+            </div>
+            <button onClick={() => collectMyPosts(popupAccountId)} disabled={!popupAccountId || myPostsLoading} style={{ width: "100%", marginTop: 11, padding: "12px", borderRadius: 11, border: "none", background: (popupAccountId && !myPostsLoading) ? "linear-gradient(135deg,#f59e0b,#d97706)" : C.line2, color: "#fff", fontSize: 13.5, fontWeight: 900, cursor: (popupAccountId && !myPostsLoading) ? "pointer" : "default", fontFamily: "inherit" }}>{myPostsLoading ? "불러오는 중…" : "📚 내 글 불러오기"}</button>
+            {myPosts.length > 0 && (<div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                <button onClick={selectAllPosts} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.accent}`, background: C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>✅ 전체 선택</button>
+                <button onClick={clearSelectedPosts} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line2}`, background: C.panel2, color: C.sub, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>◻️ 전체 해제</button>
+                <span style={{ fontSize: 12, fontWeight: 800, color: C.ink }}>선택 {selectedPosts.size}/{myPosts.length}개</span>
+              </div>
+              <div style={{ maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 5 }}>
+                {myPosts.map((p) => { const on = selectedPosts.has(p.url); return (
+                  <label key={p.url} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 9, background: on ? C.glow : C.panel2, border: `1px solid ${on ? C.accent : C.line}`, cursor: "pointer" }}>
+                    <input type="checkbox" checked={on} onChange={() => togglePost(p.url)} style={{ width: 16, height: 16, accentColor: C.accent, flexShrink: 0 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title || "(제목 없음)"}</div>
+                      {p.date && <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600 }}>{p.date}</div>}
+                    </div>
+                  </label>
+                ); })}
+              </div>
+              <button onClick={applySelectedPostsAsTargets} disabled={!selectedPosts.size} style={{ width: "100%", marginTop: 10, padding: "12px", borderRadius: 11, border: "none", background: selectedPosts.size ? `linear-gradient(135deg,${C.accent},${C.cyan})` : C.line2, color: "#fff", fontSize: 13.5, fontWeight: 900, cursor: selectedPosts.size ? "pointer" : "default", fontFamily: "inherit" }}>🎯 선택한 {selectedPosts.size}개 글을 유입 대상으로</button>
+            </div>)}
+            <button onClick={() => setPostPopup(null)} style={{ width: "100%", marginTop: 8, padding: "10px", borderRadius: 11, border: `1.5px solid ${C.line2}`, background: C.panel2, color: C.sub, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>);
+
   // ═══════════════════════════════════════════════════════════════════
   // 🚦 회원 트래픽 앱 = 목업 화면(퍼블리_트래픽_목업.html)만.
   //    관리자 컨트롤타워에서 승인한 것만 보임: 대상(visibleFeats)·행동(actionAllowed)·등급/한도·데이터모드(관리자지정, 화면엔 안 보임).
@@ -1056,8 +1156,30 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
             <div style={mCard}>
               <h3 style={mH}><span style={mNum}>1</span> 대상 · 키워드</h3>
-              <div style={mFl}>{targetType === "place" ? "내 플레이스 주소" : targetType === "store" ? "내 상품 주소" : "내 블로그 글 주소"}</div>
+              <div style={mFl}>{targetType === "place" ? "내 플레이스 주소" : targetType === "store" ? "내 상품 주소" : "내 블로그 글 주소 / 아이디"}</div>
               <input style={mInput} value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={addrPlaceholder} />
+              {/* 블로그: 글 불러오기(글주소 직접 / 로그인해서 내 글) */}
+              {targetType === "blog" && (
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <button onClick={() => setPostPopup("manual")} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1.5px solid ${C.accent}`, background: C.panel, color: C.accent, fontSize: 11.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📝 글주소 직접</button>
+                  <button onClick={() => setPostPopup("login")} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1.5px solid #d97706`, background: C.panel, color: "#d97706", fontSize: 11.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📚 로그인해 내 글</button>
+                </div>
+              )}
+              {/* 💾 대상 저장(설정됐는지 확인용) + 저장 목록 골라쓰기 */}
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                <input style={{ ...mInput, flex: 1 }} value={savingName} onChange={(e) => setSavingName(e.target.value)} placeholder={targetType === "place" ? "이 매장 이름(예: 강남점)" : targetType === "store" ? "이 상품 이름" : "이 블로그 이름"} />
+                <button onClick={saveCurrentTarget} style={{ padding: "8px 12px", borderRadius: 8, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>💾 저장</button>
+              </div>
+              {savedTargets.filter((t) => t.type === targetType).length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+                  {savedTargets.filter((t) => t.type === targetType).map((t) => (
+                    <span key={t.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px", borderRadius: 7, border: `1px solid ${C.line2}`, background: C.panel, fontSize: 11, fontWeight: 700 }}>
+                      <span onClick={() => pickSavedTarget(t)} style={{ cursor: "pointer", color: C.accent }}>{t.name}</span>
+                      <span onClick={() => removeSavedTarget(t.id)} style={{ cursor: "pointer", color: C.sub }}>✕</span>
+                    </span>
+                  ))}
+                </div>
+              )}
               <div style={mFl}>검색 키워드 (여러 개는 , 로 구분)</div>
               <input style={mInput} value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="예: 횡성시장맛집, 횡성한우" />
             </div>
@@ -1082,13 +1204,23 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               {!anyFree && !anyLogin && <div style={{ fontSize: 11.5, color: C.sub, fontWeight: 600, marginTop: 6 }}>승인된 행동이 없어요(체류만).</div>}
             </div>
             <div style={mCard}>
-              <h3 style={mH}><span style={mNum}>4</span> 현재 순위</h3>
-              <div style={mFl}>추적 키워드</div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: keywords ? C.ink : C.sub }}>{keywords.split(",")[0]?.trim() || "키워드를 입력하세요"}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                <div style={{ fontSize: 22, fontWeight: 900, color: C.accent }}>{rankText} <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>현재</span></div>
-                {targetType !== "store" && <button onClick={runMeasureRank} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📍 순위 측정</button>}
-              </div>
+              {targetType === "place" ? (<>
+                {/* 플레이스만 순위 측정 — 블로그/스토어는 순위 개념이 없어 오류 방지로 제외 */}
+                <h3 style={mH}><span style={mNum}>4</span> 현재 순위</h3>
+                <div style={mFl}>추적 키워드</div>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: keywords ? C.ink : C.sub }}>{keywords.split(",")[0]?.trim() || "키워드를 입력하세요"}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: C.accent }}>{rankText} <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>현재</span></div>
+                  <button onClick={runMeasureRank} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📍 순위 측정</button>
+                </div>
+              </>) : (<>
+                <h3 style={mH}><span style={mNum}>4</span> 안내</h3>
+                <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, marginTop: 4 }}>
+                  {targetType === "blog"
+                    ? "블로그는 순위 측정을 쓰지 않아요. 키워드 검색 유입으로 조회수·체류·공감·이웃을 쌓아요."
+                    : "스마트스토어는 순위 자동측정을 지원하지 않아요. 검색 유입으로 조회·찜을 쌓아요."}
+                </div>
+              </>)}
             </div>
           </div>
 
@@ -1135,6 +1267,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             </div>
           </div>
         </>)}
+
+        {postPopupUI}
 
         {/* 🔍 로그 크게 보기 모달 */}
         {logZoom && (
@@ -1199,8 +1333,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
         </div>
       )}
 
-      {/* ═══ 📝 팝업 A — 글 주소 직접 넣기(로그인 불필요) ═══ */}
-      {postPopup === "manual" && (
+      {postPopupUI}
+      {/* ═══ 📝 (구) 팝업 A — 공통 변수 postPopupUI로 이동됨(관리자·회원 공용). 아래는 미사용 ═══ */}
+      {false && postPopup === "manual" && (
         <div onClick={() => setPostPopup(null)} style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 460, background: C.panel, borderRadius: 18, border: `2px solid ${C.accent}`, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.45)" }}>
             <div style={{ padding: "16px 18px", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff" }}>
@@ -1223,8 +1358,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
         </div>
       )}
 
-      {/* ═══ 🔐 팝업 B — 로그인해서 내 글 불러오기 ═══ */}
-      {postPopup === "login" && (
+      {/* ═══ 🔐 (구) 팝업 B — 공통 변수 postPopupUI로 이동됨. 아래는 미사용 ═══ */}
+      {false && postPopup === "login" && (
         <div onClick={() => setPostPopup(null)} style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto", background: C.panel, borderRadius: 18, border: "2px solid #d97706", boxShadow: "0 24px 60px rgba(0,0,0,.45)" }}>
             <div style={{ padding: "16px 18px", background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#fff" }}>
