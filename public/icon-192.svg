@@ -1,43 +1,43 @@
-<svg width="192" height="192" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+<svg width="192" height="192" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0a1628"/>
-      <stop offset="100%" stop-color="#050a12"/>
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="55%" stop-color="#6d28d9"/>
+      <stop offset="100%" stop-color="#5b21b6"/>
     </linearGradient>
-    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00ff88"/>
-      <stop offset="100%" stop-color="#00cc66"/>
+    <linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ede9fe"/>
     </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="ds" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#3b0f80" flood-opacity="0.45"/>
     </filter>
   </defs>
 
-  <!-- 배경 -->
-  <rect width="192" height="192" rx="36" fill="url(#bg)"/>
+  <!-- 라운드 사각 배경 (보라 그라데이션) -->
+  <rect x="0" y="0" width="192" height="192" rx="224" fill="url(#bg)"/>
 
-  <!-- 배경 서클 장식 -->
-  <circle cx="96" cy="96" r="72" fill="none" stroke="#00ff88" stroke-width="1" opacity="0.12"/>
-  <circle cx="96" cy="96" r="55" fill="none" stroke="#00ff88" stroke-width="1" opacity="0.08"/>
+  <!-- 은은한 장식 링 -->
+  <circle cx="512" cy="452" r="352" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.10"/>
+  <circle cx="512" cy="452" r="270" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.07"/>
 
-  <!-- P 글자 - 굵고 현대적 -->
-  <text x="96" y="126" 
-    font-family="Arial Black, sans-serif" 
-    font-size="108" 
+  <!-- T 심볼 -->
+  <text x="512" y="612"
+    font-family="'Arial Black','Helvetica Neue',Arial,sans-serif"
+    font-size="560"
     font-weight="900"
-    fill="url(#g1)" 
+    fill="url(#tg)"
     text-anchor="middle"
-    filter="url(#glow)"
-    letter-spacing="-4">P</text>
+    filter="url(#ds)"
+    letter-spacing="-10">T</text>
 
-  <!-- 하단 브랜드명 -->
-  <rect x="44" y="148" width="104" height="20" rx="10" fill="#00ff88" opacity="0.12"/>
-  <text x="96" y="163"
-    font-family="Arial, sans-serif"
-    font-size="11"
-    font-weight="700"
-    fill="#00ff88"
+  <!-- 하단 브랜드명: 퍼블리 트래픽 -->
+  <rect x="212" y="742" width="600" height="132" rx="66" fill="#ffffff" opacity="0.14"/>
+  <text x="512" y="832"
+    font-family="'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif"
+    font-size="82"
+    font-weight="800"
+    fill="#ffffff"
     text-anchor="middle"
-    letter-spacing="4">PUBLY</text>
+    letter-spacing="2">퍼블리 트래픽</text>
 </svg>
