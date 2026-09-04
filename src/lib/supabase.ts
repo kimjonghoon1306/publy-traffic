@@ -2205,23 +2205,28 @@ export type ToolLicense = { tool: "place" | "blog" | "store"; expire_at: string 
 export async function getTrafficLicenses(customer: string): Promise<ToolLicense[]> {
   if (!customer) return [];
   try {
+    // 2초 폴링에 견디게 쿼리 최소화: select 1 + 서버시간 1(RPC 루프 제거).
+    //   시계 조작 방지 = 로컬시계 대신 DB 시간 기준으로 remain_sec 계산.
     const { data, error } = await supabase
       .from("tool_licenses")
       .select("tool,expire_at,data_saver")
       .eq("customer", customer)
       .in("tool", ["place", "blog", "store"]);
     if (error || !data) return [];
-    // 서버시간 기준 남은 초(시계 조작 방지) — 각 기능별로 RPC 조회
-    const out: ToolLicense[] = [];
-    for (const row of data as any[]) {
-      let remain = 0;
-      try {
-        const { data: st } = await supabase.rpc("license_status", { p_customer: customer, p_tool: row.tool });
-        const s = Array.isArray(st) ? st[0] : st;
-        remain = s?.remain_sec ? Number(s.remain_sec) : 0;
-      } catch {}
-      out.push({ tool: row.tool, expire_at: row.expire_at, data_saver: row.data_saver, remain_sec: remain });
-    }
-    return out;
+    const rows = data as any[];
+    if (!rows.length) return [];
+    // 서버시간 1회 조회(첫 기능 license_status의 server_now 재사용). 없으면 로컬시계 폴백.
+    let serverMs = 0;
+    try {
+      const { data: st } = await supabase.rpc("license_status", { p_customer: customer, p_tool: rows[0].tool });
+      const s = Array.isArray(st) ? st[0] : st;
+      if (s?.server_now) serverMs = new Date(s.server_now).getTime();
+    } catch {}
+    if (!serverMs) serverMs = Date.now();
+    return rows.map((row) => {
+      const exp = row.expire_at ? new Date(row.expire_at).getTime() : 0;
+      const remain = exp ? Math.max(0, Math.floor((exp - serverMs) / 1000)) : 0;
+      return { tool: row.tool, expire_at: row.expire_at, data_saver: row.data_saver, remain_sec: remain };
+    });
   } catch { return []; }
 }

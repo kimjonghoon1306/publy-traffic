@@ -824,6 +824,7 @@ export default function DashboardPage({user, onLogout, onAdminLogin, onThemeTogg
   //   승인+미만료(서버시간)만 allowedFeatures로 InflowCenter에 전달 → 승인된 탭만 보임.
   const [allowedFeatures, setAllowedFeatures] = useState<("place"|"blog"|"store")[]>([]);
   const [licenseSaver, setLicenseSaver] = useState<string>("");
+  const licSigRef = useRef<string>("");
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -831,15 +832,16 @@ export default function DashboardPage({user, onLogout, onAdminLogin, onThemeTogg
         const lics = await getTrafficLicenses(user.email);
         if (!alive) return;
         const ok = lics.filter(l => (l.remain_sec ?? 0) > 0);
-        setAllowedFeatures(ok.map(l => l.tool));
-        // 데이터 절약모드: 승인된 기능 중 가장 강한 절약값 적용(관리자 지정, 고객은 못 봄)
+        const feats = ok.map(l => l.tool);
         const order: Record<string,number> = { normal: 0, save: 1, ultra: 2 };
-        const strongest = ok.map(l => l.data_saver || "ultra").sort((a,b)=>(order[b]??2)-(order[a]??2))[0];
-        setLicenseSaver(strongest || "");
+        const strongest = ok.map(l => l.data_saver || "ultra").sort((a,b)=>(order[b]??2)-(order[a]??2))[0] || "";
+        // 값이 실제로 바뀐 경우에만 setState → 2초 폴링이어도 불필요 리렌더 없음
+        const sig = JSON.stringify([feats.slice().sort(), strongest]);
+        if (sig !== licSigRef.current) { licSigRef.current = sig; setAllowedFeatures(feats); setLicenseSaver(strongest); }
       } catch {}
     };
     void load();
-    const iv = window.setInterval(load, 180000); // 3분마다 재확인(연장·만료 반영)
+    const iv = window.setInterval(load, 2000); // 🔴 2초마다 재확인 — 관리자 승인/변경이 회원 앱에 즉시 반영(퍼블리처럼)
     return () => { alive = false; window.clearInterval(iv); };
   }, [user.email]);
   const [pageReady, setPageReady] = useState(false);
