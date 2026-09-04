@@ -336,7 +336,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   useEffect(() => {
     refreshStats();
     if (!userId) return;
-    getAccounts(userId).then((a) => setAccounts(a.filter((x) => x.platform === "naver"))).catch(() => {});
+    getAccounts(userId, "traffic").then((a) => setAccounts(a.filter((x) => x.platform === "naver"))).catch(() => {});
   }, [userId]);
   // 🔒 오토파일럿·예약은 대상별로 격리 로드 — 대상 바꾸면 그 대상 설정으로 갱신(없으면 OFF로 리셋해 다른 대상 설정이 안 남게)
   useEffect(() => {

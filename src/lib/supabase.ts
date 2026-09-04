@@ -47,6 +47,7 @@ export interface PublyAccount {
   blog_name?: string;
   is_connected: boolean;
   connected_at?: string;
+  app?: string;   // 🔗 'traffic' | 'publy' — 트래픽/퍼블리 계정 분리
 }
 
 export interface PublyHistory {
@@ -584,11 +585,14 @@ export async function deleteFailedHistory(userId: string): Promise<void> {
 }
 
 // ── 계정 ─────────────────────────────────────────────────
-export async function getAccounts(userId: string): Promise<PublyAccount[]> {
-  const { data } = await supabase
+export async function getAccounts(userId: string, app?: string): Promise<PublyAccount[]> {
+  // 🔗 트래픽은 app='traffic'만 조회 → 퍼블리에서 등록한 계정 자동노출 차단.
+  let q = supabase
     .from("publy_accounts")
     .select("id, user_id, platform, username, password_encrypted, blog_name, is_connected, connected_at")
     .eq("user_id", userId);
+  if (app) q = q.eq("app", app);
+  const { data } = await q;
   // 기존 Base64 값은 한 번만 메모리로 반환하고 DB에서는 즉시 제거한다.
   if (data?.some((account: any) => account.password_encrypted)) {
     await supabase.from("publy_accounts").update({ password_encrypted: "" }).eq("user_id", userId);

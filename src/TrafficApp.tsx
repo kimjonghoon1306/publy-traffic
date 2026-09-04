@@ -97,7 +97,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
 
   // ── 🔗 계정 연결(저장·찜·공감엔 네이버 로그인 필요) ──
   const [accounts, setAccounts] = useState<PublyAccount[]>([]);
-  const reloadAccounts = useCallback(() => { getAccounts(user.id).then(setAccounts).catch(() => {}); }, [user.id]);
+  const reloadAccounts = useCallback(() => { getAccounts(user.id, "traffic").then(setAccounts).catch(() => {}); }, [user.id]);
   useEffect(() => { reloadAccounts(); }, [reloadAccounts]);
   const [showAcc, setShowAcc] = useState(false);
   const [accId, setAccId] = useState("");
@@ -113,7 +113,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
       const r = await botFetch(`${BOT}/api/naver/save-session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.id, id: accId.trim(), pw: accPw, blogName: accBlog.trim() || undefined }), signal: AbortSignal.timeout(120000) });
       const d = await r.json(); if (!d.success) throw new Error(d.error || "연결 실패");
       const existing = accounts.find(a => a.platform === "naver" && a.username === accId.trim());
-      await upsertAccount({ ...(existing ? { id: existing.id } : {}), user_id: user.id, platform: "naver", username: accId.trim(), blog_name: accBlog.trim() || undefined, is_connected: true, connected_at: new Date().toISOString() });
+      await upsertAccount({ ...(existing ? { id: existing.id } : {}), user_id: user.id, platform: "naver", username: accId.trim(), blog_name: accBlog.trim() || undefined, is_connected: true, connected_at: new Date().toISOString(), app: "traffic" });
       reloadAccounts(); setAccId(""); setAccPw(""); setAccBlog("");
       showToast("✅ 네이버 계정을 연결했어요", "success");
     } catch (e: any) { showToast("연결 실패: " + (e?.message || "오류"), "error"); }

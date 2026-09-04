@@ -1,6 +1,6 @@
 {
   "name": "publy-traffic",
-  "version": "2.10.123",
+  "version": "2.10.124",
   "description": "Publy - 네이버/티스토리 자동발행 앱",
   "main": "dist-electron/main.js",
   "scripts": {
