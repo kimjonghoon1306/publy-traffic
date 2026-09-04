@@ -1134,7 +1134,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     // 승인된 행동만 노출(로그인 없이 / 로그인 필요) — 관리자 allowed_actions 기준
     const placeFree: [string, boolean, (b: boolean) => void, string][] = [["dir", doDir, setDoDir, "🧭 길찾기"], ["call", doCall, setDoCall, "📞 전화"], ["book", doBook, setDoBook, "📅 예약"], ["talk", doTalk, setDoTalk, "💬 톡톡"], ["share", doShare, setDoShare, "🔗 공유"]];
     const placeLogin: [string, boolean, (b: boolean) => void, string][] = [["save", doSave, setDoSave, "💾 저장"], ["review", doReview, setDoReview, "✍️ 리뷰"]];
-    const blogFree: [string, boolean, (b: boolean) => void, string][] = [["share", doShare, setDoShare, "🔗 공유"], ["funnel", funnel, setFunnel, "📖 다른글·이웃"]];
+    const blogFree: [string, boolean, (b: boolean) => void, string][] = [["share", doShare, setDoShare, "🔗 공유"], ["funnel", funnel, setFunnel, "🌀 퍼널유입(다른글·이웃)"]];
     const blogLogin: [string, boolean, (b: boolean) => void, string][] = [["like", doLike, setDoLike, "💚 공감"]];
     const storeFree: [string, boolean, (b: boolean) => void, string][] = [["option", doOption, setDoOption, "🔍 옵션보기"], ["share", doShare, setDoShare, "🔗 공유"]];
     const storeLogin: [string, boolean, (b: boolean) => void, string][] = [["wish", doWish, setDoWish, "💚 찜"], ["cart", doCart, setDoCart, "🛒 장바구니"]];
