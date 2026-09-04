@@ -505,7 +505,8 @@ async function getDefaultProxy(): Promise<ProxyConfig | null> {
   try {
     const { data } = await supabase.from("publy_settings").select("value").eq("key", "default_inflow_proxy").maybeSingle();
     if (data?.value) {
-      const p = JSON.parse(data.value);
+      // value가 jsonb면 이미 객체, text면 문자열 → 둘 다 안전 처리
+      const p = typeof data.value === "string" ? JSON.parse(data.value) : data.value;
       if (p && p.server) proxy = { server: normalizeProxyServer(p.server), username: p.username || undefined, password: p.password || undefined };
     }
   } catch {}
