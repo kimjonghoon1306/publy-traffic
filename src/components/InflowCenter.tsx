@@ -73,18 +73,29 @@ function AreaChart({ data, C }: { data: { label: string; count: number }[]; C: a
   const pts = data.map((d, i) => [pad + i * step, H - pad - (d.count / max) * (H - pad * 2)]);
   const line = pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
   const area = `${pad},${H - pad} ${line} ${(pad + (n - 1) * step).toFixed(1)},${H - pad}`;
+  const [hover, setHover] = useState<number | null>(null);
+  const onMove = (e: any) => {
+    const r = e.currentTarget.getBoundingClientRect(); const rel = (e.clientX - r.left) / r.width;
+    setHover(Math.max(0, Math.min(n - 1, Math.round(rel * (n - 1)))));
+  };
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 120, display: "block" }}>
-      <defs>
-        <linearGradient id="inflowArea" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={C.accent} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon points={area} fill="url(#inflowArea)" />
-      <polyline points={line} fill="none" stroke={C.accent} strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" />
-      {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="1.1" fill={C.cyan} />)}
-    </svg>
+    <div style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 120, display: "block" }}>
+        <defs>
+          <linearGradient id="inflowArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C.accent} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={C.accent} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon points={area} fill="url(#inflowArea)" />
+        <polyline points={line} fill="none" stroke={C.accent} strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" />
+        {hover != null && <line x1={pts[hover][0]} y1="0" x2={pts[hover][0]} y2={H} stroke={C.accent} strokeWidth="0.5" opacity="0.5" />}
+        {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={hover === i ? 2.2 : 1.1} fill={C.cyan} />)}
+      </svg>
+      {hover != null && data[hover] && (
+        <div style={{ position: "absolute", top: 4, left: `${(pts[hover][0] / W) * 100}%`, transform: "translateX(-50%)", background: C.ink, color: C.panel, fontSize: 11, fontWeight: 800, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", pointerEvents: "none" }}>{data[hover].label} · {data[hover].count}회</div>
+      )}
+    </div>
   );
 }
 
@@ -99,12 +110,26 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   const pts = data.map((d, i) => d.rank == null ? null : [pad + i * step, y(d.rank)] as [number, number]).filter(Boolean) as [number, number][];
   const line = pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
   const goalY = y(goal);
+  // 툴팁 — 측정값 있는 지점만
+  const measured = data.map((d, i) => d.rank != null ? { i, rank: d.rank, label: d.label, x: pad + i * step, yy: y(d.rank) } : null).filter(Boolean) as { i: number; rank: number; label: string; x: number; yy: number }[];
+  const [hover, setHover] = useState<number | null>(null);
+  const onMove = (e: any) => {
+    const r = e.currentTarget.getBoundingClientRect(); const relX = ((e.clientX - r.left) / r.width) * W;
+    let best = 0, bd = Infinity; measured.forEach((m, idx) => { const d = Math.abs(m.x - relX); if (d < bd) { bd = d; best = idx; } });
+    setHover(measured.length ? best : null);
+  };
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 120, display: "block" }}>
-      <line x1="0" y1={goalY} x2={W} y2={goalY} stroke={C.cyan} strokeWidth="0.6" strokeDasharray="2 2" opacity="0.7" />
-      <polyline points={line} fill="none" stroke="#16a34a" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
-      {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="1.3" fill="#16a34a" />)}
-    </svg>
+    <div style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: 120, display: "block" }}>
+        <line x1="0" y1={goalY} x2={W} y2={goalY} stroke={C.cyan} strokeWidth="0.6" strokeDasharray="2 2" opacity="0.7" />
+        <polyline points={line} fill="none" stroke="#16a34a" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="1.3" fill="#16a34a" />)}
+        {hover != null && measured[hover] && <circle cx={measured[hover].x} cy={measured[hover].yy} r="2.4" fill="#16a34a" stroke="#fff" strokeWidth="0.6" />}
+      </svg>
+      {hover != null && measured[hover] && (
+        <div style={{ position: "absolute", top: 4, left: `${(measured[hover].x / W) * 100}%`, transform: "translateX(-50%)", background: C.ink, color: C.panel, fontSize: 11, fontWeight: 800, padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap", pointerEvents: "none" }}>{measured[hover].label} · {measured[hover].rank}위</div>
+      )}
+    </div>
   );
 }
 
