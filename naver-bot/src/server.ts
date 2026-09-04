@@ -53,7 +53,7 @@ process.on("uncaughtException", (err: any) => {
 });
 
 const app = express();
-const PORT = 3333;
+const PORT = Number(process.env.PUBLY_BOT_PORT) || 3363;
 const AUTH_TOKEN = process.env.BOT_AUTH_TOKEN || "";
 
 app.use(cors({ origin: ["http://localhost:5173", "http://127.0.0.1:5173", "null"] }));

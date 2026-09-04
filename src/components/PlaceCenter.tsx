@@ -4,7 +4,7 @@ import { PLAN_CONFIG, CRAWL_DAILY_LIMIT, PLACE_BLOGGER_LIMIT, PLACE_DETAIL_DAILY
 import { savePlaceBloggerCandidates } from "../lib/discoveryBridge";
 import UsageGuide from "./UsageGuide";
 
-const BOT = "http://127.0.0.1:3334";
+const BOT = "http://127.0.0.1:3364";
 
 const THEMES = {
   // 플레이스365(민트)와 배색 통일

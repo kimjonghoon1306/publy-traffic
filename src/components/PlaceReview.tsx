@@ -9,7 +9,7 @@ import { PLACE_REPLY_DAILY_LIMIT, getPlaceReplyDailyUsage, getAccounts, PublyAcc
    - 봇(neighbor-bot :3334) 엔드포인트: /api/place-review-fetch(리뷰 수집), /api/place-review-reply(답글 등록, SSE).
    ═══════════════════════════════════════════════════════════════ */
 
-const BOT = "http://127.0.0.1:3334";
+const BOT = "http://127.0.0.1:3364";
 
 type ReviewStatus = "idle" | "approved" | "hold" | "done" | "fail" | "skip";
 type PlaceReviewItem = {

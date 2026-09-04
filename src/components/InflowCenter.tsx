@@ -4,7 +4,7 @@ import UsageGuide from "./UsageGuide";
 import SproutAssistant from "./SproutAssistant";
 import { INFLOW_DAILY_LIMIT, PLAN_CONFIG, getInflowDailyUsage, getInflowUsageHistory, getAccounts, PublyAccount, getAutopilot, saveAutopilot, getRankHistory, AutopilotConfig, getInflowSchedule, saveInflowSchedule, inflowScheduleRanToday, markInflowScheduleRan, getPerfReport, PerfReport, recordRankPoint, getMemberSessionToken, getAdminSessionToken, getInflowTargets, saveInflowTargets, inflowScope, getInflowStatToday, migrateLegacyInflowToScope } from "../lib/supabase";
 
-const BOT = "http://127.0.0.1:3334"; // neighbor-bot
+const BOT = "http://127.0.0.1:3364"; // neighbor-bot
 
 /* ═══════════════════════════════════════════════════════════════
    🆕 NEW 트래픽 유입 — CONTROL TOWER
@@ -108,8 +108,12 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free" }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[] }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
+  // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다. 없으면(미지정) 전부 허용.
+  const FEATS: ("place" | "blog" | "store")[] = ["place", "blog", "store"];
+  const allowFeat = (f: "place" | "blog" | "store") => !allowedFeatures || allowedFeatures.length === 0 || allowedFeatures.includes(f);
+  const visibleFeats = FEATS.filter(allowFeat);
   const theme: "dark" | "light" = extTheme === "dark" ? "dark" : "light";
   const C = THEMES[theme];
   const unlimited = plan === "admin" || plan === "unlimited";
@@ -119,6 +123,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const formKey = "publy_inflow_form";
   const saved0: any = (() => { try { return JSON.parse(localStorage.getItem("publy_inflow_form") || "{}"); } catch { return {}; } })();
   const [targetType, setTargetType] = useState<"place" | "blog" | "store">(saved0.targetType ?? "place");
+  // 🎫 현재 대상이 미승인이면 승인된 첫 대상으로 자동 전환(미승인 화면에 갇히지 않게)
+  useEffect(() => { if (visibleFeats.length && !allowFeat(targetType)) setTargetType(visibleFeats[0]); }, [allowedFeatures, targetType]);
   const privateKey = `publy_inflow_private_${userId || "guest"}`;
   const private0: any = (() => { try { return JSON.parse(localStorage.getItem(privateKey) || "{}"); } catch { return {}; } })();
   const [placeUrl, setPlaceUrl] = useState<string>(private0.placeUrl ?? saved0.placeUrl ?? "");
@@ -1177,7 +1183,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
         <div>
           <label style={labelStyle}>어디로 유입시킬까요?</label>
           <div style={{ display: "flex", gap: 8 }}>
-            {([["place", "🗺️ 플레이스"], ["blog", "📝 블로그"], ["store", "🛒 스마트스토어"]] as const).map(([k, lb]) => (
+            {([["place", "🗺️ 플레이스"], ["blog", "📝 블로그"], ["store", "🛒 스마트스토어"]] as const).filter(([k]) => allowFeat(k)).map(([k, lb]) => (
               <button key={k} onClick={() => setTargetType(k)} style={{ flex: 1, padding: "13px", borderRadius: 12, border: `2px solid ${targetType === k ? C.accent : C.line2}`, background: targetType === k ? C.glow : C.panel2, color: targetType === k ? C.accent : C.sub, fontSize: 14.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{lb}</button>
             ))}
           </div>

@@ -9,7 +9,7 @@ import dodoImg from "../assets/dodo.png";
 import monggeulImg from "../assets/monggeul.png";
 import pumiImg from "../assets/pumi.png";
 
-const BOT = "http://127.0.0.1:3334";   // neighbor-bot (발굴·발송)
+const BOT = "http://127.0.0.1:3364";   // neighbor-bot (발굴·발송)
 
 /* ── 커스텀 라인 아이콘(이모지 대신 — 색다르고 담백하게). 24 viewBox, currentColor stroke ── */
 const Ico = ({ d, s = 20, sw = 1.6, fill = "none", extra }: { d: string; s?: number; sw?: number; fill?: string; extra?: React.ReactNode }) => (

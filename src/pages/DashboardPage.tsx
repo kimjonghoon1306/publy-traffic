@@ -28,8 +28,8 @@ const ONPARTNER_PLACEMENT_INFO:Record<OnPartnerPlacement,{label:string;desc:stri
 };
 
 import { AEO_RULES, AEO_FAQ_FORMAT, AEO_TITLE_RULE, ensureAeoIntroSummary } from "../lib/aeo";
-const BOT = "http://127.0.0.1:3333";
-const INSTA_BOT = "http://127.0.0.1:3335";
+const BOT = "http://127.0.0.1:3363";
+const INSTA_BOT = "http://127.0.0.1:3365";
 const BATCH = 30;
 const MAX_TITLES = 90;
 const MAX_KW = 90;
@@ -2032,7 +2032,7 @@ Output (JSON object only): {"keyword":"핵심키워드","title":"새 SEO 제목"
   },[refreshing,checkBot,showToast]);
 
   // ── 프록시 노란불: 관리자가 이 회원에게 프록시를 배정하면 대시보드에 "프록시 ON" 깜빡이 ──
-  const NEIGHBOR_BOT = "http://127.0.0.1:3334";   // 서이추·공감·품앗이 봇(프록시 배정 조회)
+  const NEIGHBOR_BOT = "http://127.0.0.1:3364";   // 서이추·공감·품앗이 봇(프록시 배정 조회)
   const [proxyActive, setProxyActive] = useState(false);
   const checkMyProxy = useCallback(async()=>{
     try{

@@ -204,7 +204,7 @@ async function forkBotServer(opts: {
       cwd: opts.botPath,
       stdio: ["ignore", crashFd, crashFd],
       windowsHide: true,
-      env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+      env: { ...env, ELECTRON_RUN_AS_NODE: "1", PUBLY_BOT_PORT: String(opts.port) },
     });
     // 부모는 상속시킨 fd를 닫아 누수 방지(자식이 계속 소유). 실패해도 무해.
     if (typeof crashFd === "number") { const _fd = crashFd; setTimeout(() => { try { (require("fs") as typeof import("fs")).closeSync(_fd); } catch {} }, 2000); }
@@ -337,7 +337,7 @@ async function startBotServer() {
     name: "bot",
     botPath: resourceDir("naver-bot"),
     chromiumPath: resourceDir("chromium"),
-    port: 3333,
+    port: 3363,
     getProc: () => botProcess,
     setProc: p => { botProcess = p; },
   });
@@ -348,7 +348,7 @@ async function startNeighborBotServer() {
     name: "neighbor-bot",
     botPath: resourceDir("neighbor-bot"),
     chromiumPath: resourceDir("chromium"),
-    port: 3334,
+    port: 3364,
     // playwright는 naver-bot node_modules 공유
     extraEnv: { NODE_PATH: path.join(resourceDir("naver-bot"), "node_modules") },
     getProc: () => neighborBotProcess,
@@ -361,7 +361,7 @@ async function startInstaBotServer() {
     name: "insta-bot",
     botPath: resourceDir("insta-bot"),
     chromiumPath: resourceDir("chromium"),
-    port: 3335,
+    port: 3365,
     // playwright는 naver-bot node_modules 공유
     extraEnv: { NODE_PATH: path.join(resourceDir("naver-bot"), "node_modules") },
     getProc: () => instaBotProcess,
@@ -449,9 +449,9 @@ function shutdownBots(): Promise<void> {
   app.isQuitting = true;
   for (const bot of botRegistry) bot.cancelScheduledRestart();
   shutdownPromise = Promise.all([
-    killPort(3333, botProcess),
-    killPort(3334, neighborBotProcess),
-    killPort(3335, instaBotProcess),
+    killPort(3363, botProcess),
+    killPort(3364, neighborBotProcess),
+    killPort(3365, instaBotProcess),
   ]).then(() => undefined);
   return shutdownPromise;
 }
@@ -473,14 +473,14 @@ app.on("before-quit", event => {
 
 ipcMain.handle("get-bot-status", async () => {
   try {
-    const res = await fetch("http://127.0.0.1:3333/health", { headers: { Authorization: `Bearer ${botAuthToken}` }, signal: AbortSignal.timeout(2000) });
+    const res = await fetch("http://127.0.0.1:3363/health", { headers: { Authorization: `Bearer ${botAuthToken}` }, signal: AbortSignal.timeout(2000) });
     return res.ok ? "online" : "offline";
   } catch { return "offline"; }
 });
 
 // 봇 3종 개별 상태(발행/이웃/인스타). 탭별로 정확한 온·오프라인 표시용.
 ipcMain.handle("get-all-bot-status", async () => {
-  const ports = { publish: 3333, neighbor: 3334, insta: 3335 };
+  const ports = { publish: 3363, neighbor: 3364, insta: 3365 };
   const out: Record<string, "online" | "offline"> = {};
   await Promise.all(Object.entries(ports).map(async ([k, p]) => {
     out[k] = (await pingBot(p)) ? "online" : "offline";
@@ -614,7 +614,7 @@ ipcMain.handle("read-bot-log", async () => {
 
 ipcMain.handle("register-user", async (_event, userId: string) => {
   try {
-    const res = await fetch("http://127.0.0.1:3333/api/register-user", {
+    const res = await fetch("http://127.0.0.1:3363/api/register-user", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${botAuthToken}` },
       body: JSON.stringify({ userId }),
@@ -677,7 +677,7 @@ ipcMain.handle("save-report-pdf", async (_event, html: string, filename: string)
 
 ipcMain.handle("unregister-user", async (_event, userId: string) => {
   try {
-    const res = await fetch("http://127.0.0.1:3333/api/unregister-user", {
+    const res = await fetch("http://127.0.0.1:3363/api/unregister-user", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${botAuthToken}` },
       body: JSON.stringify({ userId }),

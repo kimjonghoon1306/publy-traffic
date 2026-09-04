@@ -7,7 +7,7 @@ import fs from "fs";
 import { acquireAccountLock } from "./account-lock";
 
 const app = express();
-const PORT = 3334;
+const PORT = Number(process.env.PUBLY_BOT_PORT) || 3364;
 const AUTH_TOKEN = process.env.BOT_AUTH_TOKEN || "";
 
 app.use(cors({ origin: ["http://localhost:5173", "http://127.0.0.1:5173", "null"] }));

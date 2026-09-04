@@ -7,7 +7,7 @@ import UsageGuide from "../components/UsageGuide";
 import dodoImg from "../assets/dodo.png";   // 🩺 블로그 주치의 캐릭터(검수자 도도)
 import boriImg from "../assets/bori.png";   // 🌱 응원단 보리
 
-const BOT = "http://127.0.0.1:3334";
+const BOT = "http://127.0.0.1:3364";
 
 // ★LogBox는 컴포넌트 밖에 고정 정의(테리 요청: 로그 스크롤이 위로 튀는 버그).
 //   NeighborPage 안에 정의하면 부모 리렌더마다 새 컴포넌트로 취급→통째 리마운트→스크롤 위치가 맨 위로 리셋됐다.

@@ -42,7 +42,7 @@ const DIAGNOSIS_ITEMS = [
   { icon: "🏙️", title: "상권 관심도", state: "추정 진단", desc: "주변 업체와 지역 검색 변화를 이용해 상권 흐름을 추정해요." },
 ] as const;
 
-const BOT = "http://127.0.0.1:3334";
+const BOT = "http://127.0.0.1:3364";
 
 /* 붙여넣은 플레이스 주소에서 매장 번호(placeId)만 뽑아낸다.
    pcmap.place / m.place / place.naver.com/{domain}/{id}, map.naver.com/p/entry/place/{id}, 순수 숫자 지원.

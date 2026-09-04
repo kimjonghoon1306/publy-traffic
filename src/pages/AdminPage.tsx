@@ -26,8 +26,8 @@ interface UserFull {
 }
 
 import { AEO_RULES, AEO_FAQ_FORMAT, AEO_TITLE_RULE, ensureAeoIntroSummary } from "../lib/aeo";
-const BOT = "http://127.0.0.1:3333";
-const INSTA_BOT = "http://127.0.0.1:3335";
+const BOT = "http://127.0.0.1:3363";
+const INSTA_BOT = "http://127.0.0.1:3365";
 const ADM_UID = "admin-publy";
 const OT_KW_CATS = ["맛집","여행","재테크·부업","건강·운동","육아","뷰티","패션","인테리어","IT·가전","정책자금","반려동물","자기계발","음식·레시피","문화·연예","스포츠","자동차","교육","부동산"];
 // 발행기록(publy_history)은 publy_users.id(uuid)에 FK로 묶여 있어 실제 회원계정 uuid여야 한다.
@@ -663,7 +663,7 @@ export default function AdminPage({onBack, onDashboard, theme, onThemeToggle}: P
   const [tab, setTab] = useState<"keyword"|"write"|"image"|"photo"|"publish"|"onetouch"|"manage"|"accounts"|"rank"|"blogscore"|"calendar"|"crawl"|"inflow"|"place"|"place_reply"|"crawl_manage"|"place_manage"|"place_reply_manage"|"neighbor"|"engage"|"reply"|"pumasi"|"neighbor_manage"|"engage_manage"|"reply_manage"|"blogscore_manage"|"insta_dm"|"insta_dm_manage"|"users"|"bug"|"stats"|"live"|"settings"|"proxy">("keyword");
 
   // ── 프록시(계정별 IP) 관리 ──
-  const NEIGHBOR_BOT = "http://127.0.0.1:3334";   // 서이추·공감·품앗이 봇(프록시 헬스체크도 여기서 실행)
+  const NEIGHBOR_BOT = "http://127.0.0.1:3364";   // 서이추·공감·품앗이 봇(프록시 헬스체크도 여기서 실행)
   const [proxies, setProxies] = useState<PublyProxy[]>([]);
   const [proxyAssign, setProxyAssign] = useState<Record<string, ProxyAssign[]>>({});
   // 🌐 프록시 사용량(B: 접속 카운트) + DataImpulse 실잔량(A)
