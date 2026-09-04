@@ -371,7 +371,11 @@ async function startInstaBotServer() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1040, height: 760, minWidth: 360, minHeight: 560,
+    // 🚦 트래픽 앱은 퍼블리(전체화면)와 달리 "작은 사각형 창"(목업 기준). 최대화·전체화면 막아 항상 컴팩트.
+    width: 960, height: 720, minWidth: 360, minHeight: 560,
+    maxWidth: 1100, maxHeight: 900,
+    center: true,
+    maximizable: false, fullscreenable: false, fullscreen: false,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     backgroundColor: "#02040a",
     webPreferences: {

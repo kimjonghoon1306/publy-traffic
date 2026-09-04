@@ -110,9 +110,13 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
 
 export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
-  // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다. 없으면(미지정) 전부 허용.
+  // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다.
+  //   회원앱(memberMode)=엄격: 승인된 것만(승인 없으면 아무것도 안 보임=잠금).
+  //   관리자앱(memberMode 아님)=미지정이면 전부 허용(관리자는 다 봐야 함).
   const FEATS: ("place" | "blog" | "store")[] = ["place", "blog", "store"];
-  const allowFeat = (f: "place" | "blog" | "store") => !allowedFeatures || allowedFeatures.length === 0 || allowedFeatures.includes(f);
+  const allowFeat = (f: "place" | "blog" | "store") => memberMode
+    ? (!!allowedFeatures && allowedFeatures.includes(f))
+    : (!allowedFeatures || allowedFeatures.length === 0 || allowedFeatures.includes(f));
   const visibleFeats = FEATS.filter(allowFeat);
   const theme: "dark" | "light" = extTheme === "dark" ? "dark" : "light";
   const C = THEMES[theme];
@@ -1040,11 +1044,11 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             🔎 <b style={{ color: C.accent }}>트래픽 유입</b> — 키워드로 검색 → 진입 → 체류 → 액션까지 진짜 손님처럼. 관리자가 승인한 <b style={{ color: C.accent }}>대상·행동</b>만 보여요.
           </div>
 
-          {/* 대상 탭 — 승인된 것만 진하게, 미승인은 흐리게 */}
+          {/* 대상 탭 — 관리자가 승인한 것만 보임(미승인은 아예 렌더 안 함). 1개만 승인이면 탭 1개만. */}
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            {([["place", "🗺️ 플레이스"], ["blog", "📝 블로그"], ["store", "🛒 스마트스토어"]] as [("place" | "blog" | "store"), string][]).map(([k, lb]) => {
-              const ok = allowFeat(k); const on = targetType === k;
-              return <div key={k} onClick={() => ok && setTargetType(k)} style={{ flex: 1, padding: "11px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, fontSize: 13.5, fontWeight: 800, cursor: ok ? "pointer" : "default", textAlign: "center", opacity: ok ? 1 : 0.4 }}>{lb}{!ok && <span style={{ fontSize: 10, fontWeight: 700 }}> 미승인</span>}</div>;
+            {([["place", "🗺️ 플레이스"], ["blog", "📝 블로그"], ["store", "🛒 스마트스토어"]] as [("place" | "blog" | "store"), string][]).filter(([k]) => allowFeat(k)).map(([k, lb]) => {
+              const on = targetType === k;
+              return <div key={k} onClick={() => setTargetType(k)} style={{ flex: 1, padding: "11px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, fontSize: 13.5, fontWeight: 800, cursor: "pointer", textAlign: "center" }}>{lb}</div>;
             })}
           </div>
 
