@@ -1299,7 +1299,19 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
           ) : (
             <button onClick={stop} style={{ width: "100%", padding: 15, borderRadius: 12, border: `2px solid ${C.accent}`, background: C.panel2, color: C.accent, fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>⏹️ 정지 ({progress}%)</button>
           )}
-          {!unlimited && <div style={{ marginTop: 8, fontSize: 11.5, color: C.sub, fontWeight: 700, textAlign: "center" }}>오늘 {used}/{limit}회 {gradeLabel && `· ${gradeLabel}`}</div>}
+          {/* 📊 오늘/누적 유입 수치 — 무제한 회원도 보이게(회원이 헷갈리지 않게 큰 숫자로) */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+            <div style={{ ...mCard, textAlign: "center", padding: "12px 10px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.sub }}>오늘 유입 <span style={{ color: C.sub }}>({targetType === "place" ? "플레이스" : targetType === "blog" ? "블로그" : "스토어"})</span></div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: C.accent, marginTop: 2 }}>{todayScoped}<span style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>회{!unlimited && limit ? ` / ${limit}` : ""}</span></div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.sub }}>{unlimited ? "무제한" : gradeLabel || ""}</div>
+            </div>
+            <div style={{ ...mCard, textAlign: "center", padding: "12px 10px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.sub }}>{chartDays >= 365 ? "전체 누적" : `최근 ${chartDays}일`}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: C.ink, marginTop: 2 }}>{weekTotal}<span style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>회</span></div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.sub }}>누적 방문</div>
+            </div>
+          </div>
 
           {/* 🎫 등급별 사용 한도표 — 베이직/프로/프리미엄(무제한은 관리자 고유라 제외). 내 등급 강조 */}
           <div style={{ marginTop: 14, ...mCard }}>
