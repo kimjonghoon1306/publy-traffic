@@ -377,7 +377,7 @@ function createWindow() {
     center: true,
     maximizable: false, fullscreenable: false, fullscreen: false,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    backgroundColor: "#02040a",
+    backgroundColor: "#f3eef2",   // 최초 라이트 시작(로그인 라이트 배경과 맞춤, 깜빡임 방지)
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true, nodeIntegration: false,

@@ -36,7 +36,7 @@ export default function App() {
   const [view, setView]   = useState<View>("login");
   const [user, setUser]   = useState<PublyUser | null>(null);
   const [theme, setTheme] = useState<"dark"|"light">(() =>
-    (localStorage.getItem("publy_theme") as any) || "dark"
+    (localStorage.getItem("publy_theme") as any) || "light"  // 최초 실행은 라이트 고정(로그인·회원대시보드)
   );
   const [loading, setLoading] = useState(true);
 
