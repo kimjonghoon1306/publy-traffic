@@ -489,7 +489,27 @@ export async function getProxyForAccount(userId?: string | null, feature?: strin
   let proxy: ProxyConfig | null = null;
   if (userId) proxy = await _lookupProxy(userId, feature);
   if (!proxy && ownerUserId && ownerUserId !== userId) proxy = await _lookupProxy(ownerUserId, feature);
+  // 🔒 프록시는 기본 — 배정이 없어도 기본 프록시로 항상 연결(테리: 프록시 항상 ON).
+  //    크레덴셜은 코드가 아니라 DB(publy_settings.default_inflow_proxy)에서 읽어 공개레포 노출 방지.
+  if (!proxy) proxy = await getDefaultProxy();
   if (proxy) incrementProxyUsage().catch(() => {});   // 🌐 프록시 접속 카운트(B, 사용량 실시간 체크)
+  return proxy;
+}
+
+// 🔒 기본 프록시(모든 회원 공통 폴백) — publy_settings.default_inflow_proxy 의 JSON
+//    { "server":"gw.dataimpulse.com:823", "username":"...", "password":"..." }
+let _defaultProxyCache: { proxy: ProxyConfig | null; ts: number } | null = null;
+async function getDefaultProxy(): Promise<ProxyConfig | null> {
+  if (_defaultProxyCache && Date.now() - _defaultProxyCache.ts < PROXY_CACHE_MS) return _defaultProxyCache.proxy;
+  let proxy: ProxyConfig | null = null;
+  try {
+    const { data } = await supabase.from("publy_settings").select("value").eq("key", "default_inflow_proxy").maybeSingle();
+    if (data?.value) {
+      const p = JSON.parse(data.value);
+      if (p && p.server) proxy = { server: normalizeProxyServer(p.server), username: p.username || undefined, password: p.password || undefined };
+    }
+  } catch {}
+  _defaultProxyCache = { proxy, ts: Date.now() };
   return proxy;
 }
 
