@@ -127,10 +127,17 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [targetType, setTargetType] = useState<"place" | "blog" | "store">(saved0.targetType ?? "place");
   // 🎫 현재 대상이 미승인이면 승인된 첫 대상으로 자동 전환(미승인 화면에 갇히지 않게)
   useEffect(() => { if (visibleFeats.length && !allowFeat(targetType)) setTargetType(visibleFeats[0]); }, [allowedFeatures, targetType]);
-  // 🎫 현재 대상의 라이선스 등급 한도 적용(없으면 회원 plan 기본). limit 0 = 무제한.
+  // 🎫 현재 대상의 라이선스 등급 한도.
+  //   ★트래픽은 결제 별도 → 회원앱(memberMode)은 퍼블리 등급(user.plan)을 절대 안 탄다.
+  //     오직 컨트롤타워 발급(featLic)만으로 한도·무제한 결정(featLic 없으면 0=차단, 어차피 승인없으면 잠금화면).
+  //   관리자앱(memberMode 아님)은 종전대로 user.plan도 반영.
   const featLic = licenseByFeat?.[targetType];
-  const unlimited = plan === "admin" || plan === "unlimited" || featLic?.plan === "unlimited" || featLic?.limit === 0;
-  const limit = featLic ? (featLic.limit || 0) : (INFLOW_DAILY_LIMIT[plan] ?? INFLOW_DAILY_LIMIT.free);
+  const unlimited = memberMode
+    ? (featLic?.plan === "unlimited" || featLic?.limit === 0)
+    : (plan === "admin" || plan === "unlimited" || featLic?.plan === "unlimited" || featLic?.limit === 0);
+  const limit = memberMode
+    ? (featLic ? (featLic.limit || 0) : 0)
+    : (featLic ? (featLic.limit || 0) : (INFLOW_DAILY_LIMIT[plan] ?? INFLOW_DAILY_LIMIT.free));
   // 관리자가 허용한 행동만(없으면 전체 허용 — 라이선스 미설정 하위호환). actionAllowed(key)로 게이팅.
   const actionAllowed = (key: string) => !featLic || !featLic.actions ? true : featLic.actions.includes(key);
   const privateKey = `publy_inflow_private_${userId || "guest"}`;
@@ -1263,7 +1270,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                 );
               })}
             </div>
-            <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 7, lineHeight: 1.5 }}>등급·기간은 관리자가 정해요. 한도가 더 필요하면 <b style={{ color: C.accent }}>결제·사용 문의</b>로 상향 요청하세요.</div>
+            <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 7, lineHeight: 1.5 }}>등급·기간은 관리자가 정해요. 무료 없이 <b style={{ color: C.accent }}>대여 기간 동안만</b> 사용돼요.</div>
+            <button onClick={() => { try { window.open("https://open.kakao.com/o/s5wAJ1Li", "_blank"); } catch {} }} style={{ width: "100%", marginTop: 9, padding: "11px", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 13, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>💬 연장 · 업그레이드 문의 (카카오톡)</button>
           </div>
 
           {/* 기록 그래프 + 기간 설정 (주단위·기간별 과거 데이터) */}
