@@ -1200,12 +1200,27 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
 
     return (
       <div style={{ fontFamily: "'Pretendard','Apple SD Gothic Neo',sans-serif", color: C.ink, display: "flex", flexDirection: "column" }}>
-        {/* 라이선스 없음 = 잠금 */}
+        {/* 라이선스 없음 = 잠금(실행은 막되, 과거 유입 기록은 읽기전용으로 보여줌) */}
         {visibleFeats.length === 0 ? (
-          <div style={{ background: C.panel2, border: `1.5px dashed ${C.line2}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
-            <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 6 }}>승인된 대여가 없어요</div>
-            <div style={{ fontSize: 12.5, color: C.sub, fontWeight: 600, lineHeight: 1.6 }}>관리자에게 트래픽 사용 승인(대상·기간)을 요청하세요.<br />승인되면 이 화면에 대상·행동이 자동으로 나타나요.</div>
+          <div>
+            <div style={{ background: C.panel2, border: `1.5px dashed ${C.line2}`, borderRadius: 14, padding: "34px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
+              <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 6 }}>대여 기간이 아니에요</div>
+              <div style={{ fontSize: 12.5, color: C.sub, fontWeight: 600, lineHeight: 1.6 }}>지금은 유입을 실행할 수 없어요. 아래에서 <b style={{ color: C.accent }}>그동안 사용 기록</b>은 확인할 수 있어요.<br />다시 쓰려면 결제·연장 문의를 해주세요.</div>
+              <button onClick={() => { try { window.open("https://open.kakao.com/o/s5wAJ1Li", "_blank"); } catch {} }} style={{ marginTop: 12, padding: "11px 20px", borderRadius: 10, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 13, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>💬 결제 · 연장 문의(카카오톡)</button>
+            </div>
+            <div style={{ marginTop: 14, ...mCard }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 800 }}>📊 그동안 유입 기록</span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[[7, "7일"], [30, "30일"], [90, "90일"], [365, "전체"]].map(([d, lb]) => (
+                    <button key={d as number} onClick={() => setChartDays(d as number)} style={{ padding: "5px 11px", borderRadius: 8, border: `1.5px solid ${chartDays === d ? C.accent : C.line2}`, background: chartDays === d ? C.glow : C.panel, color: chartDays === d ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{chartDays === d ? "✓ " : ""}{lb as string}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, marginBottom: 4 }}>{chartDays >= 365 ? "전체" : `최근 ${chartDays}일`} 유입 추이 · 총 {weekTotal}회</div>
+              {history.length > 0 ? <AreaChart data={history} C={C} /> : <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: C.sub, fontSize: 12.5, fontWeight: 600 }}>기록이 없어요</div>}
+            </div>
           </div>
         ) : (<>
           {/* hint */}
