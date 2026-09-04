@@ -86,13 +86,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 웹사이트/카톡 공유용 고정 다운로드 링크가 버전마다 안 깨지도록
-      # 버전 없는 이름(Publy-Setup.exe)으로 한 벌 복사 → 릴리스에 함께 업로드
-      - name: Make stable-named installer (Publy-Setup.exe)
+      # 버전 없는 이름(PublyTraffic-Setup.exe)으로 한 벌 복사 → 퍼블리와 구분
+      - name: Make stable-named installer (PublyTraffic-Setup.exe)
         shell: pwsh
         run: |
-          $exe = Get-ChildItem release/*.exe | Where-Object { $_.Name -ne 'Publy-Setup.exe' } | Select-Object -First 1
-          Copy-Item $exe.FullName release/Publy-Setup.exe -Force
-          Write-Host "Stable installer: $($exe.Name) -> Publy-Setup.exe"
+          $exe = Get-ChildItem release/*.exe | Where-Object { $_.Name -ne 'PublyTraffic-Setup.exe' } | Select-Object -First 1
+          Copy-Item $exe.FullName release/PublyTraffic-Setup.exe -Force
+          Write-Host "Stable installer: $($exe.Name) -> PublyTraffic-Setup.exe"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -243,10 +243,10 @@ jobs:
             hdiutil detach /tmp/vchk >/dev/null 2>&1 || true
           done
           # 4) 웹/공유용 고정 다운로드 링크가 버전마다 안 깨지게 버전없는 이름으로 복사
-          arm=$(ls release/*-arm64.dmg 2>/dev/null | head -1)
-          intel=$(ls release/*.dmg 2>/dev/null | grep -v -- '-arm64.dmg' | grep -v 'Publy-Mac-' | head -1)
-          [ -n "$arm" ] && cp "$arm" release/Publy-Mac-AppleSilicon.dmg && echo "stable arm: $arm -> Publy-Mac-AppleSilicon.dmg"
-          [ -n "$intel" ] && cp "$intel" release/Publy-Mac-Intel.dmg && echo "stable intel: $intel -> Publy-Mac-Intel.dmg"
+          arm=$(ls release/*-arm64.dmg 2>/dev/null | grep -v 'PublyTraffic-Mac-' | head -1)
+          intel=$(ls release/*.dmg 2>/dev/null | grep -v -- '-arm64.dmg' | grep -v 'PublyTraffic-Mac-' | head -1)
+          [ -n "$arm" ] && cp "$arm" release/PublyTraffic-Mac-AppleSilicon.dmg && echo "stable arm: $arm -> PublyTraffic-Mac-AppleSilicon.dmg"
+          [ -n "$intel" ] && cp "$intel" release/PublyTraffic-Mac-Intel.dmg && echo "stable intel: $intel -> PublyTraffic-Mac-Intel.dmg"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
