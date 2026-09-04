@@ -134,6 +134,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: C.bg, color: C.ink, fontFamily: "'Noto Sans KR','Apple SD Gothic Neo',sans-serif", overflow: "hidden" }}>
+      <style>{`@keyframes pulsePink{0%{box-shadow:0 0 0 0 rgba(240,65,122,.7)}70%{box-shadow:0 0 0 6px rgba(240,65,122,0)}100%{box-shadow:0 0 0 0 rgba(240,65,122,0)}}`}</style>
       {/* 상단 액센트 스트립 */}
       <div style={{ height: 3, flexShrink: 0, background: `linear-gradient(90deg,${C.accent},${C.accent2} 60%,#c4b5fd)` }} />
 
@@ -141,10 +142,14 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
       <div style={{ height: 48, flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "0 12px 0 14px", borderBottom: `1px solid ${C.line}`, background: `linear-gradient(180deg,${C.soft},transparent)` }}>
         <div onClick={onLogoTap} style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg,${C.accent},${C.accent2})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 900, fontSize: 16, boxShadow: "0 4px 14px rgba(109,40,217,.4)", cursor: "pointer", userSelect: "none" }}>T</div>
         <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: ".02em" }}>퍼블리 트래픽 <small style={{ color: C.sub, fontWeight: 600, marginLeft: 5, fontSize: 11 }}>· TRAFFIC{appVersion ? ` v${appVersion}` : ""}</small></div>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: C.soft, border: `1px solid ${C.line2}`, fontSize: 10.5, fontWeight: 800, color: botOnline ? C.accent : C.sub }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: botOnline ? "#16a34a" : "#dc2626" }} />{botOnline ? "서버 온라인" : "서버 오프라인"}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: C.soft, border: `1px solid ${C.line2}`, fontSize: 10.5, fontWeight: 800, color: botOnline ? "#f0417a" : C.sub }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: botOnline ? "#f0417a" : "#dc2626", boxShadow: botOnline ? "0 0 0 0 rgba(240,65,122,.7)" : "none", animation: botOnline ? "pulsePink 1.4s infinite" : "none" }} />{botOnline ? "온라인" : "오프라인"}
         </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          {/* 🎫 내 트래픽 등급 배지 — 대여 있으면 등급, 없으면 미결제(업그레이드 유도) */}
+          {soonest
+            ? <span style={{ fontSize: 10.5, fontWeight: 900, color: C.accent, background: C.soft, border: `1px solid ${C.line2}`, padding: "3px 9px", borderRadius: 99 }}>{GRADE_LABEL[gradePlan] || gradePlan}</span>
+            : <span style={{ fontSize: 10.5, fontWeight: 900, color: "#dc2626", background: "rgba(220,38,38,.1)", border: "1px solid rgba(220,38,38,.35)", padding: "3px 9px", borderRadius: 99 }}>미결제</span>}
           <span style={{ fontSize: 11.5, color: C.sub, fontWeight: 700 }}>{user.name || user.email}</span>
           <button onClick={onThemeToggle} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.line2}`, background: C.win, color: C.ink, cursor: "pointer", fontSize: 13 }}>{dark ? "☀️" : "🌙"}</button>
           <button onClick={() => setShowAcc(true)} style={btn(C.panel, C.accent)}>🔗 계정</button>
