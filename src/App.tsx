@@ -38,35 +38,33 @@ export default function App() {
   const [theme, setTheme] = useState<"dark"|"light">(() =>
     (localStorage.getItem("publy_theme") as any) || "light"  // 최초 실행은 라이트 고정(로그인·회원대시보드)
   );
-  const [loading, setLoading] = useState(true);
+  // 저장된 로그인이 있으면 그 캐시로 즉시 대시보드 시작(네트워크 안 기다림), 없으면 즉시 로그인 화면.
+  //   → 앱 켤 때 로딩 지연(Supabase 응답 대기) 제거. 세션 검증은 백그라운드로.
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    const restore = async () => {
-      let nextView: View = "login";
-      let nextUser: PublyUser | null = null;
-      const saved = localStorage.getItem("publy_user");
-      if (saved) {
-        try {
-          const cached = JSON.parse(saved) as PublyUser;
-          const hasServerSession = !!getMemberSessionToken();
-          const fresh = await refreshUserById(cached.id);
-          nextUser = fresh || (hasServerSession ? null : cached);
-          if (nextUser) {
-            nextView = "dashboard";
-            localStorage.setItem("publy_user", JSON.stringify(nextUser));
-            window.electron?.registerUser(nextUser.id);
-          } else {
-            localStorage.removeItem("publy_user");
-          }
-        } catch { localStorage.removeItem("publy_user"); }
-      }
-      if (await verifyAdminSession()) nextView = "admin";
-      else sessionStorage.removeItem("publy_admin_auth");
-      if (!alive) return;
-      setUser(nextUser); setView(nextView); setLoading(false);
-    };
-    void restore();
+    const saved = localStorage.getItem("publy_user");
+    if (saved) {
+      // 캐시된 로그인으로 바로 대시보드 → 뒤에서 서버 검증해 어긋나면 로그아웃
+      try {
+        const cached = JSON.parse(saved) as PublyUser;
+        setUser(cached); setView("dashboard");
+        window.electron?.registerUser(cached.id);
+        (async () => {
+          try {
+            const hasServerSession = !!getMemberSessionToken();
+            const fresh = await refreshUserById(cached.id);
+            const next = fresh || (hasServerSession ? null : cached);
+            if (!alive) return;
+            if (next) { setUser(next); localStorage.setItem("publy_user", JSON.stringify(next)); }
+            else { localStorage.removeItem("publy_user"); setUser(null); setView("login"); }
+          } catch {}
+        })();
+      } catch { localStorage.removeItem("publy_user"); }
+    }
+    // 관리자 세션 복원(백그라운드) — 로그인 화면 표시를 막지 않음
+    (async () => { try { if (await verifyAdminSession()) { if (alive) setView("admin"); } else sessionStorage.removeItem("publy_admin_auth"); } catch {} })();
     return () => { alive = false; };
   }, []);
 
