@@ -1162,11 +1162,7 @@ app.post("/api/inflow", async (req, res) => {
     releaseAccount = release;
 
     let plan = inflowPlan;
-    if (userId) {
-      const quota = await checkInflowQuota(userId, plan);
-      if (!quota.ok) { sseSend(res, { type: "quota_exceeded", used: quota.used, limit: quota.limit }); res.end(); return; }
-      sseSend(res, { type: "quota_info", used: quota.used, limit: quota.limit, remaining: quota.limit - quota.used });
-    }
+    // 한도 체크는 대상(statScope)이 정해진 뒤에 아래에서 — 대상별 각각 카운트
 
     let target: InflowTarget;
     if (targetType === "place") {
@@ -1224,6 +1220,12 @@ app.post("/api/inflow", async (req, res) => {
       return ref ? `${t.type === "place" ? "p" : t.type === "blog" ? "b" : "s"}_${String(ref).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40)}` : "";
     };
     const statScope = scopeOf(target);
+    // 🎯 대상별 한도 체크 — place/blog/store 각각 카운트(사용료 대상별). scope별 카운터.
+    if (userId) {
+      const quota = await checkInflowQuota(userId, plan, statScope);
+      if (!quota.ok) { sseSend(res, { type: "quota_exceeded", used: quota.used, limit: quota.limit }); releaseAccount(); res.end(); return; }
+      sseSend(res, { type: "quota_info", used: quota.used, limit: quota.limit, remaining: quota.limit - quota.used });
+    }
 
     let stopped = false;
     res.on("close", () => { stopped = true; });
@@ -1260,9 +1262,9 @@ app.post("/api/inflow", async (req, res) => {
       onQuota: async () => {
         // 한도 체크·차감만(통계는 성공 시점 onSuccess에서 기록 → 시도만 하고 실패한 방문이 유입수 부풀리지 않게)
         if (!userId) return true;
-        if (unlimited) { await incrementInflowQuota(userId).catch(() => {}); return true; }  // 무제한(관리자)은 한도만 스킵
+        if (unlimited) { await incrementInflowQuota(userId, statScope).catch(() => {}); return true; }  // 무제한(관리자)은 한도만 스킵
         const limit = INFLOW_DAILY_LIMIT[plan] ?? INFLOW_DAILY_LIMIT.free;
-        const q = await consumeInflowQuota(memberToken, userId, limit);
+        const q = await consumeInflowQuota(memberToken, userId, limit, statScope);
         if (!q.ok) return false;
         sseSend(res, { type: "quota_info", used: q.used, limit: q.limit, remaining: Math.max(0, q.limit - q.used) });
         return q.ok;

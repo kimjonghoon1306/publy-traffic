@@ -5483,6 +5483,16 @@ async function inflowDwellRead(page: any, log: (m: string) => void, shouldStop?:
 
 // 저장/공감 등 액션(로그인 필요). 셀렉터는 방어적 — 실패해도 유입 자체는 유효.
 type InflowActions = { save?: boolean; like?: boolean; share?: boolean; directions?: boolean; call?: boolean; booking?: boolean; talk?: boolean; review?: boolean; reviewText?: string; wish?: boolean; cart?: boolean; optionView?: boolean; rate?: number; loginAvailable?: boolean };
+// 🔎 공유/더보기 버튼 못 찾을 때 실제 DOM의 후보 요소(text·class·aria)를 로그로 덤프 → 셀렉터 교정용
+async function dumpShareCandidates(page: any, log: (m: string) => void): Promise<void> {
+  try {
+    const items = await page.$$eval('a,button,[role="button"]', (els: any[]) => els.slice(0, 120).map((e: any) => ({
+      t: (e.textContent || "").trim().slice(0, 24), c: String(e.className || "").slice(0, 50), a: e.getAttribute("aria-label") || ""
+    })).filter((x: any) => /공유|share|더보기|more|etc|복사|copy|스크랩|보내기|sns/i.test(x.t + " " + x.c + " " + x.a)));
+    log("  🔎 [DOM진단] 공유/더보기 후보 " + items.length + "개: " + JSON.stringify(items.slice(0, 18)));
+  } catch (e: any) { log("  🔎 [DOM진단] 후보 수집 실패: " + (e?.message || "")); }
+}
+
 async function inflowActions(page: any, target: InflowTarget, actions: InflowActions, log: (m: string) => void): Promise<void> {
   // 🎲 액션 확률 — rate(0~1)면 그 확률만큼만 발동(진짜 사람처럼 매번 안 함). 리뷰는 명시 액션이라 확률 제외.
   const rate = typeof actions.rate === "number" ? actions.rate : 1;
@@ -5576,10 +5586,10 @@ async function inflowActions(page: any, target: InflowTarget, actions: InflowAct
           if (!copied) log("  🔗 공유 레이어 열림 — 복사 버튼은 못 찾아 열람 신호만");
           await page.keyboard.press("Escape").catch(() => {});
         } else {
-          log("  ⚙️ [진단] 블로그 공유 버튼 못 찾음 — 더보기(⋯) 메뉴 셀렉터 확인 필요(개발자).");
+          log("  ⚙️ [진단] 블로그 공유 버튼 못 찾음 — 더보기(⋯) 메뉴 셀렉터 확인 필요."); await dumpShareCandidates(page, log);
         }
       } else {
-        if (!await clickFirst(['a.spi_sns_share', 'a[class*="spi_sns_share"]', 'a:text-is("공유")', 'a:has-text("공유")', 'button:has-text("공유")', '[class*="share"] a'], "  🔗 공유")) log("  ⚙️ [진단] 공유 버튼 못 찾음 — 네이버 화면 변경 의심(개발자 확인).");
+        if (!await clickFirst(['a.spi_sns_share', 'a[class*="spi_sns_share"]', 'a:text-is("공유")', 'a:has-text("공유")', 'button:has-text("공유")', '[class*="share"] a'], "  🔗 공유")) { log("  ⚙️ [진단] 공유 버튼 못 찾음 — 네이버 화면 변경 의심."); await dumpShareCandidates(page, log); }
       }
     }
   } catch (e: any) {

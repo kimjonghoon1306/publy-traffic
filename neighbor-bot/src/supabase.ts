@@ -156,15 +156,17 @@ export async function incrementPlaceDetailQuota(userId: string): Promise<void> {
 
 /* ══ 검색유입(트래픽) 하루 한도 — 관리자/무제한만 락 해제(999999) ══ */
 export const INFLOW_DAILY_LIMIT: Record<string, number> = { free: 20, basic: 50, pro: 100, unlimited: 999999, admin: 999999 };
-function inflowQuotaKey(userId: string): string { return `inflow_daily_${userId}_${koreaDateKey()}`; }
-export async function checkInflowQuota(userId: string, plan: string): Promise<{ ok: boolean; used: number; limit: number }> {
+// 🎯 한도 카운터도 대상(scope)별로 분리 — place/blog/store 사용료를 각각 받으므로 한도도 각각 차감.
+//   scope 없으면(구경로) userId 통합키(하위호환).
+function inflowQuotaKey(userId: string, scope = ""): string { return `inflow_daily_${userId}${scope ? "_" + scope : ""}_${koreaDateKey()}`; }
+export async function checkInflowQuota(userId: string, plan: string, scope = ""): Promise<{ ok: boolean; used: number; limit: number }> {
   const limit = INFLOW_DAILY_LIMIT[plan] ?? INFLOW_DAILY_LIMIT.free;
-  const { data } = await supabase.from("publy_settings").select("value").eq("key", inflowQuotaKey(userId)).maybeSingle();
+  const { data } = await supabase.from("publy_settings").select("value").eq("key", inflowQuotaKey(userId, scope)).maybeSingle();
   const used = Number.parseInt(data?.value || "0", 10) || 0;
   return { ok: used < limit, used, limit };
 }
-export async function incrementInflowQuota(userId: string): Promise<void> {
-  const key = inflowQuotaKey(userId);
+export async function incrementInflowQuota(userId: string, scope = ""): Promise<void> {
+  const key = inflowQuotaKey(userId, scope);
   const { data } = await supabase.from("publy_settings").select("value").eq("key", key).maybeSingle();
   const used = Number.parseInt(data?.value || "0", 10) || 0;
   const { error } = await supabase.from("publy_settings").upsert({ key, value: String(used + 1) }, { onConflict: "key" });
@@ -197,25 +199,27 @@ export async function verifyAdminSession(token: string): Promise<boolean> {
 
 // DB 함수가 배포된 환경에서는 검증과 한도 차감을 한 트랜잭션으로 처리한다.
 const inflowQuotaLocks = new Map<string, Promise<void>>();
-export async function consumeInflowQuota(token: string, userId: string, limit: number): Promise<{ ok: boolean; used: number; limit: number }> {
-  const { data, error } = await supabase.rpc("publy_inflow_consume_quota", { p_token: token, p_limit: limit });
+export async function consumeInflowQuota(token: string, userId: string, limit: number, scope = ""): Promise<{ ok: boolean; used: number; limit: number }> {
+  // RPC에 p_scope 전달 → 대상별 원자 차감. 구버전 RPC(p_scope 없음)면 PGRST202 → 아래 폴백이 대상별로 처리.
+  const { data, error } = await supabase.rpc("publy_inflow_consume_quota", { p_token: token, p_limit: limit, p_scope: scope });
   if (error) {
-    // 새 DB 함수 적용 전 구버전 서버도 중단되지 않게 하되, 한 프로세스 안에서는 반드시 직렬 차감한다.
-    if (!/function.*does not exist|schema cache|PGRST202/i.test(`${error.code || ""} ${error.message || ""}`)) throw new Error(`검색유입 원자 한도 차감 실패: ${error.message}`);
-    const previous = inflowQuotaLocks.get(userId) || Promise.resolve();
+    if (!/function.*does not exist|schema cache|PGRST202|p_scope/i.test(`${error.code || ""} ${error.message || ""}`)) throw new Error(`검색유입 원자 한도 차감 실패: ${error.message}`);
+    // 폴백: 대상(scope)별 카운터를 프로세스 내 직렬로 차감(락 키도 scope 포함)
+    const lockKey = `${userId}::${scope}`;
+    const previous = inflowQuotaLocks.get(lockKey) || Promise.resolve();
     let unlock = () => {};
     const current = new Promise<void>((resolve) => { unlock = resolve; });
     const queued = previous.then(() => current);
-    inflowQuotaLocks.set(userId, queued);
+    inflowQuotaLocks.set(lockKey, queued);
     await previous;
     try {
-      const q = await checkInflowQuota(userId, limit >= 999999 ? "unlimited" : limit >= 100 ? "pro" : limit >= 50 ? "basic" : "free");
-      if (!q.ok) return q;
-      await incrementInflowQuota(userId);
-      return { ok: true, used: q.used + 1, limit: q.limit };
+      const q = await checkInflowQuota(userId, limit >= 999999 ? "unlimited" : limit >= 100 ? "pro" : limit >= 50 ? "basic" : "free", scope);
+      if (!q.ok) return { ...q, limit };
+      await incrementInflowQuota(userId, scope);
+      return { ok: true, used: q.used + 1, limit };
     } finally {
       unlock();
-      if (inflowQuotaLocks.get(userId) === queued) inflowQuotaLocks.delete(userId);
+      if (inflowQuotaLocks.get(lockKey) === queued) inflowQuotaLocks.delete(lockKey);
     }
   }
   return { ok: data?.ok === true, used: Number(data?.used || 0), limit: Number(data?.limit || limit) };
