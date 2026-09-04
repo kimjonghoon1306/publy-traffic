@@ -108,7 +108,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode, externalAccounts }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[] }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다.
   //   회원앱(memberMode)=엄격: 승인된 것만(승인 없으면 아무것도 안 보임=잠금).
@@ -221,7 +221,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [visible, setVisible] = useState(false); // 🪟 창 보기(테스트) — 저장 안 함(안전상 매번 꺼짐)
   const [accountId, setAccountId] = useState("");
   const [selectedAccts, setSelectedAccts] = useState<Set<string>>(new Set()); // 🔄 다계정 로테이션(저장·찜·공감을 여러 계정으로)
-  const [accounts, setAccounts] = useState<PublyAccount[]>([]);
+  const [accountsInternal, setAccounts] = useState<PublyAccount[]>([]);
+  // 🔗 부모(TrafficApp)가 계정을 넘기면 그걸 우선 사용 → 헤더에서 연결하면 팝업에도 즉시 반영(계정 안 뜨는 버그 해결)
+  const accounts = externalAccounts ?? accountsInternal;
   const [running, setRunning] = useState(false);
   type InflowLogEntry = { type: "text"; text: string } | { type: "shot"; caption: string; dataUrl: string };
   const [logs, setLogs] = useState<InflowLogEntry[]>([]);

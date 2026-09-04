@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { PublyUser, PublyAccount, getAccounts, upsertAccount, getTrafficLicenses, TRAFFIC_PLAN_LIMIT, ToolLicense } from "./lib/supabase";
+import { PublyUser, PublyAccount, getAccounts, upsertAccount, deleteTrafficAccount, getTrafficLicenses, TRAFFIC_PLAN_LIMIT, ToolLicense } from "./lib/supabase";
 import { botFetch } from "./lib/botApi";
 import InflowCenter from "./components/InflowCenter";
 
@@ -119,6 +119,14 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
     } catch (e: any) { showToast("연결 실패: " + (e?.message || "오류"), "error"); }
     finally { setAccBusy(false); }
   }
+  // 삭제 확인 — Electron은 window.confirm 안 뜨므로 "한 번 더 누르면 삭제" 방식
+  const [delArm, setDelArm] = useState<string>("");
+  async function deleteAccount(a: PublyAccount) {
+    if (delArm !== a.id) { setDelArm(a.id); showToast("한 번 더 '삭제'를 누르면 삭제돼요", "info"); setTimeout(() => setDelArm(""), 3000); return; }
+    setDelArm("");
+    try { await deleteTrafficAccount(a.id); reloadAccounts(); showToast("계정을 삭제했어요", "success"); }
+    catch (e: any) { showToast("삭제 실패: " + (e?.message || "오류"), "error"); }
+  }
 
   // 5회 탭 → 관리자 로그인(숨김 진입)
   const logoTap = useRef(0);
@@ -138,14 +146,14 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
       {/* 상단 액센트 스트립 */}
       <div style={{ height: 3, flexShrink: 0, background: `linear-gradient(90deg,${C.accent},${C.accent2} 60%,#c4b5fd)` }} />
 
-      {/* 헤더 */}
-      <div style={{ height: 48, flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "0 12px 0 14px", borderBottom: `1px solid ${C.line}`, background: `linear-gradient(180deg,${C.soft},transparent)` }}>
-        <div onClick={onLogoTap} style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg,${C.accent},${C.accent2})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 900, fontSize: 16, boxShadow: "0 4px 14px rgba(109,40,217,.4)", cursor: "pointer", userSelect: "none" }}>T</div>
+      {/* 헤더 — 이 영역 드래그로 창 이동(맥 hiddenInset). 좌측 78px 여백=신호등 버튼 자리. 버튼·로고는 no-drag */}
+      <div style={{ height: 48, flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "0 12px 0 78px", borderBottom: `1px solid ${C.line}`, background: `linear-gradient(180deg,${C.soft},transparent)`, ["WebkitAppRegion" as any]: "drag" }}>
+        <div onClick={onLogoTap} style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(135deg,${C.accent},${C.accent2})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 900, fontSize: 16, boxShadow: "0 4px 14px rgba(109,40,217,.4)", cursor: "pointer", userSelect: "none", ["WebkitAppRegion" as any]: "no-drag" }}>T</div>
         <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: ".02em" }}>퍼블리 트래픽 <small style={{ color: C.sub, fontWeight: 600, marginLeft: 5, fontSize: 11 }}>· TRAFFIC{appVersion ? ` v${appVersion}` : ""}</small></div>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: C.soft, border: `1px solid ${C.line2}`, fontSize: 10.5, fontWeight: 800, color: botOnline ? "#f0417a" : C.sub }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: botOnline ? "#f0417a" : "#dc2626", boxShadow: botOnline ? "0 0 0 0 rgba(240,65,122,.7)" : "none", animation: botOnline ? "pulsePink 1.4s infinite" : "none" }} />{botOnline ? "온라인" : "오프라인"}
         </span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", ["WebkitAppRegion" as any]: "no-drag" }}>
           {/* 🎫 내 트래픽 등급 배지 — 대여 있으면 등급, 없으면 미결제(업그레이드 유도) */}
           {soonest
             ? <span style={{ fontSize: 10.5, fontWeight: 900, color: C.accent, background: C.soft, border: `1px solid ${C.line2}`, padding: "3px 9px", borderRadius: 99 }}>{GRADE_LABEL[gradePlan] || gradePlan}</span>
@@ -159,7 +167,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
 
       {/* 본문 = 유입 엔진(InflowCenter) */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 18px" }}>
-        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} />
+        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} externalAccounts={accounts} />
       </div>
 
       {/* 하단 대여 카운트다운 */}
@@ -196,10 +204,14 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
               {naverAccs.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
                   {naverAccs.map(a => (
-                    <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: C.panel, border: `1px solid ${C.line}`, marginBottom: 6, fontSize: 12.5 }}>
+                    <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: C.panel, border: `1px solid ${C.line}`, marginBottom: 6, fontSize: 12.5, flexWrap: "wrap" }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: a.is_connected ? "#16a34a" : "#dc2626" }} />
                       <b>{a.username}</b>{a.blog_name ? <span style={{ color: C.sub }}>· {a.blog_name}</span> : null}
-                      <span style={{ marginLeft: "auto", color: a.is_connected ? C.accent : C.sub, fontWeight: 700 }}>{a.is_connected ? "연결됨" : "미연결"}</span>
+                      <span style={{ color: a.is_connected ? C.accent : C.sub, fontWeight: 700 }}>{a.is_connected ? "연결됨" : "미연결"}</span>
+                      <div style={{ marginLeft: "auto", display: "flex", gap: 5 }}>
+                        <button onClick={() => { setAccId(a.username); setAccBlog(a.blog_name || ""); setAccPw(""); showToast("비밀번호를 넣고 계정 연결을 누르면 재연결돼요", "info"); }} style={{ padding: "5px 9px", borderRadius: 7, border: `1px solid ${C.accent}`, background: C.win, color: C.accent, fontSize: 11, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>재연결</button>
+                        <button onClick={() => deleteAccount(a)} style={{ padding: "5px 9px", borderRadius: 7, border: "1px solid #dc2626", background: delArm === a.id ? "#dc2626" : C.win, color: delArm === a.id ? "#fff" : "#dc2626", fontSize: 11, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{delArm === a.id ? "정말 삭제" : "삭제"}</button>
+                      </div>
                     </div>
                   ))}
                 </div>

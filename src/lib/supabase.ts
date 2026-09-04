@@ -600,6 +600,12 @@ export async function getAccounts(userId: string, app?: string): Promise<PublyAc
   return data || [];
 }
 
+// 🔗 트래픽 계정만 삭제(app='traffic' 조건 → 퍼블리 공유 계정 실수 삭제 방지)
+export async function deleteTrafficAccount(id: string): Promise<void> {
+  const { error } = await supabase.from("publy_accounts").delete().eq("id", id).eq("app", "traffic");
+  if (error) throw new Error(error.message);
+}
+
 export async function upsertAccount(account: Partial<PublyAccount> & { password_encrypted?: string }) {
   // Legacy NOT NULL schemas accept an empty marker; credentials are never persisted.
   account.password_encrypted = "";
