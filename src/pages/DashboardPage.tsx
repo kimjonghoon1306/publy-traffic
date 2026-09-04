@@ -159,24 +159,11 @@ function getWarmup(connectedAt?: string){
   return {ageDays, stage:s.stage, label:s.label, emoji:s.emoji, neighbor:s.neighbor, engage:s.engage, color:s.color, progress, done:s.stage===5};
 }
 
+// 🚦 트래픽 단품 앱 — 트래픽 유입만 노출. (플레이스/블로그/스토어는 유입 화면 안 서브탭)
+//   퍼블리의 발행·서이추·플레이스365 등 나머지 탭은 이 제품에서 숨긴다. 계정·설정만 필수로 유지.
 const NAV_GROUPS = [
-  {label:"",tabs:[
-    {k:"control",i:"🎛️",l:"컨트롤타워"},
-  ]},
-  {label:"콘텐츠 만들기",tabs:[
-    {k:"keyword",i:"🔍",l:"키워드/제목"},{k:"write",i:"✍️",l:"글 생성"},{k:"image",i:"🖼️",l:"이미지 생성"},{k:"photo",i:"📷",l:"사진 글쓰기"},{k:"publish",i:"🚀",l:"발행하기"},{k:"onetouch",i:"⚡",l:"원터치 발행"},
-  ]},
-  {label:"블로그 운영",tabs:[
-    {k:"calendar",i:"📅",l:"콘텐츠 캘린더",shine:true},{k:"manage",i:"📋",l:"발행 관리"},{k:"blogscore",i:"📈",l:"블로그 지수"},{k:"crawl",i:"🔍",l:"크롤링"},
-  ]},
-  {label:"NEW 트래픽",boxed:true,tabs:[
-    {k:"inflow",i:"🆕",l:"트래픽 유입"},
-  ]},
-  {label:"플레이스",boxed:true,tabs:[
-    {k:"place",i:"🏪",l:"플레이스 365"},{k:"place_reply",i:"🗣️",l:"플레이스 리뷰답글"},
-  ]},
-  {label:"관계·소통 자동화",tabs:[
-    {k:"neighbor",i:"🤝",l:"서이추"},{k:"engage",i:"❤️",l:"공감·댓글"},{k:"reply",i:"💬",l:"답방"},{k:"pumasi",i:"💞",l:"품앗이"},{k:"insta_dm",i:"📱",l:"인스타 DM"},
+  {label:"트래픽",boxed:true,tabs:[
+    {k:"inflow",i:"🚦",l:"트래픽 유입"},
   ]},
   {label:"계정·설정",tabs:[
     {k:"accounts",i:"🔗",l:"계정 관리"},{k:"settings",i:"⚙️",l:"설정"},
@@ -832,7 +819,7 @@ export default function DashboardPage({user, onLogout, onAdminLogin, onThemeTogg
     if (logoTapCount.current >= 5) { logoTapCount.current = 0; onAdminLogin(); return; }
     logoTapTimer.current = setTimeout(() => { logoTapCount.current = 0; }, 1400);
   };
-  const [tab, setTab] = useState<MainTab>("control");
+  const [tab, setTab] = useState<MainTab>("inflow");
   // 🎫 트래픽 라이선스 — 로그인 이메일로 컨트롤타워 승인 기능(place/blog/store) 조회.
   //   승인+미만료(서버시간)만 allowedFeatures로 InflowCenter에 전달 → 승인된 탭만 보임.
   const [allowedFeatures, setAllowedFeatures] = useState<("place"|"blog"|"store")[]>([]);
@@ -5027,26 +5014,13 @@ POST3: (제목)|(이유)
             {NAV_GROUPS.map(group=>(
               <div key={group.label} className={(group as any).boxed?"nav-box":""}>
                 {group.label&&<div className={(group as any).boxed?"nav-box-lbl":"nav-lbl"}>{group.label}</div>}
-                {group.tabs.map(t=> (t.k==="crawl" || t.k==="place" || t.k==="place_reply" || t.k==="inflow") ? (() => { const enabled = (t.k === "place" || t.k === "place_reply") ? place360Enabled : (t.k === "inflow") ? inflowEnabled : crawlEnabled; return (
-                  <button key={t.k} className={`nav-item nav-crawl nav-shine ${tab===t.k&&enabled?"active":""} ${enabled?"":"nav-crawl-locked"}`} onClick={()=>{ if(!enabled){ setShowCrawlLock(true); return; } setTab(t.k); }}>
+                {group.tabs.map(t=> t.k==="inflow" ? (
+                  <button key={t.k} className={`nav-item nav-crawl nav-shine ${tab===t.k?"active":""}`} onClick={()=>setTab(t.k)}>
                     <span className="nav-ico">{t.i}</span><span className="nav-crawl-label">{t.l}</span>
-                    <span className="nav-hot">HOT</span>
-                    {!enabled && <span className="nav-crawl-lock">🔒</span>}
-                    {!enabled && <span className="crawl-tip">🔒 <b>관리자 승인</b>이 필요한 기능이에요</span>}
                   </button>
-                ); })() : (
-                  <button key={t.k} className={`nav-item ${tab===t.k?"active":""} ${t.k==="control"?"nav-control":""} ${t.k==="onetouch"?"nav-onetouch":""} ${t.k==="insta_dm"?"nav-soon":""} ${(t as any).shine?"nav-shine":""}`} onClick={()=>{if(t.k==="insta_dm"){showToast("📱 인스타 DM은 곧 출시됩니다!","info");return;}setTab(t.k);}}>
-                    <span className="nav-ico">{t.i}</span><span style={t.k==="reply"?{color:"#8b5cf6",fontWeight:700}:t.k==="pumasi"?{color:"#e5397f",fontWeight:700}:t.k==="onetouch"?{color:"#7c3aed",fontWeight:800}:undefined}>{t.l}</span>
-                    {(t as any).shine&&<span className="nav-hot">HOT</span>}
-                    {t.k==="onetouch"&&<span className="nav-best">BEST</span>}
-                    {(t.k==="control"||t.k==="blogscore")&&<span className="nav-new">NEW</span>}
-                    {t.k==="insta_dm"&&<span className="nav-soon-badge">곧 출시</span>}
-                    {t.k==="keyword"&&titles.length>0&&<span className="nav-badge" title="추출한 제목 수">{titles.length}</span>}
-                    {t.k==="manage"&&history.length>0&&<span className="nav-badge" title="발행 이력 수">{history.length}</span>}
-                    {/* ↓ 사용량 배지: '오늘 그 기능으로 작업한 횟수'. 0이면 헷갈리므로 숨김 + 툴팁으로 의미 표시 */}
-                    {t.k==="neighbor"&&neighborUsed>0&&<span className="nav-badge" title="오늘 보낸 서이추 수">{neighborUsed}</span>}
-                    {t.k==="engage"&&engageUsed>0&&<span className="nav-badge" title="오늘 남긴 공감·댓글 수">{engageUsed}</span>}
-                    {t.k==="reply"&&replyUsed>0&&<span className="nav-badge" title="오늘 남긴 답방 수">{replyUsed}</span>}
+                ) : (
+                  <button key={t.k} className={`nav-item ${tab===t.k?"active":""}`} onClick={()=>setTab(t.k)}>
+                    <span className="nav-ico">{t.i}</span><span>{t.l}</span>
                   </button>
                 ))}
               </div>
