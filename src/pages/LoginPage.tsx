@@ -506,11 +506,11 @@ export default function LoginPage({ onLogin, onAdminLogin, theme, onThemeToggle 
         {/* 상단 */}
         <div className="top-bar">
           <div style={{display:"flex",alignItems:"baseline",gap:8}}>
-            <div className="top-brand">PUBLY</div>
+            <div className="top-brand">PUBLY TRAFFIC</div>
             {appVersion&&<span style={{fontSize:11,color:theme==="dark"?"rgba(255,255,255,.45)":"rgba(0,0,0,.48)",letterSpacing:".04em"}}>{appVersion.startsWith("v")?appVersion:`v${appVersion}`}</span>}
           </div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button className="top-btn" onClick={onThemeToggle}>{theme === "dark" ? "☀️" : "🌙"}</button>
+            <button className="top-btn" onClick={onThemeToggle} title="라이트/다크 전환" aria-label="테마 전환">{theme === "dark" ? "☀️" : "🌙"}</button>
           </div>
         </div>
 
