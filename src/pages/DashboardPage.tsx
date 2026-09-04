@@ -3,7 +3,7 @@ import GoogleFlowCard from "../GoogleFlowCard";
 import { PublyUser, getQuota, getHistory, getAccounts, PublyQuota, PublyHistory, PublyAccount, upsertAccount, useQuota, refundQuota, addHistory, getHistoryContent, deleteHistory, deleteAllHistory, deleteFailedHistory, changeUserPassword, getNaverApiKeys, saveNaverApiKeys, NaverApiKeys, checkNaverQuota, incrementNaverQuota, getNaverDailyUsage, NAVER_DAILY_LIMIT, getUserNaverApiKeys, logError, PLAN_CONFIG, checkDailyPublishQuota, incrementDailyPublish, getDailyPublishUsage, getNeighborDailyUsage, NEIGHBOR_DAILY_LIMIT, getEngageDailyUsage, ENGAGE_DAILY_LIMIT, InstaDmTarget, InstaDmHistory, InstaDmQuota, getInstaDmTargets, addInstaDmTarget, deleteInstaDmTarget, getInstaDmHistory, addInstaDmHistory, getInstaDmQuota, upsertInstaDmQuota, incrementInstaDmUsage, INSTA_DM_DAILY_LIMIT, getReplyDailyUsage, REPLY_DAILY_LIMIT, pushLiveLog, getWeeklyActivity, WeeklyActivity, getActivityByRange, ActivityRange } from "../lib/supabase";
 import { supabase, submitBugReportRow, getMyResolvedBugAlerts, markBugNotified, PublyBugReport, getPlace360Access } from "../lib/supabase";
 import { markTitleChanged, checkReviveQuota, incrementReviveQuota } from "../lib/supabase";
-import { getTrafficLicenses } from "../lib/supabase";
+import { getTrafficLicenses, TRAFFIC_PLAN_LIMIT } from "../lib/supabase";
 import NeighborPage from "./NeighborPage";
 import CrawlCenter from "../components/CrawlCenter";
 import InflowCenter from "../components/InflowCenter";
@@ -195,7 +195,7 @@ function KeyInput({k}:{k:any; [x:string]:any}) {
       <div style={{display:"flex",gap:6}}>
         <input className="inp" type={show?"text":"password"} placeholder={k.placeholder} value={val} onChange={e=>setVal(e.target.value)} style={{flex:1,fontSize:13,padding:"9px 12px"}}/>
         <button className="btn-ghost" onClick={()=>setShow(s=>!s)}>{show?"숨김":"표시"}</button>
-        <button style={{padding:"9px 16px",borderRadius:8,border:"none",background:saved?"#f0417a":"var(--accent)",color:"#000",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:"inherit",transition:"all .2s"}} onClick={save}>{saved?"✓":"저장"}</button>
+        <button style={{padding:"9px 16px",borderRadius:8,border:"none",background:saved?"#6d28d9":"var(--accent)",color:"#000",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:"inherit",transition:"all .2s"}} onClick={save}>{saved?"✓":"저장"}</button>
       </div>
     </div>
   );
@@ -214,30 +214,30 @@ const CSS = `
 .app.dark{
   /* 웜 에스프레소 다크(너무 어둡지 않게) + 로즈 포인트 — 2026-08-28 리디자인 */
   --bg:#241e17;--bg2:#2b2419;--card:#2e271e;--card2:#352d22;--card-hover:#3b3227;
-  --border:#43392e;--border2:#52463a;--border-focus:#ff6fa1;
+  --border:#43392e;--border2:#52463a;--border-focus:#a78bfa;
   --text:#f6eddd;--text2:#c6b7a1;--text3:#a99d8b;
-  --accent:#ff6fa1;--accent-dim:rgba(255,111,161,.1);--accent-30:rgba(255,111,161,.3);
-  --accent-text:#ff8fb4;--accent-bg:rgba(255,111,161,.1);--accent-border:rgba(255,111,161,.28);
+  --accent:#a78bfa;--accent-dim:rgba(167,139,250,.1);--accent-30:rgba(167,139,250,.3);
+  --accent-text:#c4b5fd;--accent-bg:rgba(167,139,250,.1);--accent-border:rgba(167,139,250,.28);
   --pink:#FF6B9D;--pink-bg:rgba(255,107,157,.1);--pink-border:rgba(255,107,157,.28);
   --yellow:#FFD93D;--yellow-bg:rgba(255,217,61,.08);--yellow-border:rgba(255,217,61,.25);
   --purple:#c3a6ff;--purple-bg:rgba(195,166,255,.1);
   --naver:#03C75A;--tistory:#FF6B35;
   --danger:#ff7a6b;--warn:#ffb454;--info:#f0b657;--success:#5fd39b;
   --header-bg:rgba(36,30,23,.94);--shadow:0 4px 24px rgba(0,0,0,.4);
-  --g-fg:#f6eddd;--g-fg2:rgba(246,237,221,.72);--g-green:#ff6fa1;--g-yellow:#FFD93D;--g-pink:#FF6B9D;--g-surface:#2a2318;--g-surface2:#322a1e;--g-line:rgba(255,255,255,.08);
+  --g-fg:#f6eddd;--g-fg2:rgba(246,237,221,.72);--g-green:#a78bfa;--g-yellow:#FFD93D;--g-pink:#FF6B9D;--g-surface:#2a2318;--g-surface2:#322a1e;--g-line:rgba(255,255,255,.08);
 }
 .app.light{
   /* 웜 페이퍼 라이트 + 로즈 포인트 — 2026-08-28 리디자인 */
   --bg:#f3efe6;--bg2:#fffdf8;--card:#fffdf8;--card2:#f8f3ea;--card-hover:#f1ebe0;
-  --border:#e9e1d3;--border2:#dccfba;--border-focus:#f0417a;
+  --border:#e9e1d3;--border2:#dccfba;--border-focus:#6d28d9;
   --text:#241d16;--text2:#6d6353;--text3:#a99d89;
-  --accent:#f0417a;--accent-dim:rgba(240,65,122,.08);--accent-30:rgba(240,65,122,.3);
-  --accent-text:#c62c62;--accent-bg:rgba(240,65,122,.08);--accent-border:rgba(240,65,122,.25);
+  --accent:#6d28d9;--accent-dim:rgba(109,40,217,.08);--accent-30:rgba(109,40,217,.3);
+  --accent-text:#5b21b6;--accent-bg:rgba(109,40,217,.08);--accent-border:rgba(109,40,217,.25);
   --pink:#e0396d;--pink-bg:rgba(224,57,109,.07);--pink-border:rgba(224,57,109,.25);
   --yellow:#b57e12;--yellow-bg:rgba(181,126,18,.08);--yellow-border:rgba(181,126,18,.25);
   --purple:#6d4fcc;--purple-bg:rgba(109,79,204,.07);
   --naver:#03C75A;--tistory:#FF6B35;
-  --danger:#cf222e;--warn:#9a6700;--info:#c62c62;--success:#1a7f37;
+  --danger:#cf222e;--warn:#9a6700;--info:#5b21b6;--success:#1a7f37;
   --header-bg:rgba(243,239,230,.95);--shadow:0 2px 12px rgba(60,45,30,.07);
   --g-fg:#241d16;--g-fg2:#6d6353;--g-green:#0a8f57;--g-yellow:#956e00;--g-pink:#d6336c;--g-surface:#fffdf8;--g-surface2:#f5efe4;--g-line:#e9e1d3;
 }
@@ -245,7 +245,7 @@ const CSS = `
 *::-webkit-scrollbar{width:5px;}*::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
 .header{min-height:58px;flex-shrink:0;display:flex;align-items:center;flex-wrap:wrap;padding:8px 16px;gap:10px;background:var(--header-bg);border-bottom:1px solid var(--border);backdrop-filter:blur(24px);position:sticky;top:0;z-index:100;}
 .logo{display:flex;align-items:center;gap:9px;text-decoration:none;flex-shrink:0;}
-.logo-ico{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#f0417a,#ff8a4c);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 12px rgba(240,65,122,.4);}
+.logo-ico{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6d28d9,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 12px rgba(109,40,217,.4);}
 .logo-text{font-size:17px;font-weight:900;letter-spacing:.18em;color:var(--accent-text);font-family:'Space Grotesk',sans-serif;}
 .header-mid{display:flex;align-items:center;gap:8px;flex:1;justify-content:center;flex-wrap:wrap;}
 .plat-btn{padding:5px 12px;border-radius:99px;border:1.5px solid;font-size:11px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;white-space:nowrap;flex-shrink:0;}
@@ -282,7 +282,7 @@ const CSS = `
 .user-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .logout-btn{padding:6px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-weight:600;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
 .logout-btn:hover{border-color:var(--danger);color:var(--danger);}
-.dl-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:99px;border:none;background:linear-gradient(135deg,#f0417a,#ff8a4c);color:#000;font-size:12px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;text-decoration:none;animation:dlFloat 2.5s ease-in-out infinite;white-space:nowrap;flex-shrink:0;box-shadow:0 3px 14px rgba(240,65,122,.35);}
+.dl-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:99px;border:none;background:linear-gradient(135deg,#6d28d9,#8b5cf6);color:#000;font-size:12px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;text-decoration:none;animation:dlFloat 2.5s ease-in-out infinite;white-space:nowrap;flex-shrink:0;box-shadow:0 3px 14px rgba(109,40,217,.35);}
 .guide-open-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 15px;border-radius:99px;border:none;background:linear-gradient(135deg,#FF6B9D,#FF3D7F);color:#fff;font-size:12px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;animation:guideFloat 2.8s ease-in-out infinite;white-space:nowrap;flex-shrink:0;box-shadow:0 3px 14px rgba(255,61,127,.35);}
 .video-open-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 15px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
 .video-open-btn:hover{border-color:#FF3D7F;color:#FF6B9D;}
@@ -294,7 +294,7 @@ const CSS = `
 .sidebar{position:relative;flex-shrink:0;z-index:50;width:210px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:12px 8px;gap:2px;overflow-y:auto;}
 .nav-lbl{font-size:9px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--text3);padding:5px 11px 7px;margin-top:4px;}
 /* 플레이스 세트: 플레이스365+리뷰답글을 테두리로 묶어 한 눈에 */
-.nav-box{margin:8px 6px;padding:6px 6px 7px;border:1.5px solid var(--accent-soft,rgba(240,65,122,.35));border-radius:12px;background:linear-gradient(180deg,rgba(240,65,122,.06),rgba(240,65,122,.02));position:relative;}
+.nav-box{margin:8px 6px;padding:6px 6px 7px;border:1.5px solid var(--accent-soft,rgba(109,40,217,.35));border-radius:12px;background:linear-gradient(180deg,rgba(109,40,217,.06),rgba(109,40,217,.02));position:relative;}
 .nav-box-lbl{font-size:9px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#16856b;padding:2px 6px 6px;display:flex;align-items:center;gap:4px;}
 .nav-box-lbl::before{content:"🏪";font-size:11px;}
 .dark .nav-box{border-color:rgba(34,168,128,.4);background:linear-gradient(180deg,rgba(34,168,128,.08),rgba(34,168,128,.02));}
@@ -316,7 +316,7 @@ const CSS = `
 .card-title{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--text2);display:flex;align-items:center;gap:7px;}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 22px;border-radius:10px;border:none;font-size:14px;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .15s;white-space:nowrap;}
 .btn:disabled{opacity:.42;cursor:not-allowed;}
-.btn-primary{background:linear-gradient(135deg,var(--accent),#ff8a4c);color:#000;box-shadow:0 3px 14px var(--accent-30);}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#8b5cf6);color:#000;box-shadow:0 3px 14px var(--accent-30);}
 .btn-primary:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);}
 .btn-secondary{background:var(--card2);color:var(--text);border:1px solid var(--border);}
 .btn-secondary:hover:not(:disabled){background:var(--card-hover);border-color:var(--border2);}
@@ -333,7 +333,7 @@ const CSS = `
 .flow-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 26px;border-radius:99px;border:none;font-size:15px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .18s;}
 .flow-btn:hover:not(:disabled){transform:translateY(-2px);}
 .flow-btn:disabled{opacity:.4;cursor:not-allowed;}
-.flow-btn-g{background:linear-gradient(135deg,var(--accent),#ff8a4c);color:#000;box-shadow:0 4px 20px var(--accent-30);}
+.flow-btn-g{background:linear-gradient(135deg,var(--accent),#8b5cf6);color:#000;box-shadow:0 4px 20px var(--accent-30);}
 .flow-btn-skip{background:var(--card2);color:var(--text2);border:1px solid var(--border);}
 .inp{width:100%;padding:12px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:'Noto Sans KR',sans-serif;outline:none;transition:all .15s;}
 .inp:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(77,166,255,.12);}
@@ -348,7 +348,7 @@ select.inp{cursor:pointer;appearance:auto;}
 textarea.inp{resize:vertical;line-height:1.75;min-height:80px;}
 .spinner{width:16px;height:16px;border-radius:50%;border:2.5px solid rgba(0,0,0,.15);border-top-color:#000;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0;}
 .sp-w{border-color:rgba(255,255,255,.2);border-top-color:#fff;}
-.sp-g{border-color:rgba(240,65,122,.2);border-top-color:var(--accent);}
+.sp-g{border-color:rgba(109,40,217,.2);border-top-color:var(--accent);}
 .steps{display:flex;border-radius:13px;overflow:hidden;border:1px solid var(--border);margin-bottom:20px;background:var(--bg2);}
 .step-item{flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:600;color:var(--text3);background:transparent;border-right:1px solid var(--border);transition:all .2s;}
 .step-item:last-child{border-right:none;}
@@ -381,7 +381,7 @@ textarea.inp{resize:vertical;line-height:1.75;min-height:80px;}
 .img-td{position:absolute;top:-6px;right:-6px;width:19px;height:19px;border-radius:50%;background:var(--danger);border:none;color:#fff;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;}
 .img-td:hover{transform:scale(1.15);}
 .img-prog{height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin:10px 0 6px;}
-.img-prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),#ff8a4c);border-radius:99px;transition:width .4s;}
+.img-prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),#8b5cf6);border-radius:99px;transition:width .4s;}
 .concept-grid{display:grid;gap:10px;}
 .concept-btn{padding:16px 18px;border-radius:13px;border:2px solid var(--border);background:var(--bg);cursor:pointer;text-align:left;font-family:'Noto Sans KR',sans-serif;transition:all .18s;}
 .concept-btn.sel-full{border-color:var(--accent);background:var(--accent-bg);}
@@ -435,7 +435,7 @@ textarea.inp{resize:vertical;line-height:1.75;min-height:80px;}
 .guide-modal{width:100%;max-width:560px;max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));border-radius:24px;overflow:hidden;display:flex;flex-direction:column;animation:guideIn .32s cubic-bezier(.34,1.56,.64,1) both;box-shadow:0 32px 80px rgba(0,0,0,.6);position:relative;}
 .guide-header{padding:22px 22px 0;background:var(--g-surface2);flex-shrink:0;border-bottom:1px solid var(--g-line);}
 .guide-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
-.guide-logo-ico{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#f0417a,#ff8a4c);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.guide-logo-ico{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#6d28d9,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
 .guide-title{font-size:20px;font-weight:900;color:var(--g-fg);}
 .guide-subtitle{font-size:12px;color:var(--g-fg2);margin-top:3px;}
 .guide-tabs{display:flex;overflow-x:auto;scrollbar-width:none;}
@@ -761,11 +761,11 @@ textarea.inp{resize:vertical;line-height:1.75;min-height:80px;}
 .photo-keypoints{width:100%;min-height:80px;padding:14px;border-radius:14px;border:1.5px solid #C77DFF44;background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;resize:vertical;outline:none;transition:all .2s;line-height:1.7;}
 .photo-keypoints:focus{border-color:#C77DFF;background:var(--card);box-shadow:0 0 0 3px #C77DFF22;}
 .photo-keypoints::placeholder{color:var(--text3);}
-.photo-gen-btn{width:100%;padding:18px;border-radius:16px;border:none;cursor:pointer;font-size:16px;font-weight:900;font-family:inherit;transition:all .2s;background:linear-gradient(135deg,#f0417a,#ff6fa1);color:#fff;box-shadow:0 4px 20px rgba(255,107,157,.4);margin-top:8px;}
+.photo-gen-btn{width:100%;padding:18px;border-radius:16px;border:none;cursor:pointer;font-size:16px;font-weight:900;font-family:inherit;transition:all .2s;background:linear-gradient(135deg,#6d28d9,#a78bfa);color:#fff;box-shadow:0 4px 20px rgba(255,107,157,.4);margin-top:8px;}
 .photo-gen-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(255,107,157,.5);}
 .photo-gen-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
 .photo-guides{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:18px;margin-bottom:8px;}
-.photo-guide-btn{padding:10px 16px;border-radius:99px;background:linear-gradient(135deg,#f0417a,#ff6fa1);border:none;cursor:pointer;font-size:13px;font-weight:800;color:#fff;display:flex;align-items:center;gap:6px;transition:all .2s;white-space:nowrap;font-family:inherit;}
+.photo-guide-btn{padding:10px 16px;border-radius:99px;background:linear-gradient(135deg,#6d28d9,#a78bfa);border:none;cursor:pointer;font-size:13px;font-weight:800;color:#fff;display:flex;align-items:center;gap:6px;transition:all .2s;white-space:nowrap;font-family:inherit;}
 .photo-guide-btn:hover{transform:scale(1.05);}
 /* 모바일: 좌하단 고정(결제문의는 우하단이라 안 겹침), 항상 보이게 */
 @media(max-width:768px){
@@ -824,6 +824,9 @@ export default function DashboardPage({user, onLogout, onAdminLogin, onThemeTogg
   //   승인+미만료(서버시간)만 allowedFeatures로 InflowCenter에 전달 → 승인된 탭만 보임.
   const [allowedFeatures, setAllowedFeatures] = useState<("place"|"blog"|"store")[]>([]);
   const [licenseSaver, setLicenseSaver] = useState<string>("");
+  const [inflowBusy, setInflowBusy] = useState(false); // 트래픽 유입 실행/예약/오토파일럿 중 = 절전 방지
+  // 🎫 기능별 라이선스 상세(등급 한도·허용행동): { place: {limit, actions[], plan}, ... }
+  const [licenseByFeat, setLicenseByFeat] = useState<Record<string,{limit:number;actions:string[];plan:string}>>({});
   const licSigRef = useRef<string>("");
   useEffect(() => {
     let alive = true;
@@ -835,9 +838,17 @@ export default function DashboardPage({user, onLogout, onAdminLogin, onThemeTogg
         const feats = ok.map(l => l.tool);
         const order: Record<string,number> = { normal: 0, save: 1, ultra: 2 };
         const strongest = ok.map(l => l.data_saver || "ultra").sort((a,b)=>(order[b]??2)-(order[a]??2))[0] || "";
+        // 기능별 등급 한도(+보너스)·허용행동 맵
+        const byFeat: Record<string,{limit:number;actions:string[];plan:string}> = {};
+        ok.forEach(l => {
+          const plan = l.plan || "basic";
+          const base = TRAFFIC_PLAN_LIMIT[plan] ?? 30;           // 0=무제한
+          const limit = base === 0 ? 0 : base + (l.bonus_quota || 0);
+          byFeat[l.tool] = { limit, actions: Array.isArray(l.allowed_actions) ? l.allowed_actions : [], plan };
+        });
         // 값이 실제로 바뀐 경우에만 setState → 2초 폴링이어도 불필요 리렌더 없음
-        const sig = JSON.stringify([feats.slice().sort(), strongest]);
-        if (sig !== licSigRef.current) { licSigRef.current = sig; setAllowedFeatures(feats); setLicenseSaver(strongest); }
+        const sig = JSON.stringify([feats.slice().sort(), strongest, byFeat]);
+        if (sig !== licSigRef.current) { licSigRef.current = sig; setAllowedFeatures(feats); setLicenseSaver(strongest); setLicenseByFeat(byFeat); }
       } catch {}
     };
     void load();
@@ -1487,10 +1498,10 @@ Output (JSON object only): {"keyword":"핵심키워드","title":"새 SEO 제목"
   // ★절전 방지(테리 요청): 자동 작업(발행·이미지생성·서이추·공감댓글) 중엔 화면/맥이 안 꺼지게(맥·윈도우 공통).
   //   어느 기능이든 하나라도 돌면 keepAwake, 전부 끝나면 자동 해제 → 평소엔 정상 절전. (영화 틀면 안 꺼지는 것과 같은 원리)
   useEffect(()=>{
-    const busy = publishing || genImgLoading || neighborBusy || otRunning || otSchedOn;   // ★원터치·예약 대기 중 화면·시스템 안 꺼지게(예약=지정 시각까지 노트북 살아있게)
+    const busy = publishing || genImgLoading || neighborBusy || otRunning || otSchedOn || inflowBusy;   // ★트래픽 유입(텀 대기·예약·오토파일럿 포함)도 화면 안 꺼지게
     window.electron?.keepAwake?.(busy).catch(()=>{});
     return ()=>{ if(busy) window.electron?.keepAwake?.(false).catch(()=>{}); };
-  },[publishing, genImgLoading, neighborBusy, otRunning, otSchedOn]);
+  },[publishing, genImgLoading, neighborBusy, otRunning, otSchedOn, inflowBusy]);
   // ⏰ 예약 감시: 30초마다 현재 시각을 확인해 예약 시각이면 원터치 자동 시작(중복 방지). 매일 반복이면 계속.
   useEffect(()=>{
     otRunRef.current=()=>runOneTouch(undefined,undefined,"schedule");
@@ -4538,7 +4549,7 @@ POST3: (제목)|(이유)
   const activeImages=getActiveImages();
   useEffect(()=>{if(genTitle)setPubTitle(genTitle);},[genTitle]);
   useEffect(()=>{if(genTags)setPubTags(genTags);},[genTags]);
-  const P="#FF6B9D",Y="#FFD93D",G="#f0417a";
+  const P="#FF6B9D",Y="#FFD93D",G="#6d28d9";
   const guideTabs=["🏠 시작","🔑 API 키","✍️ 글 생성","🖼️ 이미지","🚀 발행","🏪 플레이스","❓ FAQ"];
   const guidePages=[
     /* ── 0: 시작 ── */
@@ -4548,7 +4559,7 @@ POST3: (제목)|(이유)
         <div className="g-step-title" style={{color:"var(--g-fg)"}}>글쓰기부터 매장 성장까지 한곳에서 해요</div>
         <div className="g-step-desc">블로그는 <b>제목 → 글 → 이미지 → 자동 발행</b>, 매장은 <b>순위 확인 → 진단 → 고객 화면 점검 → 리뷰어 찾기</b> 순서로 따라가면 돼요.</div>
       </div>
-      <div className="g-step" style={{borderColor:"rgba(240,65,122,.35)",background:"rgba(240,65,122,.08)"}}>
+      <div className="g-step" style={{borderColor:"rgba(109,40,217,.35)",background:"rgba(109,40,217,.08)"}}>
         <div className="g-step-num" style={{color:"#16856b"}}>🏪 매장을 운영하시나요?</div>
         <div className="g-step-title" style={{color:"var(--g-fg)"}}>플레이스 365부터 눌러보세요</div>
         <div className="g-step-desc">왼쪽의 <b>🏪 플레이스 365</b>에서 내 매장을 등록하면 현재 순위, 주변 업체 비교, 고객에게 보이는 정보를 한눈에 확인할 수 있어요.</div>
@@ -4596,7 +4607,7 @@ POST3: (제목)|(이유)
         <div key={i} className="g-step" style={{borderColor:`${ai.color}35`,background:`${ai.color}08`}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
             <div style={{width:34,height:34,borderRadius:9,background:ai.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:"#000",fontSize:14,flexShrink:0}}>{ai.logo}</div>
-            <div><div style={{fontSize:15,fontWeight:800,color:"var(--g-fg)"}}>{ai.name}</div><span style={{fontSize:11,fontWeight:800,padding:"2px 8px",borderRadius:99,background:ai.free?"rgba(240,65,122,.15)":"rgba(245,158,11,.15)",color:ai.free?"#f0417a":"#f59e0b"}}>{ai.free?"✅ 무료":"💳 유료"}</span></div>
+            <div><div style={{fontSize:15,fontWeight:800,color:"var(--g-fg)"}}>{ai.name}</div><span style={{fontSize:11,fontWeight:800,padding:"2px 8px",borderRadius:99,background:ai.free?"rgba(109,40,217,.15)":"rgba(245,158,11,.15)",color:ai.free?"#6d28d9":"#f59e0b"}}>{ai.free?"✅ 무료":"💳 유료"}</span></div>
           </div>
           <div className="g-step-desc">{ai.desc}</div>
           <div className="g-tip" style={{marginTop:8,fontSize:13}}>🔑 <a href={ai.link} target="_blank" rel="noopener noreferrer" style={{color:"var(--g-yellow)",fontWeight:700,textDecoration:"underline"}}>여기서 키 발급</a> → 로그인 → API 키 생성 → 복사 → 설정 탭 붙여넣기</div>
@@ -4659,7 +4670,7 @@ POST3: (제목)|(이유)
             </div>
           ))}
         </div>
-        <button className="g-btn" style={{background:`linear-gradient(135deg,${G},#ff8a4c)`,color:"#000"}} onClick={()=>{setShowGuide(false);setTab("accounts");}}>🔗 계정 연결하러 가기</button>
+        <button className="g-btn" style={{background:`linear-gradient(135deg,${G},#8b5cf6)`,color:"#000"}} onClick={()=>{setShowGuide(false);setTab("accounts");}}>🔗 계정 연결하러 가기</button>
       </div>
       <div className="g-step" style={{borderColor:`${Y}40`,background:`${Y}08`}}>
         <div className="g-step-num" style={{color:"var(--g-yellow)"}}>🖼️ 이미지+글 패턴 확인</div>
@@ -4670,7 +4681,7 @@ POST3: (제목)|(이유)
 
     /* ── 5: 플레이스 365 ── */
     <div key="5">
-      <div className="g-step" style={{borderColor:"rgba(240,65,122,.4)",background:"rgba(240,65,122,.08)"}}>
+      <div className="g-step" style={{borderColor:"rgba(109,40,217,.4)",background:"rgba(109,40,217,.08)"}}>
         <div className="g-step-num" style={{color:"#16856b"}}>🏪 플레이스 365이 뭐예요?</div>
         <div className="g-step-title" style={{color:"var(--g-fg)"}}>내 가게를 찾고, 비교하고, 키우는 매장 성장센터예요</div>
         <div className="g-step-desc">단순 순위 조회가 아니에요. 고객에게 내 매장이 어떻게 보이는지 확인하고, 주변 업체보다 부족한 점과 다음 행동을 알려줘요.</div>
@@ -4762,7 +4773,7 @@ POST3: (제목)|(이유)
           <div style={{position:"fixed",inset:0,zIndex:10000,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
             onClick={()=>{ pwPromptResolve.current?.(null); pwPromptResolve.current=null; setPwPrompt(null); }}>
             <div style={{width:"100%",maxWidth:400,borderRadius:20,background:"var(--card)",border:"1px solid var(--accent-border)",overflow:"hidden",animation:"fadeUp .25s ease",boxShadow:"0 24px 60px rgba(0,0,0,.5)"}} onClick={e=>e.stopPropagation()}>
-              <div style={{padding:"18px 22px 14px",background:"linear-gradient(135deg,var(--accent),#ff8a4c)",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{padding:"18px 22px 14px",background:"linear-gradient(135deg,var(--accent),#8b5cf6)",display:"flex",alignItems:"center",gap:10}}>
                 <span style={{fontSize:24}}>🔒</span>
                 <div><div style={{fontSize:16,fontWeight:900,color:"#000"}}>세션이 만료되었어요</div>
                 <div style={{fontSize:12,color:"rgba(0,0,0,.7)",marginTop:2}}>{pwPrompt.acc.platform==="naver"?"네이버":"티스토리"} 비밀번호를 다시 입력해주세요</div></div>
@@ -4879,19 +4890,12 @@ POST3: (제목)|(이유)
           </button>
           {appVersion&&<span style={{fontSize:10.5,color:"var(--text3)",fontWeight:600,whiteSpace:"nowrap"}}>{appVersion.startsWith("v")?appVersion:`v${appVersion}`}</span>}
           <div className="header-mid">
-            <button className={`plat-btn ${platform==="naver"?"plat-btn-naver":"plat-btn-naver-off"}`} onClick={()=>setPlatform("naver")}>🟢 네이버</button>
-            <button className={`plat-btn ${platform==="tistory"?"plat-btn-tistory":"plat-btn-tistory-off"}`} onClick={()=>setPlatform("tistory")}>🟠 티스토리</button>
-            <div style={{width:1,height:16,background:"var(--border)",flexShrink:0}}/>
+            {/* 트래픽 전용: 플랫폼 토글·발행 quota칩 제거(발행 기능 없음). 서버·프록시 상태만. */}
             <div className={`server-chip ${botOnline?"server-on":"server-off"}`}><div className={`dot ${botOnline?"dot-on":"dot-off"}`}/>{botOnline?"서버 온라인":"서버 오프라인"}</div>
             {proxyActive && <div className="server-chip proxy-chip" title="관리자가 프록시(전용 IP)를 켜줬어요. 안전하게 자동 접속 중이에요."><div className="dot"/>프록시 ON</div>}
-            {(["unlimited","admin"] as string[]).includes(user.plan)
-              ? <div className="quota-chip"><div className="quota-bar-bg"><div className="quota-bar-fill" style={{width:"100%"}}/></div>무제한<span className={`plan-badge plan-${user.plan}`}>{PLAN_LABELS[user.plan]}</span></div>
-              : <div className="quota-chip"><div className="quota-bar-bg"><div className="quota-bar-fill" style={{width:`${Math.min(100,(dailyPublishUsed/(PLAN_CONFIG[user.plan]?.dailyPublish??2))*100)}%`}}/></div>{Math.max(0,(PLAN_CONFIG[user.plan]?.dailyPublish??2)-dailyPublishUsed)}건<span className={`plan-badge plan-${user.plan}`}>{PLAN_LABELS[user.plan]}</span></div>}
           </div>
           <div className="header-right">
-            <button className="video-open-btn" onClick={()=>setShowVideo(true)} title="소개 영상 보기">🎬 <span className="guide-btn-text">영상</span></button>
-            <button className="guide-open-btn" onClick={()=>{setShowGuide(true);setGuideTab(0);}}>📖 <span className="guide-btn-text">사용설명서</span></button>
-            <button className="guide-open-btn" onClick={()=>setShowDaebaekseo(true)} title="어떤 순서로 어떨 때 쓰면 좋은지 모아둔 퍼블리 대백서" style={{background:"linear-gradient(135deg,#ff7eb6,#ff5a98)",color:"#fff",border:0}}>📚 <span className="guide-btn-text">대백서</span></button>
+            {/* 트래픽 전용: 영상·사용설명서·대백서(퍼블리용) 제거 */}
             <button className="icon-btn" onClick={onThemeToggle} title="화면 밝기 전환" aria-label="테마 전환">{theme==="dark"?"☀️":"🌙"}</button>
             <button className="icon-btn" onClick={handleHeaderRefresh} title="새로고침" aria-label="새로고침" disabled={refreshing}><span style={{display:"inline-block",animation:refreshing?"publySpin .55s linear infinite":"none"}}>🔄</span></button>
 
@@ -6044,7 +6048,7 @@ POST3: (제목)|(이유)
                                 <span style={{fontSize:14,fontWeight:900,color:"var(--accent-text)",fontFamily:"'Space Grotesk',sans-serif"}}>{genImgProgress}%</span>
                               </div>
                               <div style={{height:8,background:"var(--border)",borderRadius:99,overflow:"hidden"}}>
-                                <div style={{height:"100%",width:`${genImgProgress}%`,background:"linear-gradient(90deg,var(--accent),#ff8a4c)",borderRadius:99,transition:"width .4s"}}/>
+                                <div style={{height:"100%",width:`${genImgProgress}%`,background:"linear-gradient(90deg,var(--accent),#8b5cf6)",borderRadius:99,transition:"width .4s"}}/>
                               </div>
                             </div>
                           )}
@@ -6372,7 +6376,7 @@ POST3: (제목)|(이유)
                       style={{padding:"5px 12px",borderRadius:20,background:(photoSuggesting||photoFiles.length===0)?"var(--card2)":"var(--accent)",color:(photoSuggesting||photoFiles.length===0)?"var(--text3)":"#fff",border:"none",cursor:(photoSuggesting||photoFiles.length===0)?"default":"pointer",fontSize:11,fontWeight:800,fontFamily:"inherit",whiteSpace:"nowrap"}}>
                       {photoSuggesting?"✨ 분석 중...":"✨ AI 추천"}
                     </button>
-                    <button onClick={()=>{const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>키포인트 예시</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Malgun Gothic',sans-serif;background:#fdf0ff;color:#111}h1{background:linear-gradient(135deg,#f0417a,#ff6fa1);color:#fff;padding:20px 24px;font-size:18px;line-height:1.4}.content{padding:20px}.intro{font-size:14px;color:#555;line-height:1.8;margin-bottom:18px;padding:12px 16px;background:#fff;border-radius:12px;border-left:4px solid #C77DFF}.cat-title{font-size:13px;font-weight:800;color:#FF6B9D;margin:16px 0 8px;padding:4px 10px;background:#FF6B9D11;border-radius:6px;display:inline-block}.bad{background:#fff0f0;border:1px solid #ffcccc;border-radius:10px;padding:10px 14px;margin-bottom:6px;font-size:13px;color:#c00;line-height:1.7}.good{background:#f0fff4;border:1px solid #99ddaa;border-radius:10px;padding:10px 14px;font-size:13px;color:#005c1a;line-height:1.8;margin-bottom:16px}.lbl{font-size:10px;font-weight:800;margin-bottom:3px}.tip{background:linear-gradient(135deg,#FF6B9D11,#C77DFF11);border:1px solid #C77DFF33;border-radius:12px;padding:14px;margin-top:4px;font-size:13px;line-height:1.9}</style></head><body><h1>✏️ 키포인트 이렇게 쓰면 글이 잘 나와요</h1><div class="content"><div class="intro">구체적으로 쓸수록 실제 경험처럼 자연스러운 글이 나옵니다.<br>장소 + 가격 + 시간 + 특징 + 개인 의견을 담아주세요.</div><div class="cat-title">🍽️ 맛집 방문</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>강원도 맛집, 고기집, 맛있었음</div><div class="good"><div class="lbl">✅ 좋은 예</div>강원도 홍천 태장동 / 한우 소갈비찜 전문점 / 2인 45,000원 / 웨이팅 40분 / 주차 무료 / 반찬 10가지 / 아이 동반 가능 / 재방문 의향 있음</div><div class="cat-title">✈️ 여행 후기</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>제주도 여행, 경치 좋았다</div><div class="good"><div class="lbl">✅ 좋은 예</div>제주 성산읍 성산일출봉 / 오전 6시 방문 / 입장료 5,000원 / 일출 40분 전 도착 권장 / 주차장에서 도보 10분 / 공항에서 1시간 소요</div><div class="cat-title">☕ 카페 방문</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>서울 카페, 인테리어 예쁨</div><div class="good"><div class="lbl">✅ 좋은 예</div>서울 성수동 공장 리모델링 카페 / 아메리카노 6,500원 / 대기 없이 입장 / 오전 11시 방문 / 좌석 80개 / 지하철 권장 주차 불가</div><div class="cat-title">📦 제품 리뷰</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>에어프라이어 구매, 좋음</div><div class="good"><div class="lbl">✅ 좋은 예</div>필립스 에어프라이어 5.6L / 129,000원 / 3인 가족 6개월 사용 / 치킨 20분 바삭 / 세척 쉬움 / 단점: 크기 커서 수납 불편 / 만족도 9점</div><div class="cat-title">💬 체험단 후기</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>협찬 받은 피부과, 좋았음</div><div class="good"><div class="lbl">✅ 좋은 예</div>[협찬] 강남 청담 피부과 / 리프팅 시술 1회 / 40분 소요 / 붓기 거의 없음 / 직원 친절 / 주차 2시간 무료 / 다음 달 추가 예약</div><div class="tip">💡 핵심: 장소 + 가격 + 소요시간 + 특징 2~3개 + 내 솔직한 의견<br>이렇게만 써도 AI가 훨씬 풍부하고 자연스러운 글을 써드려요!</div></div></body></html>`;setPhotoGuideModal("example");}} style={{padding:"5px 12px",borderRadius:20,background:"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",border:"none",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>📝 예시 보기</button>
+                    <button onClick={()=>{const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>키포인트 예시</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Malgun Gothic',sans-serif;background:#fdf0ff;color:#111}h1{background:linear-gradient(135deg,#6d28d9,#a78bfa);color:#fff;padding:20px 24px;font-size:18px;line-height:1.4}.content{padding:20px}.intro{font-size:14px;color:#555;line-height:1.8;margin-bottom:18px;padding:12px 16px;background:#fff;border-radius:12px;border-left:4px solid #C77DFF}.cat-title{font-size:13px;font-weight:800;color:#FF6B9D;margin:16px 0 8px;padding:4px 10px;background:#FF6B9D11;border-radius:6px;display:inline-block}.bad{background:#fff0f0;border:1px solid #ffcccc;border-radius:10px;padding:10px 14px;margin-bottom:6px;font-size:13px;color:#c00;line-height:1.7}.good{background:#f0fff4;border:1px solid #99ddaa;border-radius:10px;padding:10px 14px;font-size:13px;color:#005c1a;line-height:1.8;margin-bottom:16px}.lbl{font-size:10px;font-weight:800;margin-bottom:3px}.tip{background:linear-gradient(135deg,#FF6B9D11,#C77DFF11);border:1px solid #C77DFF33;border-radius:12px;padding:14px;margin-top:4px;font-size:13px;line-height:1.9}</style></head><body><h1>✏️ 키포인트 이렇게 쓰면 글이 잘 나와요</h1><div class="content"><div class="intro">구체적으로 쓸수록 실제 경험처럼 자연스러운 글이 나옵니다.<br>장소 + 가격 + 시간 + 특징 + 개인 의견을 담아주세요.</div><div class="cat-title">🍽️ 맛집 방문</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>강원도 맛집, 고기집, 맛있었음</div><div class="good"><div class="lbl">✅ 좋은 예</div>강원도 홍천 태장동 / 한우 소갈비찜 전문점 / 2인 45,000원 / 웨이팅 40분 / 주차 무료 / 반찬 10가지 / 아이 동반 가능 / 재방문 의향 있음</div><div class="cat-title">✈️ 여행 후기</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>제주도 여행, 경치 좋았다</div><div class="good"><div class="lbl">✅ 좋은 예</div>제주 성산읍 성산일출봉 / 오전 6시 방문 / 입장료 5,000원 / 일출 40분 전 도착 권장 / 주차장에서 도보 10분 / 공항에서 1시간 소요</div><div class="cat-title">☕ 카페 방문</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>서울 카페, 인테리어 예쁨</div><div class="good"><div class="lbl">✅ 좋은 예</div>서울 성수동 공장 리모델링 카페 / 아메리카노 6,500원 / 대기 없이 입장 / 오전 11시 방문 / 좌석 80개 / 지하철 권장 주차 불가</div><div class="cat-title">📦 제품 리뷰</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>에어프라이어 구매, 좋음</div><div class="good"><div class="lbl">✅ 좋은 예</div>필립스 에어프라이어 5.6L / 129,000원 / 3인 가족 6개월 사용 / 치킨 20분 바삭 / 세척 쉬움 / 단점: 크기 커서 수납 불편 / 만족도 9점</div><div class="cat-title">💬 체험단 후기</div><div class="bad"><div class="lbl">❌ 아쉬운 예</div>협찬 받은 피부과, 좋았음</div><div class="good"><div class="lbl">✅ 좋은 예</div>[협찬] 강남 청담 피부과 / 리프팅 시술 1회 / 40분 소요 / 붓기 거의 없음 / 직원 친절 / 주차 2시간 무료 / 다음 달 추가 예약</div><div class="tip">💡 핵심: 장소 + 가격 + 소요시간 + 특징 2~3개 + 내 솔직한 의견<br>이렇게만 써도 AI가 훨씬 풍부하고 자연스러운 글을 써드려요!</div></div></body></html>`;setPhotoGuideModal("example");}} style={{padding:"5px 12px",borderRadius:20,background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",border:"none",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:"inherit",whiteSpace:"nowrap",flexShrink:0}}>📝 예시 보기</button>
                     </div>
                   </div>
                   <textarea
@@ -6465,7 +6469,7 @@ POST3: (제목)|(이유)
                       </div>
                       <div style={{display:"flex",gap:8}}>
                         <button onClick={()=>openPreview()} style={{padding:"7px 14px",borderRadius:9,border:"1px solid #C77DFF",background:"#C77DFF11",color:"#C77DFF",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>👁️ 미리보기</button>
-                        <button onClick={()=>setTab("publish")} style={{padding:"7px 14px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>🚀 발행하기 →</button>
+                        <button onClick={()=>setTab("publish")} style={{padding:"7px 14px",borderRadius:9,border:"none",background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit"}}>🚀 발행하기 →</button>
                       </div>
                     </div>
 
@@ -6500,7 +6504,7 @@ POST3: (제목)|(이유)
                     {/* 발행 버튼 */}
                     <div style={{marginTop:14,display:"flex",gap:10}}>
                       <button onClick={()=>copyForNaver()} style={{flex:1,padding:"14px",borderRadius:12,border:"1px solid #03C75A",background:"#03C75A11",color:"#03C75A",cursor:"pointer",fontSize:13,fontWeight:800,fontFamily:"inherit"}}>📋 N복사</button>
-                      <button onClick={()=>handlePublish()} disabled={publishing||!pubAccId||!pubTitle} style={{flex:2,padding:"14px",borderRadius:12,border:"none",background:publishing?"#888":"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",cursor:publishing?"not-allowed":"pointer",fontSize:14,fontWeight:900,fontFamily:"inherit",opacity:(publishing||!pubAccId||!pubTitle)?.6:1}}>
+                      <button onClick={()=>handlePublish()} disabled={publishing||!pubAccId||!pubTitle} style={{flex:2,padding:"14px",borderRadius:12,border:"none",background:publishing?"#888":"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",cursor:publishing?"not-allowed":"pointer",fontSize:14,fontWeight:900,fontFamily:"inherit",opacity:(publishing||!pubAccId||!pubTitle)?.6:1}}>
                         {publishing?<><span className="spinner" style={{width:16,height:16,marginRight:8}}/>발행 중...</>:<>🌸 블로그 발행하기</>}
                       </button>
                     </div>
@@ -6519,7 +6523,7 @@ POST3: (제목)|(이유)
                 {photoGuideModal&&(
                   <div onClick={()=>setPhotoGuideModal(null)} style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.6)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                     <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:460,maxHeight:"85vh",overflowY:"auto",background:"var(--card)",borderRadius:18,border:"1px solid var(--border)",boxShadow:"0 20px 60px rgba(0,0,0,.4)"}}>
-                      <div style={{position:"sticky",top:0,padding:"16px 20px",background:photoGuideModal==="caution"?"linear-gradient(135deg,#FF8C00,#FF6B9D)":"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                      <div style={{position:"sticky",top:0,padding:"16px 20px",background:photoGuideModal==="caution"?"linear-gradient(135deg,#FF8C00,#FF6B9D)":"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
                         <span style={{fontSize:16,fontWeight:900}}>{photoGuideModal==="caution"?"⚠️ 사진 글쓰기 유의할점":photoGuideModal==="example"?"✏️ 키포인트 이렇게 쓰면 잘 나와요":"📷 사진으로 글 쓰는 방법"}</span>
                         <button onClick={()=>setPhotoGuideModal(null)} style={{width:30,height:30,borderRadius:8,border:"none",background:"rgba(255,255,255,.25)",color:"#fff",cursor:"pointer",fontSize:16,fontWeight:900,flexShrink:0}}>✕</button>
                       </div>
@@ -7824,7 +7828,7 @@ POST3: (제목)|(이유)
             {showInstaWarn&&(
               <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.78)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowInstaWarn(false)}>
                 <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:440,background:"var(--card)",border:"1px solid var(--border)",borderRadius:18,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,.4)"}}>
-                  <div style={{padding:"20px 22px",background:"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff"}}>
+                  <div style={{padding:"20px 22px",background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff"}}>
                     <div style={{fontSize:18,fontWeight:900,display:"flex",alignItems:"center",gap:8}}>⚠️ 인스타 DM 안전 수칙</div>
                     <div style={{fontSize:12,opacity:.92,marginTop:4}}>계정을 지키려면 꼭 읽어주세요</div>
                   </div>
@@ -7851,7 +7855,7 @@ POST3: (제목)|(이유)
                       <input type="checkbox" onChange={e=>{if(e.target.checked)localStorage.setItem("insta_dm_warn_hide","1");else localStorage.removeItem("insta_dm_warn_hide");}}/>
                       다시 보지 않기
                     </label>
-                    <button onClick={()=>setShowInstaWarn(false)} style={{marginTop:4,padding:"13px",borderRadius:11,border:"none",background:"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",fontSize:14,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>
+                    <button onClick={()=>setShowInstaWarn(false)} style={{marginTop:4,padding:"13px",borderRadius:11,border:"none",background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",fontSize:14,fontWeight:800,fontFamily:"inherit",cursor:"pointer"}}>
                       확인했어요 👍
                     </button>
                   </div>
@@ -7865,7 +7869,7 @@ POST3: (제목)|(이유)
 
                 {/* 헤더 */}
                 <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-                  <div style={{width:48,height:48,borderRadius:16,background:"linear-gradient(135deg,#f0417a,#ff6fa1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,boxShadow:"0 6px 20px rgba(255,107,157,.3)",flexShrink:0}}>📱</div>
+                  <div style={{width:48,height:48,borderRadius:16,background:"linear-gradient(135deg,#6d28d9,#a78bfa)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,boxShadow:"0 6px 20px rgba(255,107,157,.3)",flexShrink:0}}>📱</div>
                   <div>
                     <div style={{fontSize:20,fontWeight:900,color:"var(--text)"}}>인스타그램 DM</div>
                     <div style={{fontSize:12,color:"var(--text3)",marginTop:2}}>체험단·협찬 모집을 위한 인스타 DM 발송 서비스</div>
@@ -7973,7 +7977,7 @@ POST3: (제목)|(이유)
                     </div>
 
                     <button onClick={()=>setDmSubTab("send")}
-                      style={{padding:"14px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",cursor:"pointer",fontSize:14,fontWeight:800,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 6px 20px rgba(255,107,157,.3)"}}>
+                      style={{padding:"14px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",cursor:"pointer",fontSize:14,fontWeight:800,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 6px 20px rgba(255,107,157,.3)"}}>
                       🚀 DM 발송 시작하기 →
                     </button>
                   </div>
@@ -7990,7 +7994,7 @@ POST3: (제목)|(이유)
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"end"}}>
                         <div><label className="inp-label">인스타 아이디</label><input className="inp" placeholder="@내계정" value={dmAccount} onChange={e=>setDmAccount(e.target.value)} onBlur={()=>checkDmSession(dmAccount.trim().replace(/^@/,""))}/></div>
                         <div><label className="inp-label">비밀번호</label><div style={{position:"relative"}}><input className="inp" type={showDmIgPw?"text":"password"} placeholder="비밀번호" value={dmIgPw} onChange={e=>setDmIgPw(e.target.value)} style={{paddingRight:40}}/><button type="button" onClick={()=>setShowDmIgPw(v=>!v)} aria-label="비밀번호 보기" style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:"var(--text3)"}}>{showDmIgPw?"🙈":"👁️"}</button></div></div>
-                        <button onClick={connectIg} disabled={dmConnecting} style={{padding:"11px 18px",borderRadius:10,border:"none",background:dmConnecting?"var(--border)":"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",cursor:dmConnecting?"default":"pointer",fontSize:13,fontWeight:800,fontFamily:"inherit",whiteSpace:"nowrap"}}>{dmConnecting?"연결 중...":dmSessionOk?"재연결":"계정 연결"}</button>
+                        <button onClick={connectIg} disabled={dmConnecting} style={{padding:"11px 18px",borderRadius:10,border:"none",background:dmConnecting?"var(--border)":"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",cursor:dmConnecting?"default":"pointer",fontSize:13,fontWeight:800,fontFamily:"inherit",whiteSpace:"nowrap"}}>{dmConnecting?"연결 중...":dmSessionOk?"재연결":"계정 연결"}</button>
                       </div>
                     </div>
 
@@ -8005,7 +8009,7 @@ POST3: (제목)|(이유)
                         <div><label className="inp-label">최대 팔로워</label><input className="inp" type="number" inputMode="numeric" placeholder="50000" value={dmMaxFollow} onChange={e=>setDmMaxFollow(e.target.value)}/></div>
                         <div><label className="inp-label">수집 개수</label><input className="inp" type="number" inputMode="numeric" placeholder="30" value={dmCrawlLimit} onChange={e=>setDmCrawlLimit(e.target.value)}/></div>
                       </div>
-                      <button onClick={crawlIg} disabled={dmRunning} style={{padding:"11px 20px",borderRadius:10,border:"none",background:dmRunning?"var(--border)":"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",cursor:dmRunning?"default":"pointer",fontSize:13,fontWeight:800,fontFamily:"inherit"}}>{dmRunning?"수집 중...":"🔍 키워드 수집 시작"}</button>
+                      <button onClick={crawlIg} disabled={dmRunning} style={{padding:"11px 20px",borderRadius:10,border:"none",background:dmRunning?"var(--border)":"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",cursor:dmRunning?"default":"pointer",fontSize:13,fontWeight:800,fontFamily:"inherit"}}>{dmRunning?"수집 중...":"🔍 키워드 수집 시작"}</button>
                     </div>
 
                     {/* 타겟 추가 */}
@@ -8037,7 +8041,7 @@ POST3: (제목)|(이유)
                         setDmTargetInput("");
                         getInstaDmTargets(user.id).then(setDmTargets);
                         showToast(skipped?`대상 ${list.length}명 추가 · 중복 ${skipped}명 제외`:`대상 ${list.length}명을 추가했어요`);
-                      }} style={{padding:"11px 20px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:800,fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:8,boxShadow:"0 4px 16px rgba(255,107,157,.25)"}}>
+                      }} style={{padding:"11px 20px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:800,fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:8,boxShadow:"0 4px 16px rgba(255,107,157,.25)"}}>
                         ➕ 타겟 추가
                       </button>
                     </div>
@@ -8129,7 +8133,7 @@ POST3: (제목)|(이유)
                     <div style={{fontSize:11,color:"var(--text3)",marginBottom:10}}>중복 대상은 추가할 때 자동 제외하며, 오늘 남은 안전 한도까지만 발송해요. 발송 간격은 봇이 랜덤(40~90초) 적용합니다.</div>
                     <div style={{display:"flex",gap:8,marginBottom:dmLogs.length?12:0}}>
                       {!dmRunning ? (
-                        <button onClick={sendIg} disabled={!dmSendableCount||!dmMessage.trim()||!dmSessionOk} title={!dmSessionOk?"인스타 계정을 먼저 연결해주세요":!dmMessage.trim()?"DM 문구를 먼저 작성해주세요":!dmSendableCount?"발송 가능한 대상이 없어요":undefined} style={{flex:1,padding:"13px",borderRadius:11,border:"none",background:"linear-gradient(135deg,#f0417a,#ff6fa1)",color:"#fff",cursor:dmSendableCount&&dmMessage.trim()&&dmSessionOk?"pointer":"not-allowed",opacity:dmSendableCount&&dmMessage.trim()&&dmSessionOk?1:.45,fontSize:14,fontWeight:800,fontFamily:"inherit"}}>🚀 안전 발송 시작</button>
+                        <button onClick={sendIg} disabled={!dmSendableCount||!dmMessage.trim()||!dmSessionOk} title={!dmSessionOk?"인스타 계정을 먼저 연결해주세요":!dmMessage.trim()?"DM 문구를 먼저 작성해주세요":!dmSendableCount?"발송 가능한 대상이 없어요":undefined} style={{flex:1,padding:"13px",borderRadius:11,border:"none",background:"linear-gradient(135deg,#6d28d9,#a78bfa)",color:"#fff",cursor:dmSendableCount&&dmMessage.trim()&&dmSessionOk?"pointer":"not-allowed",opacity:dmSendableCount&&dmMessage.trim()&&dmSessionOk?1:.45,fontSize:14,fontWeight:800,fontFamily:"inherit"}}>🚀 안전 발송 시작</button>
                       ) : (
                         <button onClick={stopDm} style={{flex:1,padding:"13px",borderRadius:11,border:"1px solid var(--danger)",background:"rgba(248,81,73,.08)",color:"var(--danger)",cursor:"pointer",fontSize:14,fontWeight:800,fontFamily:"inherit"}}>⏹️ 중단</button>
                       )}
@@ -8203,7 +8207,7 @@ POST3: (제목)|(이유)
               <div aria-hidden={tab!=="crawl"} style={{ display: tab==="crawl" ? "block" : "none", pointerEvents: tab==="crawl" ? "auto" : "none" }}><CrawlCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} /></div>
             )}
             {visitedAutoTabs.has("inflow") && inflowEnabled && (
-              <div aria-hidden={tab!=="inflow"} style={{ display: tab==="inflow" ? "block" : "none", pointerEvents: tab==="inflow" ? "auto" : "none" }}><InflowCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} /></div>
+              <div aria-hidden={tab!=="inflow"} style={{ display: tab==="inflow" ? "block" : "none", pointerEvents: tab==="inflow" ? "auto" : "none" }}><InflowCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} /></div>
             )}
             {visitedAutoTabs.has("place") && place360Enabled && (
               <div aria-hidden={tab!=="place"} style={{ display: tab==="place" ? "block" : "none", pointerEvents: tab==="place" ? "auto" : "none" }}><Place360 showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} onOpenCrawl={()=>setTab("crawl")} onOpenReview={()=>setTab("place_reply")} /></div>
@@ -8488,7 +8492,7 @@ POST3: (제목)|(이유)
           onClick={()=>{localStorage.setItem("publy_dismissed_"+noticePopup.key,"1");setNoticePopup(null);}}>
           <div style={{width:"100%",maxWidth:440,borderRadius:20,background:"var(--card)",border:"1px solid var(--border)",overflow:"hidden",animation:"fadeUp .25s ease",boxShadow:"0 24px 60px rgba(0,0,0,.6)"}}
             onClick={e=>e.stopPropagation()}>
-            <div style={{background:"linear-gradient(135deg,var(--accent),#ff8a4c)",padding:"18px 22px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{background:"linear-gradient(135deg,var(--accent),#8b5cf6)",padding:"18px 22px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div style={{fontSize:16,fontWeight:900,color:"#000"}}>📢 {noticePopup.title}</div>
               <button onClick={()=>{localStorage.setItem("publy_dismissed_"+noticePopup.key,"1");setNoticePopup(null);}}
                 style={{background:"rgba(0,0,0,.2)",border:"none",color:"#000",width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"inherit"}}>✕</button>

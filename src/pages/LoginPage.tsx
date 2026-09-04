@@ -21,7 +21,7 @@ const CSS = `
 }
 @keyframes star-twinkle { 0%,100%{opacity:.3;transform:scale(1)} 50%{opacity:1;transform:scale(1.4)} }
 @keyframes card-float { 0%,100%{transform:translateY(0) rotateX(0)} 50%{transform:translateY(-8px) rotateX(.5deg)} }
-@keyframes glow-breathe { 0%,100%{box-shadow:0 0 40px rgba(240,65,122,.15),0 0 80px rgba(240,65,122,.05)} 50%{box-shadow:0 0 60px rgba(240,65,122,.3),0 0 120px rgba(240,65,122,.1)} }
+@keyframes glow-breathe { 0%,100%{box-shadow:0 0 40px rgba(109,40,217,.15),0 0 80px rgba(109,40,217,.05)} 50%{box-shadow:0 0 60px rgba(109,40,217,.3),0 0 120px rgba(109,40,217,.1)} }
 @keyframes line-scan { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
 @keyframes logo-emerge { 0%{opacity:0;transform:scale(.6) rotateY(-90deg)} 100%{opacity:1;transform:scale(1) rotateY(0deg)} }
 @keyframes form-rise { 0%{opacity:0;transform:translateY(40px)} 100%{opacity:1;transform:translateY(0)} }
@@ -55,25 +55,25 @@ const CSS = `
 .cosmos-orb-1 { width:600px; height:600px; top:-200px; left:-200px; animation:cosmos-drift 20s linear infinite; }
 .cosmos-orb-2 { width:400px; height:400px; bottom:-100px; right:-100px; animation:cosmos-drift 25s linear infinite reverse; }
 .cosmos-orb-3 { width:300px; height:300px; top:50%; left:50%; animation:cosmos-drift 15s linear infinite; }
-.dark .cosmos-orb-1  { background:radial-gradient(circle,rgba(240,65,122,.12) 0%,transparent 70%); }
-.dark .cosmos-orb-2  { background:radial-gradient(circle,rgba(255,180,120,.08) 0%,transparent 70%); }
-.dark .cosmos-orb-3  { background:radial-gradient(circle,rgba(255,120,170,.06) 0%,transparent 70%); }
-.light .cosmos-orb-1 { background:radial-gradient(circle,rgba(240,65,122,.08) 0%,transparent 70%); }
-.light .cosmos-orb-2 { background:radial-gradient(circle,rgba(255,180,120,.06) 0%,transparent 70%); }
-.light .cosmos-orb-3 { background:radial-gradient(circle,rgba(240,65,122,.04) 0%,transparent 70%); }
+.dark .cosmos-orb-1  { background:radial-gradient(circle,rgba(109,40,217,.12) 0%,transparent 70%); }
+.dark .cosmos-orb-2  { background:radial-gradient(circle,rgba(139,92,246,.08) 0%,transparent 70%); }
+.dark .cosmos-orb-3  { background:radial-gradient(circle,rgba(139,92,246,.06) 0%,transparent 70%); }
+.light .cosmos-orb-1 { background:radial-gradient(circle,rgba(109,40,217,.08) 0%,transparent 70%); }
+.light .cosmos-orb-2 { background:radial-gradient(circle,rgba(139,92,246,.06) 0%,transparent 70%); }
+.light .cosmos-orb-3 { background:radial-gradient(circle,rgba(109,40,217,.04) 0%,transparent 70%); }
 
 /* 별 */
 .star { position:absolute; border-radius:50%; animation:star-twinkle var(--dur,3s) var(--del,0s) ease-in-out infinite; }
 .dark .star  { background:white; }
-.light .star { background:rgba(240,65,122,.4); }
+.light .star { background:rgba(109,40,217,.4); }
 
 /* 스캔라인 */
 .scan-line {
   position:absolute; left:0; right:0; height:1px; pointer-events:none;
   animation:line-scan 8s linear infinite;
 }
-.dark .scan-line  { background:linear-gradient(90deg,transparent,rgba(240,65,122,.3),transparent); }
-.light .scan-line { background:linear-gradient(90deg,transparent,rgba(240,65,122,.2),transparent); }
+.dark .scan-line  { background:linear-gradient(90deg,transparent,rgba(109,40,217,.3),transparent); }
+.light .scan-line { background:linear-gradient(90deg,transparent,rgba(109,40,217,.2),transparent); }
 
 /* 상단 버튼 */
 .top-bar { position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:16px 24px; z-index:100; }
@@ -82,13 +82,13 @@ const CSS = `
   display:flex; align-items:center; justify-content:center; border:1px solid;
   transition:all .25s; backdrop-filter:blur(12px);
 }
-.dark .top-btn  { background:rgba(255,255,255,.05); border-color:rgba(240,65,122,.2); color:white; }
-.light .top-btn { background:rgba(255,255,255,.8); border-color:rgba(240,65,122,.2); color:#09090b; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+.dark .top-btn  { background:rgba(255,255,255,.05); border-color:rgba(109,40,217,.2); color:white; }
+.light .top-btn { background:rgba(255,255,255,.8); border-color:rgba(109,40,217,.2); color:#09090b; box-shadow:0 2px 12px rgba(0,0,0,.08); }
 .top-btn:hover { transform:scale(1.08) rotate(5deg); }
 .admin-btn:hover { transform:scale(1.08) rotate(45deg) !important; }
 .top-brand {
   font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:.2em;
-  background:linear-gradient(135deg,#f0417a,#e0356e);
+  background:linear-gradient(135deg,#6d28d9,#5b21b6);
   -webkit-background-clip:text; -webkit-text-fill-color:transparent;
 }
 
@@ -107,21 +107,21 @@ const CSS = `
    윈도우에서 버벅임/시간차. 배경 불투명도를 올려 blur 없이도 카드가 또렷하게(성능 회복). */
 .dark .login-card {
   background:rgba(28,24,20,.92);
-  border:1px solid rgba(240,65,122,.15);
-  box-shadow:0 0 0 1px rgba(240,65,122,.05), inset 0 1px 0 rgba(240,65,122,.1);
+  border:1px solid rgba(109,40,217,.15);
+  box-shadow:0 0 0 1px rgba(109,40,217,.05), inset 0 1px 0 rgba(109,40,217,.1);
 }
 .light .login-card {
   background:rgba(255,255,255,.97);
-  border:1px solid rgba(240,65,122,.15);
-  box-shadow:0 32px 80px rgba(0,0,0,.08), 0 0 0 1px rgba(240,65,122,.08);
+  border:1px solid rgba(109,40,217,.15);
+  box-shadow:0 32px 80px rgba(0,0,0,.08), 0 0 0 1px rgba(109,40,217,.08);
 }
 
 /* 카드 상단 장식선 */
 .card-glow-line {
   position:absolute; top:0; left:20%; right:20%; height:1px; border-radius:99px;
 }
-.dark .card-glow-line  { background:linear-gradient(90deg,transparent,rgba(240,65,122,.6),transparent); }
-.light .card-glow-line { background:linear-gradient(90deg,transparent,rgba(240,65,122,.4),transparent); }
+.dark .card-glow-line  { background:linear-gradient(90deg,transparent,rgba(109,40,217,.6),transparent); }
+.light .card-glow-line { background:linear-gradient(90deg,transparent,rgba(109,40,217,.4),transparent); }
 
 /* 로고 */
 .logo-section { text-align:center; margin-bottom:14px; }
@@ -140,31 +140,31 @@ const CSS = `
   inset:8px; animation:spin-rev 5s linear infinite;
   border-style:dotted;
 }
-.dark .logo-ring  { border-color:rgba(240,65,122,.3); }
-.light .logo-ring { border-color:rgba(240,65,122,.3); }
+.dark .logo-ring  { border-color:rgba(109,40,217,.3); }
+.light .logo-ring { border-color:rgba(109,40,217,.3); }
 .logo-core {
   position:absolute; inset:16px; border-radius:50%;
-  background:linear-gradient(135deg,#f0417a,#e0356e);
+  background:linear-gradient(135deg,#6d28d9,#5b21b6);
   display:flex; align-items:center; justify-content:center;
-  box-shadow:0 0 30px rgba(240,65,122,.5);
+  box-shadow:0 0 30px rgba(109,40,217,.5);
 }
 .logo-pulse {
   position:absolute; inset:16px; border-radius:50%;
-  border:2px solid rgba(240,65,122,.4);
+  border:2px solid rgba(109,40,217,.4);
   animation:pulse-ring 2s ease-out infinite;
 }
 .logo-name {
   font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:.24em; line-height:1;
-  background:linear-gradient(135deg,#f0417a,#e0356e,#ffb47a);
+  background:linear-gradient(135deg,#6d28d9,#5b21b6,#c4b5fd);
   -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  filter:drop-shadow(0 2px 14px rgba(240,65,122,.35));
+  filter:drop-shadow(0 2px 14px rgba(109,40,217,.35));
 }
 .logo-ko { font-size:16px; font-weight:900; letter-spacing:.02em; margin-top:7px; }
-.dark .logo-ko  { color:#ffe3ee; }
+.dark .logo-ko  { color:#ede9fe; }
 .light .logo-ko { color:#1a0f16; }
 .logo-tagline { font-size:9.5px; letter-spacing:.34em; text-transform:uppercase; margin-top:5px; font-weight:700; }
-.dark .logo-tagline  { color:rgba(255,180,205,.55); }
-.light .logo-tagline { color:rgba(224,53,110,.55); }
+.dark .logo-tagline  { color:rgba(196,181,253,.55); }
+.light .logo-tagline { color:rgba(109,40,217,.55); }
 
 /* 탭 */
 .tab-group {
@@ -179,8 +179,8 @@ const CSS = `
   transition:all .22s; font-family:'Noto Sans KR',sans-serif;
 }
 .tab-btn.active {
-  background:linear-gradient(135deg,#f0417a,#e0356e);
-  color:#000; box-shadow:0 4px 16px rgba(240,65,122,.35);
+  background:linear-gradient(135deg,#6d28d9,#5b21b6);
+  color:#000; box-shadow:0 4px 16px rgba(109,40,217,.35);
   transform:translateY(-1px);
 }
 .dark .tab-btn.inactive  { background:transparent; color:rgba(255,235,244,.68); }
@@ -202,25 +202,25 @@ const CSS = `
 }
 .recent-email-item{ transition:background .13s; }
 .dark .recent-email-item:hover{ background:rgba(255,255,255,.08); }
-.light .recent-email-item:hover{ background:rgba(240,65,122,.09); }
+.light .recent-email-item:hover{ background:rgba(109,40,217,.09); }
 .recent-email-item:active{ transform:scale(.99); }
 .dark .field-input {
   background:rgba(255,255,255,.09);
-  border:1.5px solid rgba(255,140,180,.28);
+  border:1.5px solid rgba(167,139,250,.28);
   color:white;
 }
 .light .field-input {
   background:#faf8f3;
-  border:1.5px solid rgba(240,65,122,.15);
+  border:1.5px solid rgba(109,40,217,.15);
   color:#09090b;
 }
 .field-input::placeholder { opacity:.75; }
 .dark .field-input::placeholder  { color:rgba(255,255,255,.5); }
 .light .field-input::placeholder { color:#8a8072; }
 .field-input:focus {
-  border-color:rgba(240,65,122,.5) !important;
-  box-shadow:0 0 0 4px rgba(240,65,122,.08) !important;
-  background:rgba(240,65,122,.03) !important;
+  border-color:rgba(109,40,217,.5) !important;
+  box-shadow:0 0 0 4px rgba(109,40,217,.08) !important;
+  background:rgba(109,40,217,.03) !important;
 }
 
 /* 제출 버튼 */
@@ -229,7 +229,7 @@ const CSS = `
   border:none; border-radius:14px; cursor:pointer;
   font-family:'Noto Sans KR',sans-serif;
   font-size:15px; font-weight:800; letter-spacing:.03em;
-  background:linear-gradient(135deg,#f0417a,#e0356e,#c62c62);
+  background:linear-gradient(135deg,#6d28d9,#5b21b6,#5b21b6);
   background-size:200% 100%;
   color:#000; position:relative; overflow:hidden;
   transition:all .25s;
@@ -240,7 +240,7 @@ const CSS = `
   transform:translateX(-100%); transition:transform .5s;
 }
 .submit-btn:hover::before { transform:translateX(100%); }
-.submit-btn:hover { transform:translateY(-2px); box-shadow:0 12px 32px rgba(240,65,122,.45); }
+.submit-btn:hover { transform:translateY(-2px); box-shadow:0 12px 32px rgba(109,40,217,.45); }
 .submit-btn:disabled { opacity:.45; cursor:not-allowed; transform:none; }
 
 /* 에러 */
@@ -254,9 +254,9 @@ const CSS = `
 /* 하단 장식 */
 .card-footer { display:flex; justify-content:center; align-items:center; gap:8px; margin-top:28px; }
 .footer-dot { width:5px; height:5px; border-radius:50%; }
-.dark .footer-dot  { background:rgba(240,65,122,.25); }
-.light .footer-dot { background:rgba(240,65,122,.2); }
-.footer-dot.active { background:#f0417a !important; box-shadow:0 0 8px rgba(240,65,122,.6); }
+.dark .footer-dot  { background:rgba(109,40,217,.25); }
+.light .footer-dot { background:rgba(109,40,217,.2); }
+.footer-dot.active { background:#6d28d9 !important; box-shadow:0 0 8px rgba(109,40,217,.6); }
 
 /* 로더 */
 .btn-spin {
@@ -275,7 +275,7 @@ const CSS = `
 .find-links { display:flex; justify-content:center; gap:16px; margin-top:16px; }
 .find-link { background:none; border:none; cursor:pointer; font-size:12px; font-family:'Noto Sans KR',sans-serif; font-weight:600; letter-spacing:.03em; opacity:.55; transition:opacity .2s; text-decoration:underline; }
 .find-link:hover { opacity:1; }
-.dark .find-link  { color:rgba(255,180,205,.85); }
+.dark .find-link  { color:rgba(196,181,253,.85); }
 .light .find-link { color:rgba(0,0,0,.6); }
 
 /* 찾기 모달 오버레이 */
@@ -283,8 +283,8 @@ const CSS = `
 .dark .find-overlay  { background:rgba(0,0,0,.75); }
 .light .find-overlay { background:rgba(0,0,0,.45); }
 .find-modal { width:100%; max-width:400px; border-radius:24px; padding:32px 28px; animation:form-rise .3s ease both; }
-.dark .find-modal  { background:#0d1117; border:1px solid rgba(240,65,122,.15); }
-.light .find-modal { background:#fff; border:1px solid rgba(240,65,122,.2); box-shadow:0 24px 60px rgba(0,0,0,.15); }
+.dark .find-modal  { background:#0d1117; border:1px solid rgba(109,40,217,.15); }
+.light .find-modal { background:#fff; border:1px solid rgba(109,40,217,.2); box-shadow:0 24px 60px rgba(0,0,0,.15); }
 .find-title { font-size:18px; font-weight:900; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; }
 .dark .find-title  { color:#fff; }
 .light .find-title { color:#09090b; }
@@ -292,12 +292,12 @@ const CSS = `
 .dark .find-tabs  { background:rgba(255,255,255,.06); }
 .light .find-tabs { background:rgba(0,0,0,.06); }
 .find-tab { padding:9px; border:none; border-radius:9px; cursor:pointer; font-size:12px; font-weight:700; font-family:'Noto Sans KR',sans-serif; transition:all .2s; }
-.find-tab.active { background:linear-gradient(135deg,#f0417a,#e0356e); color:#000; }
+.find-tab.active { background:linear-gradient(135deg,#6d28d9,#5b21b6); color:#000; }
 .dark .find-tab.inactive  { background:transparent; color:rgba(255,255,255,.4); }
 .light .find-tab.inactive { background:transparent; color:rgba(0,0,0,.4); }
 .find-result { margin-top:16px; padding:16px; border-radius:12px; font-size:14px; font-weight:700; text-align:center; line-height:1.6; }
-.dark .find-result  { background:rgba(240,65,122,.08); border:1px solid rgba(240,65,122,.2); color:#f0417a; }
-.light .find-result { background:rgba(240,65,122,.06); border:1px solid rgba(240,65,122,.2); color:#c62c62; }
+.dark .find-result  { background:rgba(109,40,217,.08); border:1px solid rgba(109,40,217,.2); color:#6d28d9; }
+.light .find-result { background:rgba(109,40,217,.06); border:1px solid rgba(109,40,217,.2); color:#5b21b6; }
 `;
 
 // 별 생성
@@ -340,11 +340,11 @@ function PWAInstallBtn({ theme }: { theme: "dark" | "light" }) {
         position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
         display: "flex", alignItems: "center", gap: 8,
         padding: "12px 24px", borderRadius: 99,
-        background: "linear-gradient(135deg,#f0417a,#e0356e)",
+        background: "linear-gradient(135deg,#6d28d9,#5b21b6)",
         color: "#000", fontWeight: 800, fontSize: 13,
         border: "none", cursor: "pointer", zIndex: 999,
         fontFamily: "'Noto Sans KR', sans-serif",
-        boxShadow: "0 8px 24px rgba(240,65,122,.45)",
+        boxShadow: "0 8px 24px rgba(109,40,217,.45)",
         animation: "pwa-bounce 2s ease-in-out infinite",
         whiteSpace: "nowrap",
       }}>
@@ -532,8 +532,8 @@ export default function LoginPage({ onLogin, onAdminLogin, theme, onThemeToggle 
                       <stop offset="100%" stopColor="#050a12"/>
                     </linearGradient>
                     <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#f0417a"/>
-                      <stop offset="100%" stopColor="#e0356e"/>
+                      <stop offset="0%" stopColor="#6d28d9"/>
+                      <stop offset="100%" stopColor="#5b21b6"/>
                     </linearGradient>
                     <filter id="glow">
                       <feGaussianBlur stdDeviation="3" result="blur"/>
@@ -541,11 +541,11 @@ export default function LoginPage({ onLogin, onAdminLogin, theme, onThemeToggle 
                     </filter>
                   </defs>
                   <rect width="192" height="192" rx="36" fill="url(#bg)"/>
-                  <circle cx="96" cy="96" r="72" fill="none" stroke="#f0417a" strokeWidth="1" opacity="0.12"/>
-                  <circle cx="96" cy="96" r="55" fill="none" stroke="#f0417a" strokeWidth="1" opacity="0.08"/>
+                  <circle cx="96" cy="96" r="72" fill="none" stroke="#6d28d9" strokeWidth="1" opacity="0.12"/>
+                  <circle cx="96" cy="96" r="55" fill="none" stroke="#6d28d9" strokeWidth="1" opacity="0.08"/>
                   <text x="96" y="122" fontFamily="Arial Black, sans-serif" fontSize="108" fontWeight="900" fill="url(#g1)" textAnchor="middle" filter="url(#glow)" letterSpacing="-4">T</text>
-                  <rect x="34" y="148" width="124" height="20" rx="10" fill="#f0417a" opacity="0.12"/>
-                  <text x="96" y="163" fontFamily="Arial, sans-serif" fontSize="10.5" fontWeight="700" fill="#f0417a" textAnchor="middle" letterSpacing="3.5">TRAFFIC</text>
+                  <rect x="34" y="148" width="124" height="20" rx="10" fill="#6d28d9" opacity="0.12"/>
+                  <text x="96" y="163" fontFamily="Arial, sans-serif" fontSize="10.5" fontWeight="700" fill="#6d28d9" textAnchor="middle" letterSpacing="3.5">TRAFFIC</text>
                 </svg>
               </div>
             </div>
@@ -556,7 +556,7 @@ export default function LoginPage({ onLogin, onAdminLogin, theme, onThemeToggle 
 
           {/* 초대 링크 배지 */}
           {refCode&&(
-            <div style={{marginBottom:16,padding:"8px 14px",borderRadius:10,background:"rgba(240,65,122,.08)",border:"1px solid rgba(240,65,122,.2)",fontSize:12,color:"#f0417a",fontWeight:700,textAlign:"center"}}>
+            <div style={{marginBottom:16,padding:"8px 14px",borderRadius:10,background:"rgba(109,40,217,.08)",border:"1px solid rgba(109,40,217,.2)",fontSize:12,color:"#6d28d9",fontWeight:700,textAlign:"center"}}>
               🎉 초대 링크로 접속했어요! 가입하면 쿼터 보너스가 지급돼요
             </div>
           )}
@@ -626,7 +626,7 @@ export default function LoginPage({ onLogin, onAdminLogin, theme, onThemeToggle 
                 value={phone} onChange={e => setPhone(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSubmit()} />
               <div style={{marginTop:4,fontSize:10.5,lineHeight:1.5,paddingLeft:2,
-                color:theme==="dark"?"rgba(240,65,122,.7)":"rgba(240,65,122,.85)"}}>
+                color:theme==="dark"?"rgba(109,40,217,.7)":"rgba(109,40,217,.85)"}}>
                 💡 이메일·비밀번호 찾기에 필요해요
               </div>
             </div>

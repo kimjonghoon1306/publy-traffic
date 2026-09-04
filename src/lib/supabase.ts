@@ -2201,7 +2201,8 @@ export function computeCareStatus(c: PostCare): { status: CareStatus; daysLeft?:
    customer = 이 앱 로그인 이메일. 관리자 컨트롤타워에서 그 이메일로 기능(place/blog/store)을
    승인하면 여기서 읽어 승인된 탭만 노출 + 데이터 절약 모드를 강제 적용한다.
    서버시간 기준 만료판정은 license_status RPC(시계 조작 방지). */
-export type ToolLicense = { tool: "place" | "blog" | "store"; expire_at: string | null; data_saver?: string; remain_sec?: number };
+export type ToolLicense = { tool: "place" | "blog" | "store"; expire_at: string | null; data_saver?: string; remain_sec?: number; plan?: string; allowed_actions?: string[]; bonus_quota?: number };
+export const TRAFFIC_PLAN_LIMIT: Record<string, number> = { basic: 30, pro: 60, premium: 120, unlimited: 0 }; // 0=무제한
 export async function getTrafficLicenses(customer: string): Promise<ToolLicense[]> {
   if (!customer) return [];
   try {
@@ -2209,7 +2210,7 @@ export async function getTrafficLicenses(customer: string): Promise<ToolLicense[
     //   시계 조작 방지 = 로컬시계 대신 DB 시간 기준으로 remain_sec 계산.
     const { data, error } = await supabase
       .from("tool_licenses")
-      .select("tool,expire_at,data_saver")
+      .select("tool,expire_at,data_saver,plan,allowed_actions,bonus_quota")
       .eq("customer", customer)
       .in("tool", ["place", "blog", "store"]);
     if (error || !data) return [];
@@ -2226,7 +2227,7 @@ export async function getTrafficLicenses(customer: string): Promise<ToolLicense[
     return rows.map((row) => {
       const exp = row.expire_at ? new Date(row.expire_at).getTime() : 0;
       const remain = exp ? Math.max(0, Math.floor((exp - serverMs) / 1000)) : 0;
-      return { tool: row.tool, expire_at: row.expire_at, data_saver: row.data_saver, remain_sec: remain };
+      return { tool: row.tool, expire_at: row.expire_at, data_saver: row.data_saver, remain_sec: remain, plan: row.plan || "basic", allowed_actions: Array.isArray(row.allowed_actions) ? row.allowed_actions : [], bonus_quota: row.bonus_quota || 0 };
     });
   } catch { return []; }
 }

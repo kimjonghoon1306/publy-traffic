@@ -152,13 +152,13 @@ export default function App() {
   if (loading) return (
     <div style={{
       width:"100vw", height:"100vh",
-      background: theme==="dark" ? "#0a0510" : "#fdf2f7",
+      background: theme==="dark" ? "#0d0a14" : "#f1eef9",
       display:"flex", alignItems:"center", justifyContent:"center",
     }}>
       <div style={{
         width:44, height:44, borderRadius:"50%",
-        border:"3px solid rgba(240,65,122,.2)",
-        borderTopColor:"#f0417a",
+        border:"3px solid rgba(109,40,217,.2)",
+        borderTopColor:"#6d28d9",
         animation:"spin 1s linear infinite",
       }}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>

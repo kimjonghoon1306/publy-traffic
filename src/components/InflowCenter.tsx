@@ -14,8 +14,8 @@ const BOT = "http://127.0.0.1:3364"; // neighbor-bot
    ═══════════════════════════════════════════════════════════════ */
 
 const THEMES = {
-  light: { bg: "#eef2f8", panel: "#ffffff", panel2: "#f5f8fc", ink: "#111a28", sub: "#647084", line: "#e3e9f2", line2: "#d2dbe8", accent: "#2563eb", cyan: "#0891b2", glow: "rgba(37,99,235,.14)", kpiBg: "linear-gradient(135deg,#ffffff,#f2f6fc)", logBg: "#0d1420", logInk: "#c7d6ea" },
-  dark: { bg: "#080c14", panel: "#111927", panel2: "#18212f", ink: "#eaf1fb", sub: "#8fa3bd", line: "#26313f", line2: "#33404f", accent: "#4f9bff", cyan: "#22d3ee", glow: "rgba(79,155,255,.20)", kpiBg: "linear-gradient(135deg,#141d2c,#0f1826)", logBg: "#05090f", logInk: "#a9bfd8" },
+  light: { bg: "#f1eef9", panel: "#ffffff", panel2: "#f7f4fc", ink: "#1a1426", sub: "#6b6480", line: "#e8e3f2", line2: "#dcd4ec", accent: "#6d28d9", cyan: "#8b5cf6", glow: "rgba(109,40,217,.14)", kpiBg: "linear-gradient(135deg,#ffffff,#f6f2fc)", logBg: "#160f22", logInk: "#d6ccea" },
+  dark: { bg: "#0d0a14", panel: "#1a1526", panel2: "#221b30", ink: "#efeafb", sub: "#a89fbd", line: "#332b42", line2: "#413650", accent: "#a78bfa", cyan: "#c4b5fd", glow: "rgba(167,139,250,.20)", kpiBg: "linear-gradient(135deg,#1e1830,#150f24)", logBg: "#0a0713", logInk: "#c8bce0" },
 };
 
 const PLAN_ORDER = ["free", "basic", "pro"] as const; // ⚖️ 무제한은 관리자 고유 — 표엔 안 넣음
@@ -108,7 +108,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다. 없으면(미지정) 전부 허용.
   const FEATS: ("place" | "blog" | "store")[] = ["place", "blog", "store"];
@@ -116,8 +116,6 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const visibleFeats = FEATS.filter(allowFeat);
   const theme: "dark" | "light" = extTheme === "dark" ? "dark" : "light";
   const C = THEMES[theme];
-  const unlimited = plan === "admin" || plan === "unlimited";
-  const limit = INFLOW_DAILY_LIMIT[plan] ?? INFLOW_DAILY_LIMIT.free;
 
   // 🔁 탭을 옮겨도·앱을 껐다 켜도 입력값이 유지되게 — 고정 키(userId 무관, 로그인 로딩중 초기화 방지)
   const formKey = "publy_inflow_form";
@@ -125,6 +123,12 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [targetType, setTargetType] = useState<"place" | "blog" | "store">(saved0.targetType ?? "place");
   // 🎫 현재 대상이 미승인이면 승인된 첫 대상으로 자동 전환(미승인 화면에 갇히지 않게)
   useEffect(() => { if (visibleFeats.length && !allowFeat(targetType)) setTargetType(visibleFeats[0]); }, [allowedFeatures, targetType]);
+  // 🎫 현재 대상의 라이선스 등급 한도 적용(없으면 회원 plan 기본). limit 0 = 무제한.
+  const featLic = licenseByFeat?.[targetType];
+  const unlimited = plan === "admin" || plan === "unlimited" || featLic?.plan === "unlimited" || featLic?.limit === 0;
+  const limit = featLic ? (featLic.limit || 0) : (INFLOW_DAILY_LIMIT[plan] ?? INFLOW_DAILY_LIMIT.free);
+  // 관리자가 허용한 행동만(없으면 전체 허용 — 라이선스 미설정 하위호환). actionAllowed(key)로 게이팅.
+  const actionAllowed = (key: string) => !featLic || !featLic.actions ? true : featLic.actions.includes(key);
   const privateKey = `publy_inflow_private_${userId || "guest"}`;
   const private0: any = (() => { try { return JSON.parse(localStorage.getItem(privateKey) || "{}"); } catch { return {}; } })();
   const [placeUrl, setPlaceUrl] = useState<string>(private0.placeUrl ?? saved0.placeUrl ?? "");
@@ -249,6 +253,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [schedEnabled, setSchedEnabled] = useState(false);
   const [schedTime, setSchedTime] = useState("10:00");
   const [schedRounds, setSchedRounds] = useState(10);
+  // 💤 화면·시스템 절전 방지 — 유입 실행중(텀 대기 포함) OR 예약 대기 OR 오토파일럿 가동 중이면 안 꺼지게(부모 keepAwake).
+  useEffect(() => { onBusyChange?.(running || schedEnabled || apEnabled); }, [running, schedEnabled, apEnabled]);
   type InflowNotification = { id: string; message: string; createdAt: string };
   const notificationKey = `publy_inflow_notifications_${userId || "guest"}`;
   const [notifications, setNotifications] = useState<InflowNotification[]>(() => {
@@ -1432,21 +1438,22 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {/* 🎫 관리자가 허용한 행동만 노출(actionAllowed). 라이선스 미설정이면 전체 허용(하위호환). */}
             {targetType === "place" ? (<>
-              <ActionChk v={doSave} set={setDoSave} label="💾 저장 🔑" />
-              <ActionChk v={doDir} set={setDoDir} label="🧭 길찾기" />
-              <ActionChk v={doCall} set={setDoCall} label="📞 전화" />
-              <ActionChk v={doBook} set={setDoBook} label="📅 예약" />
-              <ActionChk v={doTalk} set={setDoTalk} label="💬 톡톡" />
-              <ActionChk v={doShare} set={setDoShare} label="🔗 공유" />
+              {actionAllowed("save") && <ActionChk v={doSave} set={setDoSave} label="💾 저장 🔑" />}
+              {actionAllowed("dir") && <ActionChk v={doDir} set={setDoDir} label="🧭 길찾기" />}
+              {actionAllowed("call") && <ActionChk v={doCall} set={setDoCall} label="📞 전화" />}
+              {actionAllowed("book") && <ActionChk v={doBook} set={setDoBook} label="📅 예약" />}
+              {actionAllowed("talk") && <ActionChk v={doTalk} set={setDoTalk} label="💬 톡톡" />}
+              {actionAllowed("share") && <ActionChk v={doShare} set={setDoShare} label="🔗 공유" />}
             </>) : targetType === "store" ? (<>
-              <ActionChk v={doOption} set={setDoOption} label="🔍 옵션·상세 탐색" />
-              <ActionChk v={doWish} set={setDoWish} label="💚 찜 🔑" />
-              <ActionChk v={doCart} set={setDoCart} label="🛒 장바구니 🔑" />
-              <ActionChk v={doShare} set={setDoShare} label="🔗 공유" />
+              {actionAllowed("option") && <ActionChk v={doOption} set={setDoOption} label="🔍 옵션·상세 탐색" />}
+              {actionAllowed("wish") && <ActionChk v={doWish} set={setDoWish} label="💚 찜 🔑" />}
+              {actionAllowed("cart") && <ActionChk v={doCart} set={setDoCart} label="🛒 장바구니 🔑" />}
+              {actionAllowed("share") && <ActionChk v={doShare} set={setDoShare} label="🔗 공유" />}
             </>) : (<>
-              <ActionChk v={doLike} set={setDoLike} label="💚 공감 🔑" />
-              <ActionChk v={doShare} set={setDoShare} label="🔗 공유" />
+              {actionAllowed("like") && <ActionChk v={doLike} set={setDoLike} label="💚 공감 🔑" />}
+              {actionAllowed("share") && <ActionChk v={doShare} set={setDoShare} label="🔗 공유" />}
             </>)}
             <ActionChk v={auto} set={setAuto} label="⚙️ 자동(오늘 한도까지)" />
             <ActionChk v={visible} set={setVisible} label="🪟 창 보기(테스트)" />
