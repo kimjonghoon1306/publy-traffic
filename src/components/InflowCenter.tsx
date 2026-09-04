@@ -260,6 +260,23 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [schedRounds, setSchedRounds] = useState(10);
   // 💤 화면·시스템 절전 방지 — 유입 실행중(텀 대기 포함) OR 예약 대기 OR 오토파일럿 가동 중이면 안 꺼지게(부모 keepAwake).
   useEffect(() => { onBusyChange?.(running || schedEnabled || apEnabled); }, [running, schedEnabled, apEnabled]);
+  // 🔴 관리자가 승인을 취소하면(허용 대상이 줄면) — 실행 중이면 즉시 정지 + 화면 새로고침(회원앱만)
+  const prevFeatsRef = useRef<("place"|"blog"|"store")[] | undefined>(undefined);
+  useEffect(() => {
+    if (!memberMode) { prevFeatsRef.current = allowedFeatures; return; }
+    const prev = prevFeatsRef.current;
+    const now = allowedFeatures || [];
+    if (prev !== undefined) {
+      const removed = prev.filter((f) => !now.includes(f));
+      if (removed.length) {
+        try { esRef.current?.close(); } catch {}
+        esRef.current = null; setRunning(false);
+        toast("관리자가 일부 승인을 취소했어요. 실행을 멈추고 새로고침합니다.", "info");
+        setTimeout(() => { try { window.location.reload(); } catch {} }, 1400);
+      }
+    }
+    prevFeatsRef.current = now;
+  }, [allowedFeatures, memberMode]);
   type InflowNotification = { id: string; message: string; createdAt: string };
   const notificationKey = `publy_inflow_notifications_${userId || "guest"}`;
   const [notifications, setNotifications] = useState<InflowNotification[]>(() => {
@@ -1231,6 +1248,23 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             <button onClick={stop} style={{ width: "100%", padding: 15, borderRadius: 12, border: `2px solid ${C.accent}`, background: C.panel2, color: C.accent, fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>⏹️ 정지 ({progress}%)</button>
           )}
           {!unlimited && <div style={{ marginTop: 8, fontSize: 11.5, color: C.sub, fontWeight: 700, textAlign: "center" }}>오늘 {used}/{limit}회 {gradeLabel && `· ${gradeLabel}`}</div>}
+
+          {/* 🎫 등급별 사용 한도표 — 베이직/프로/프리미엄(무제한은 관리자 고유라 제외). 내 등급 강조 */}
+          <div style={{ marginTop: 14, ...mCard }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 8 }}>🎫 등급별 하루 유입 한도 <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· {targetType === "place" ? "플레이스" : targetType === "blog" ? "블로그" : "스마트스토어"} 기준</span></div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              {([["basic", "베이직", 30], ["pro", "프로", 60], ["premium", "프리미엄", 120]] as [string, string, number][]).map(([k, lb, n]) => {
+                const mine = featLic?.plan === k;
+                return (
+                  <div key={k} style={{ padding: "12px 10px", borderRadius: 10, textAlign: "center", border: `2px solid ${mine ? C.accent : C.line2}`, background: mine ? C.glow : C.panel }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: mine ? C.accent : C.sub }}>{lb}{mine ? " ✓" : ""}</div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: mine ? C.accent : C.ink, marginTop: 3 }}>{n}<span style={{ fontSize: 11, fontWeight: 700, color: C.sub }}>회</span></div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 7, lineHeight: 1.5 }}>등급·기간은 관리자가 정해요. 한도가 더 필요하면 <b style={{ color: C.accent }}>결제·사용 문의</b>로 상향 요청하세요.</div>
+          </div>
 
           {/* 기록 그래프 + 기간 설정 (주단위·기간별 과거 데이터) */}
           <div style={{ marginTop: 16, ...mCard }}>
