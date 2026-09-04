@@ -108,7 +108,10 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void }) {
+// 📋 트래픽 앱 상단 컴팩트 4칸 요약에 쓰는 스냅샷(목업 모양). onSummary로 부모에 내보낸다.
+export type InflowSummary = { targetType: "place" | "blog" | "store"; targetLabel: string; url: string; keywords: string; rounds: number; termMin: number; termMax: number; device: "mobile" | "pc" | "mix"; actions: string[]; rankText: string; apEnabled: boolean; apGoal: number; apKeyword: string };
+
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, onSummary }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; onSummary?: (s: InflowSummary) => void }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다. 없으면(미지정) 전부 허용.
   const FEATS: ("place" | "blog" | "store")[] = ["place", "blog", "store"];
@@ -256,6 +259,17 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [schedRounds, setSchedRounds] = useState(10);
   // 💤 화면·시스템 절전 방지 — 유입 실행중(텀 대기 포함) OR 예약 대기 OR 오토파일럿 가동 중이면 안 꺼지게(부모 keepAwake).
   useEffect(() => { onBusyChange?.(running || schedEnabled || apEnabled); }, [running, schedEnabled, apEnabled]);
+  // 📋 상단 컴팩트 4칸 요약(목업)에 현재 설정을 실시간 반영 — 표시 전용(입력은 아래 상세 패널에서).
+  useEffect(() => {
+    if (!onSummary) return;
+    const url = (targetType === "place" ? placeUrl : targetType === "store" ? storeUrl : blogUrl).trim();
+    const acts: string[] = [];
+    if (targetType === "place") { if (doSave) acts.push("저장"); if (doDir) acts.push("길찾기"); if (doCall) acts.push("전화"); if (doBook) acts.push("예약"); if (doTalk) acts.push("톡톡"); if (doShare) acts.push("공유"); if (doReview) acts.push("리뷰"); }
+    else if (targetType === "blog") { if (doLike) acts.push("공감"); if (doShare) acts.push("공유"); if (funnel) acts.push("풀퍼널(다른글·이웃)"); }
+    else { if (doWish) acts.push("찜"); if (doCart) acts.push("장바구니"); if (doOption) acts.push("옵션보기"); if (doShare) acts.push("공유"); }
+    const rankText = targetType === "store" ? "미지원" : apLastRank != null ? `${apLastRank}위` : apRankOut ? "30위 밖" : "미측정";
+    onSummary({ targetType, targetLabel: targetType === "place" ? "플레이스" : targetType === "blog" ? "블로그" : "스토어", url, keywords, rounds, termMin, termMax, device, actions: acts, rankText, apEnabled, apGoal, apKeyword });
+  }, [onSummary, targetType, placeUrl, blogUrl, storeUrl, keywords, rounds, termMin, termMax, device, doSave, doDir, doCall, doBook, doTalk, doShare, doReview, doLike, funnel, doWish, doCart, doOption, apLastRank, apRankOut, apEnabled, apGoal, apKeyword]);
   type InflowNotification = { id: string; message: string; createdAt: string };
   const notificationKey = `publy_inflow_notifications_${userId || "guest"}`;
   const [notifications, setNotifications] = useState<InflowNotification[]>(() => {
