@@ -165,7 +165,7 @@ const CSS = `
 
 .header{height:60px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;gap:12px;background:var(--header-bg);border-bottom:1px solid var(--border);backdrop-filter:blur(20px);position:sticky;top:0;z-index:100;}
 .logo{display:flex;align-items:center;gap:8px;text-decoration:none;}
-.logo-ico{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#ff6b6b,#ff3333);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo-ico{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#f0417a,#ff8a4c);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .logo-text{font-size:17px;font-weight:900;letter-spacing:.15em;color:var(--danger);}
 .header-mid{display:flex;align-items:center;gap:8px;flex:1;justify-content:center;}
 .plat-toggle{display:flex;align-items:center;gap:5px;flex-shrink:0;}
@@ -3337,13 +3337,8 @@ POST3: (제목)|(이유)
         {/* 헤더 */}
         <div className="header">
           <div className="logo">
-            <div className="logo-ico">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L22 20H2L12 2Z" fill="#fff" opacity=".8"/>
-                <path d="M12 7L19 19H5L12 7Z" fill="#ff6b6b" opacity=".8"/>
-              </svg>
-            </div>
-            <span className="logo-text">PUBLY ADM</span>
+            <div className="logo-ico" style={{fontSize:16,fontWeight:900,color:"#fff"}}>T</div>
+            <span className="logo-text">TRAFFIC ADM</span>
           </div>
           <div className="header-mid">
             <button className="plat-hdr-btn" onClick={()=>{setPlatform("naver");if(pubAccId)loadCategories("naver");}}

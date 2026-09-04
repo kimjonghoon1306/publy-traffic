@@ -195,7 +195,7 @@ function KeyInput({k}:{k:any; [x:string]:any}) {
       <div style={{display:"flex",gap:6}}>
         <input className="inp" type={show?"text":"password"} placeholder={k.placeholder} value={val} onChange={e=>setVal(e.target.value)} style={{flex:1,fontSize:13,padding:"9px 12px"}}/>
         <button className="btn-ghost" onClick={()=>setShow(s=>!s)}>{show?"숨김":"표시"}</button>
-        <button style={{padding:"9px 16px",borderRadius:8,border:"none",background:saved?"#00c875":"var(--accent)",color:"#000",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:"inherit",transition:"all .2s"}} onClick={save}>{saved?"✓":"저장"}</button>
+        <button style={{padding:"9px 16px",borderRadius:8,border:"none",background:saved?"#f0417a":"var(--accent)",color:"#000",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:"inherit",transition:"all .2s"}} onClick={save}>{saved?"✓":"저장"}</button>
       </div>
     </div>
   );
@@ -245,7 +245,7 @@ const CSS = `
 *::-webkit-scrollbar{width:5px;}*::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
 .header{min-height:58px;flex-shrink:0;display:flex;align-items:center;flex-wrap:wrap;padding:8px 16px;gap:10px;background:var(--header-bg);border-bottom:1px solid var(--border);backdrop-filter:blur(24px);position:sticky;top:0;z-index:100;}
 .logo{display:flex;align-items:center;gap:9px;text-decoration:none;flex-shrink:0;}
-.logo-ico{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#00ff9d,#00c870);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 12px rgba(0,255,157,.35);}
+.logo-ico{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#f0417a,#ff8a4c);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 12px rgba(240,65,122,.4);}
 .logo-text{font-size:17px;font-weight:900;letter-spacing:.18em;color:var(--accent-text);font-family:'Space Grotesk',sans-serif;}
 .header-mid{display:flex;align-items:center;gap:8px;flex:1;justify-content:center;flex-wrap:wrap;}
 .plat-btn{padding:5px 12px;border-radius:99px;border:1.5px solid;font-size:11px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;white-space:nowrap;flex-shrink:0;}
@@ -282,7 +282,7 @@ const CSS = `
 .user-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .logout-btn{padding:6px 13px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-weight:600;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
 .logout-btn:hover{border-color:var(--danger);color:var(--danger);}
-.dl-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:99px;border:none;background:linear-gradient(135deg,#00ff9d,#00c870);color:#000;font-size:12px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;text-decoration:none;animation:dlFloat 2.5s ease-in-out infinite;white-space:nowrap;flex-shrink:0;box-shadow:0 3px 14px rgba(0,255,157,.35);}
+.dl-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:99px;border:none;background:linear-gradient(135deg,#f0417a,#ff8a4c);color:#000;font-size:12px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;text-decoration:none;animation:dlFloat 2.5s ease-in-out infinite;white-space:nowrap;flex-shrink:0;box-shadow:0 3px 14px rgba(240,65,122,.35);}
 .guide-open-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 15px;border-radius:99px;border:none;background:linear-gradient(135deg,#FF6B9D,#FF3D7F);color:#fff;font-size:12px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;animation:guideFloat 2.8s ease-in-out infinite;white-space:nowrap;flex-shrink:0;box-shadow:0 3px 14px rgba(255,61,127,.35);}
 .video-open-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 15px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
 .video-open-btn:hover{border-color:#FF3D7F;color:#FF6B9D;}
@@ -294,7 +294,7 @@ const CSS = `
 .sidebar{position:relative;flex-shrink:0;z-index:50;width:210px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:12px 8px;gap:2px;overflow-y:auto;}
 .nav-lbl{font-size:9px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--text3);padding:5px 11px 7px;margin-top:4px;}
 /* 플레이스 세트: 플레이스365+리뷰답글을 테두리로 묶어 한 눈에 */
-.nav-box{margin:8px 6px;padding:6px 6px 7px;border:1.5px solid var(--accent-soft,rgba(22,133,107,.35));border-radius:12px;background:linear-gradient(180deg,rgba(22,133,107,.06),rgba(22,133,107,.02));position:relative;}
+.nav-box{margin:8px 6px;padding:6px 6px 7px;border:1.5px solid var(--accent-soft,rgba(240,65,122,.35));border-radius:12px;background:linear-gradient(180deg,rgba(240,65,122,.06),rgba(240,65,122,.02));position:relative;}
 .nav-box-lbl{font-size:9px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#16856b;padding:2px 6px 6px;display:flex;align-items:center;gap:4px;}
 .nav-box-lbl::before{content:"🏪";font-size:11px;}
 .dark .nav-box{border-color:rgba(34,168,128,.4);background:linear-gradient(180deg,rgba(34,168,128,.08),rgba(34,168,128,.02));}
@@ -316,7 +316,7 @@ const CSS = `
 .card-title{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--text2);display:flex;align-items:center;gap:7px;}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 22px;border-radius:10px;border:none;font-size:14px;font-weight:700;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .15s;white-space:nowrap;}
 .btn:disabled{opacity:.42;cursor:not-allowed;}
-.btn-primary{background:linear-gradient(135deg,var(--accent),#00cc80);color:#000;box-shadow:0 3px 14px var(--accent-30);}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#ff8a4c);color:#000;box-shadow:0 3px 14px var(--accent-30);}
 .btn-primary:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);}
 .btn-secondary{background:var(--card2);color:var(--text);border:1px solid var(--border);}
 .btn-secondary:hover:not(:disabled){background:var(--card-hover);border-color:var(--border2);}
@@ -333,7 +333,7 @@ const CSS = `
 .flow-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 26px;border-radius:99px;border:none;font-size:15px;font-weight:800;font-family:'Noto Sans KR',sans-serif;cursor:pointer;transition:all .18s;}
 .flow-btn:hover:not(:disabled){transform:translateY(-2px);}
 .flow-btn:disabled{opacity:.4;cursor:not-allowed;}
-.flow-btn-g{background:linear-gradient(135deg,var(--accent),#00cc80);color:#000;box-shadow:0 4px 20px var(--accent-30);}
+.flow-btn-g{background:linear-gradient(135deg,var(--accent),#ff8a4c);color:#000;box-shadow:0 4px 20px var(--accent-30);}
 .flow-btn-skip{background:var(--card2);color:var(--text2);border:1px solid var(--border);}
 .inp{width:100%;padding:12px 14px;border-radius:9px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:'Noto Sans KR',sans-serif;outline:none;transition:all .15s;}
 .inp:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(77,166,255,.12);}
@@ -348,7 +348,7 @@ select.inp{cursor:pointer;appearance:auto;}
 textarea.inp{resize:vertical;line-height:1.75;min-height:80px;}
 .spinner{width:16px;height:16px;border-radius:50%;border:2.5px solid rgba(0,0,0,.15);border-top-color:#000;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0;}
 .sp-w{border-color:rgba(255,255,255,.2);border-top-color:#fff;}
-.sp-g{border-color:rgba(0,255,157,.2);border-top-color:var(--accent);}
+.sp-g{border-color:rgba(240,65,122,.2);border-top-color:var(--accent);}
 .steps{display:flex;border-radius:13px;overflow:hidden;border:1px solid var(--border);margin-bottom:20px;background:var(--bg2);}
 .step-item{flex:1;padding:11px 8px;text-align:center;font-size:12px;font-weight:600;color:var(--text3);background:transparent;border-right:1px solid var(--border);transition:all .2s;}
 .step-item:last-child{border-right:none;}
@@ -381,7 +381,7 @@ textarea.inp{resize:vertical;line-height:1.75;min-height:80px;}
 .img-td{position:absolute;top:-6px;right:-6px;width:19px;height:19px;border-radius:50%;background:var(--danger);border:none;color:#fff;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;}
 .img-td:hover{transform:scale(1.15);}
 .img-prog{height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin:10px 0 6px;}
-.img-prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),#00cc80);border-radius:99px;transition:width .4s;}
+.img-prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),#ff8a4c);border-radius:99px;transition:width .4s;}
 .concept-grid{display:grid;gap:10px;}
 .concept-btn{padding:16px 18px;border-radius:13px;border:2px solid var(--border);background:var(--bg);cursor:pointer;text-align:left;font-family:'Noto Sans KR',sans-serif;transition:all .18s;}
 .concept-btn.sel-full{border-color:var(--accent);background:var(--accent-bg);}
@@ -435,7 +435,7 @@ textarea.inp{resize:vertical;line-height:1.75;min-height:80px;}
 .guide-modal{width:100%;max-width:560px;max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));border-radius:24px;overflow:hidden;display:flex;flex-direction:column;animation:guideIn .32s cubic-bezier(.34,1.56,.64,1) both;box-shadow:0 32px 80px rgba(0,0,0,.6);position:relative;}
 .guide-header{padding:22px 22px 0;background:var(--g-surface2);flex-shrink:0;border-bottom:1px solid var(--g-line);}
 .guide-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
-.guide-logo-ico{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#00ff9d,#00c870);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.guide-logo-ico{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#f0417a,#ff8a4c);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
 .guide-title{font-size:20px;font-weight:900;color:var(--g-fg);}
 .guide-subtitle{font-size:12px;color:var(--g-fg2);margin-top:3px;}
 .guide-tabs{display:flex;overflow-x:auto;scrollbar-width:none;}
@@ -4536,7 +4536,7 @@ POST3: (제목)|(이유)
   const activeImages=getActiveImages();
   useEffect(()=>{if(genTitle)setPubTitle(genTitle);},[genTitle]);
   useEffect(()=>{if(genTags)setPubTags(genTags);},[genTags]);
-  const P="#FF6B9D",Y="#FFD93D",G="#00ff9d";
+  const P="#FF6B9D",Y="#FFD93D",G="#f0417a";
   const guideTabs=["🏠 시작","🔑 API 키","✍️ 글 생성","🖼️ 이미지","🚀 발행","🏪 플레이스","❓ FAQ"];
   const guidePages=[
     /* ── 0: 시작 ── */
@@ -4546,7 +4546,7 @@ POST3: (제목)|(이유)
         <div className="g-step-title" style={{color:"var(--g-fg)"}}>글쓰기부터 매장 성장까지 한곳에서 해요</div>
         <div className="g-step-desc">블로그는 <b>제목 → 글 → 이미지 → 자동 발행</b>, 매장은 <b>순위 확인 → 진단 → 고객 화면 점검 → 리뷰어 찾기</b> 순서로 따라가면 돼요.</div>
       </div>
-      <div className="g-step" style={{borderColor:"rgba(22,133,107,.35)",background:"rgba(22,133,107,.08)"}}>
+      <div className="g-step" style={{borderColor:"rgba(240,65,122,.35)",background:"rgba(240,65,122,.08)"}}>
         <div className="g-step-num" style={{color:"#16856b"}}>🏪 매장을 운영하시나요?</div>
         <div className="g-step-title" style={{color:"var(--g-fg)"}}>플레이스 365부터 눌러보세요</div>
         <div className="g-step-desc">왼쪽의 <b>🏪 플레이스 365</b>에서 내 매장을 등록하면 현재 순위, 주변 업체 비교, 고객에게 보이는 정보를 한눈에 확인할 수 있어요.</div>
@@ -4594,7 +4594,7 @@ POST3: (제목)|(이유)
         <div key={i} className="g-step" style={{borderColor:`${ai.color}35`,background:`${ai.color}08`}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
             <div style={{width:34,height:34,borderRadius:9,background:ai.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:"#000",fontSize:14,flexShrink:0}}>{ai.logo}</div>
-            <div><div style={{fontSize:15,fontWeight:800,color:"var(--g-fg)"}}>{ai.name}</div><span style={{fontSize:11,fontWeight:800,padding:"2px 8px",borderRadius:99,background:ai.free?"rgba(0,200,117,.15)":"rgba(245,158,11,.15)",color:ai.free?"#00c875":"#f59e0b"}}>{ai.free?"✅ 무료":"💳 유료"}</span></div>
+            <div><div style={{fontSize:15,fontWeight:800,color:"var(--g-fg)"}}>{ai.name}</div><span style={{fontSize:11,fontWeight:800,padding:"2px 8px",borderRadius:99,background:ai.free?"rgba(240,65,122,.15)":"rgba(245,158,11,.15)",color:ai.free?"#f0417a":"#f59e0b"}}>{ai.free?"✅ 무료":"💳 유료"}</span></div>
           </div>
           <div className="g-step-desc">{ai.desc}</div>
           <div className="g-tip" style={{marginTop:8,fontSize:13}}>🔑 <a href={ai.link} target="_blank" rel="noopener noreferrer" style={{color:"var(--g-yellow)",fontWeight:700,textDecoration:"underline"}}>여기서 키 발급</a> → 로그인 → API 키 생성 → 복사 → 설정 탭 붙여넣기</div>
@@ -4657,7 +4657,7 @@ POST3: (제목)|(이유)
             </div>
           ))}
         </div>
-        <button className="g-btn" style={{background:`linear-gradient(135deg,${G},#00c870)`,color:"#000"}} onClick={()=>{setShowGuide(false);setTab("accounts");}}>🔗 계정 연결하러 가기</button>
+        <button className="g-btn" style={{background:`linear-gradient(135deg,${G},#ff8a4c)`,color:"#000"}} onClick={()=>{setShowGuide(false);setTab("accounts");}}>🔗 계정 연결하러 가기</button>
       </div>
       <div className="g-step" style={{borderColor:`${Y}40`,background:`${Y}08`}}>
         <div className="g-step-num" style={{color:"var(--g-yellow)"}}>🖼️ 이미지+글 패턴 확인</div>
@@ -4668,7 +4668,7 @@ POST3: (제목)|(이유)
 
     /* ── 5: 플레이스 365 ── */
     <div key="5">
-      <div className="g-step" style={{borderColor:"rgba(22,133,107,.4)",background:"rgba(22,133,107,.08)"}}>
+      <div className="g-step" style={{borderColor:"rgba(240,65,122,.4)",background:"rgba(240,65,122,.08)"}}>
         <div className="g-step-num" style={{color:"#16856b"}}>🏪 플레이스 365이 뭐예요?</div>
         <div className="g-step-title" style={{color:"var(--g-fg)"}}>내 가게를 찾고, 비교하고, 키우는 매장 성장센터예요</div>
         <div className="g-step-desc">단순 순위 조회가 아니에요. 고객에게 내 매장이 어떻게 보이는지 확인하고, 주변 업체보다 부족한 점과 다음 행동을 알려줘요.</div>
@@ -4760,7 +4760,7 @@ POST3: (제목)|(이유)
           <div style={{position:"fixed",inset:0,zIndex:10000,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
             onClick={()=>{ pwPromptResolve.current?.(null); pwPromptResolve.current=null; setPwPrompt(null); }}>
             <div style={{width:"100%",maxWidth:400,borderRadius:20,background:"var(--card)",border:"1px solid var(--accent-border)",overflow:"hidden",animation:"fadeUp .25s ease",boxShadow:"0 24px 60px rgba(0,0,0,.5)"}} onClick={e=>e.stopPropagation()}>
-              <div style={{padding:"18px 22px 14px",background:"linear-gradient(135deg,var(--accent),#00cc80)",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{padding:"18px 22px 14px",background:"linear-gradient(135deg,var(--accent),#ff8a4c)",display:"flex",alignItems:"center",gap:10}}>
                 <span style={{fontSize:24}}>🔒</span>
                 <div><div style={{fontSize:16,fontWeight:900,color:"#000"}}>세션이 만료되었어요</div>
                 <div style={{fontSize:12,color:"rgba(0,0,0,.7)",marginTop:2}}>{pwPrompt.acc.platform==="naver"?"네이버":"티스토리"} 비밀번호를 다시 입력해주세요</div></div>
@@ -4872,8 +4872,8 @@ POST3: (제목)|(이유)
         {/* ── 헤더 ── */}
         <div className="header">
           <button className="logo" type="button" onClick={handleLogoTap} aria-label="퍼블리 로고" style={{background:"transparent",border:0,cursor:"pointer",fontFamily:"inherit"}}>
-            <div className="logo-ico" style={{fontSize:17,fontWeight:900,color:"#000"}}>P</div>
-            <span className="logo-text">PUBLY</span>
+            <div className="logo-ico" style={{fontSize:17,fontWeight:900,color:"#fff"}}>T</div>
+            <span className="logo-text">TRAFFIC</span>
           </button>
           {appVersion&&<span style={{fontSize:10.5,color:"var(--text3)",fontWeight:600,whiteSpace:"nowrap"}}>{appVersion.startsWith("v")?appVersion:`v${appVersion}`}</span>}
           <div className="header-mid">
@@ -6042,7 +6042,7 @@ POST3: (제목)|(이유)
                                 <span style={{fontSize:14,fontWeight:900,color:"var(--accent-text)",fontFamily:"'Space Grotesk',sans-serif"}}>{genImgProgress}%</span>
                               </div>
                               <div style={{height:8,background:"var(--border)",borderRadius:99,overflow:"hidden"}}>
-                                <div style={{height:"100%",width:`${genImgProgress}%`,background:"linear-gradient(90deg,var(--accent),#00cc80)",borderRadius:99,transition:"width .4s"}}/>
+                                <div style={{height:"100%",width:`${genImgProgress}%`,background:"linear-gradient(90deg,var(--accent),#ff8a4c)",borderRadius:99,transition:"width .4s"}}/>
                               </div>
                             </div>
                           )}
@@ -8486,7 +8486,7 @@ POST3: (제목)|(이유)
           onClick={()=>{localStorage.setItem("publy_dismissed_"+noticePopup.key,"1");setNoticePopup(null);}}>
           <div style={{width:"100%",maxWidth:440,borderRadius:20,background:"var(--card)",border:"1px solid var(--border)",overflow:"hidden",animation:"fadeUp .25s ease",boxShadow:"0 24px 60px rgba(0,0,0,.6)"}}
             onClick={e=>e.stopPropagation()}>
-            <div style={{background:"linear-gradient(135deg,var(--accent),#00cc80)",padding:"18px 22px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{background:"linear-gradient(135deg,var(--accent),#ff8a4c)",padding:"18px 22px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div style={{fontSize:16,fontWeight:900,color:"#000"}}>📢 {noticePopup.title}</div>
               <button onClick={()=>{localStorage.setItem("publy_dismissed_"+noticePopup.key,"1");setNoticePopup(null);}}
                 style={{background:"rgba(0,0,0,.2)",border:"none",color:"#000",width:30,height:30,borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"inherit"}}>✕</button>
