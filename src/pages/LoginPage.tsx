@@ -539,14 +539,14 @@ export default function LoginPage({ onLogin, onAdminLogin, theme, onThemeToggle 
                   <rect width="192" height="192" rx="36" fill="url(#bg)"/>
                   <circle cx="96" cy="96" r="72" fill="none" stroke="#f0417a" strokeWidth="1" opacity="0.12"/>
                   <circle cx="96" cy="96" r="55" fill="none" stroke="#f0417a" strokeWidth="1" opacity="0.08"/>
-                  <text x="96" y="126" fontFamily="Arial Black, sans-serif" fontSize="108" fontWeight="900" fill="url(#g1)" textAnchor="middle" filter="url(#glow)" letterSpacing="-4">P</text>
-                  <rect x="44" y="148" width="104" height="20" rx="10" fill="#f0417a" opacity="0.12"/>
-                  <text x="96" y="163" fontFamily="Arial, sans-serif" fontSize="11" fontWeight="700" fill="#f0417a" textAnchor="middle" letterSpacing="4">PUBLY</text>
+                  <text x="96" y="122" fontFamily="Arial Black, sans-serif" fontSize="108" fontWeight="900" fill="url(#g1)" textAnchor="middle" filter="url(#glow)" letterSpacing="-4">T</text>
+                  <rect x="34" y="148" width="124" height="20" rx="10" fill="#f0417a" opacity="0.12"/>
+                  <text x="96" y="163" fontFamily="Arial, sans-serif" fontSize="10.5" fontWeight="700" fill="#f0417a" textAnchor="middle" letterSpacing="3.5">TRAFFIC</text>
                 </svg>
               </div>
             </div>
-            <div className="logo-name">PUBLY</div>
-            <div className="logo-tagline">Auto Publishing System v2</div>
+            <div className="logo-name">TRAFFIC</div>
+            <div className="logo-tagline">PUBLY · Traffic Inflow</div>
           </div>
 
           {/* 초대 링크 배지 */}
