@@ -447,8 +447,10 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   // 🔐 로그인해서 내 글 불러오기 — 계정 관리에서 연결한 계정으로 내 글 목록 수집(SSE). 모든 과정 라이브 로그.
   const collectMyPosts = (acctId: string) => {
     if (!acctId) { toast("먼저 불러올 네이버 계정을 선택하세요", "error"); return; }
-    const acctName = accounts.find((a) => a.id === acctId)?.username || acctId;
-    const fallbackBid = parseBlogUrl(blogUrl)?.blogId || "";
+    const acct = accounts.find((a) => a.id === acctId);
+    const acctName = acct?.username || acctId;
+    // 폴백용 blogId — 주소칸이 비어도 계정의 블로그명/아이디로 공개수집(주소 입력 강요 X)
+    const fallbackBid = parseBlogUrl(blogUrl)?.blogId || parseBlogUrl(acct?.blog_name || "")?.blogId || (acct?.username || "").replace(/@.*/, "");
     setMyPostsLoading(true); setMyPosts([]); setSelectedPosts(new Set());
     pushLog(`━━━━━ 📚 내 글 불러오기 시작 ━━━━━`);
     pushLog(`🔐 로그인 계정 '${acctName}'로 내 글 목록 요청 중…`);
