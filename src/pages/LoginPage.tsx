@@ -39,8 +39,8 @@ const CSS = `
   position:relative; font-family:'Noto Sans KR',sans-serif;
   perspective:1000px;
 }
-.login-root.dark  { background:#241e17; }
-.login-root.light { background:#f3efe6; }
+.login-root.dark  { background:radial-gradient(1200px 800px at 20% 0%, #2a1420 0%, #170d14 55%, #0d070b 100%); }
+.login-root.light { background:radial-gradient(1200px 800px at 20% 0%, #fdeef4 0%, #f7edf3 55%, #f3eef2 100%); }
 
 /* 우주 배경 */
 .cosmos-bg {
@@ -154,13 +154,17 @@ const CSS = `
   animation:pulse-ring 2s ease-out infinite;
 }
 .logo-name {
-  font-family:'Bebas Neue',sans-serif; font-size:27px; letter-spacing:.22em;
-  background:linear-gradient(135deg,#f0417a,#e0356e,#ffffff);
+  font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:.24em; line-height:1;
+  background:linear-gradient(135deg,#f0417a,#e0356e,#ffb47a);
   -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 2px 14px rgba(240,65,122,.35));
 }
-.logo-tagline { font-size:10px; letter-spacing:.3em; text-transform:uppercase; margin-top:4px; }
-.dark .logo-tagline  { color:rgba(255,220,235,.62); }
-.light .logo-tagline { color:rgba(0,0,0,.4); }
+.logo-ko { font-size:16px; font-weight:900; letter-spacing:.02em; margin-top:7px; }
+.dark .logo-ko  { color:#ffe3ee; }
+.light .logo-ko { color:#1a0f16; }
+.logo-tagline { font-size:9.5px; letter-spacing:.34em; text-transform:uppercase; margin-top:5px; font-weight:700; }
+.dark .logo-tagline  { color:rgba(255,180,205,.55); }
+.light .logo-tagline { color:rgba(224,53,110,.55); }
 
 /* 탭 */
 .tab-group {
@@ -546,7 +550,8 @@ export default function LoginPage({ onLogin, onAdminLogin, theme, onThemeToggle 
               </div>
             </div>
             <div className="logo-name">TRAFFIC</div>
-            <div className="logo-tagline">PUBLY · Traffic Inflow</div>
+            <div className="logo-ko">퍼블리 트래픽</div>
+            <div className="logo-tagline">Traffic Inflow System</div>
           </div>
 
           {/* 초대 링크 배지 */}

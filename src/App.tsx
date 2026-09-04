@@ -4,7 +4,6 @@ import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminPageRaw from "./pages/AdminPage";
 const AdminPage = AdminPageRaw as React.ComponentType<any>;
 import DashboardPage from "./pages/DashboardPage";
-import IntroSplash from "./pages/IntroSplash";
 import { PublyUser, refreshUserById, touchLastSeen, logoutServerSession, verifyAdminSession, clearAdminSession, getMemberSessionToken, isThisDeviceActive } from "./lib/supabase";
 
 type View = "login" | "admin-login" | "admin" | "dashboard";
@@ -39,8 +38,6 @@ export default function App() {
     (localStorage.getItem("publy_theme") as any) || "dark"
   );
   const [loading, setLoading] = useState(true);
-  // 첫 실행 시 인트로 영상 1회 재생("다시 보지 않기"/건너뛰기 시 저장)
-  const [showIntro, setShowIntro] = useState(() => !localStorage.getItem("publy_intro_seen"));
 
   useEffect(() => {
     let alive = true;
@@ -168,8 +165,7 @@ export default function App() {
     </div>
   );
 
-  // 첫 실행 인트로 영상 (로그인 앞에서 1회)
-  if (showIntro) return <IntroSplash onDone={() => setShowIntro(false)} />;
+  // 트래픽 앱 — 퍼블리 인트로 영상 제거(첫 화면부터 트래픽 로그인). showIntro 미사용.
 
   if (view==="login") return (
     <LoginPage
