@@ -271,39 +271,71 @@
     </div>
   </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-  // ── 실시간 대여 카운트다운(데모) ──
-  // 실제로는 서버(Supabase) 저장 만료시각 + 서버시간 기준으로 계산해 시계 조작 방지.
-  const TOTAL_DAYS = 30;
-  let expireAt = Date.now() + (12 * 24 * 3600 + 3 * 3600 + 24 * 60 + 51) * 1000; // 데모: 12일 3:24:51 남음
-  const $ = (id) => document.getElementById(id);
-  function pad(n){return String(n).padStart(2,'0');}
-  function tick(){
-    let ms = expireAt - Date.now();
-    if (ms <= 0){ $('lockover').classList.add('show'); $('clock').textContent='00:00:00'; $('days').textContent='D-0'; $('prog').style.width='0%'; return; }
-    const totalSec = Math.floor(ms/1000);
-    const days = Math.floor(totalSec/86400);
-    const h = Math.floor((totalSec%86400)/3600);
-    const m = Math.floor((totalSec%3600)/60);
-    const s = totalSec%60;
-    $('days').textContent = 'D-' + days;
-    $('clock').textContent = pad(h)+':'+pad(m)+':'+pad(s);
-    const remainPct = Math.max(2, Math.min(100, (totalSec / (TOTAL_DAYS*86400))*100));
-    $('prog').style.width = remainPct + '%';
-    $('ring').style.setProperty('--pct', remainPct + '%');
-    $('ringpct').textContent = Math.round(remainPct) + '%';
-    // 3일 이하 남으면 경고색
-    $('rentbar').classList.toggle('warn', days < 3);
+  // ── 실시간 대여 카운트다운 (Supabase 라이선스 · 서버시간 기준으로 시계 조작 방지) ──
+  const SB_URL='https://qhhoyxexxlimbjrbwrgq.supabase.co';
+  const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoaG95eGV4eGxpbWJqcmJ3cmdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTMzOTQsImV4cCI6MjA5Mjg4OTM5NH0.pw_qUR0oOxgt82S_DA6GTka3WP0JBu2vmWuKZ9VvTKM';
+  const sb=window.supabase.createClient(SB_URL,SB_KEY);
+  const TOOL='traffic';
+  const $=(id)=>document.getElementById(id);
+  const pad=(n)=>String(n).padStart(2,'0');
+  const setLockMsg=(m)=>{ const t=document.querySelector('#lockover .t'); if(t)t.textContent=m; };
+
+  // 테스트용 고객 지정: URL ?c=이름 > localStorage > 입력창
+  function getCustomer(){
+    const u=new URLSearchParams(location.search).get('c');
+    if(u){ localStorage.setItem('traffic_customer',u.trim()); return u.trim(); }
+    let c=localStorage.getItem('traffic_customer');
+    if(!c){ c=(prompt('테스트할 고객 이름 (컨트롤타워에서 발급한 고객)')||'').trim(); if(c) localStorage.setItem('traffic_customer',c); }
+    return c||'';
   }
-  tick(); setInterval(tick, 1000);
-  // 만료 미리보기(잠금 화면 확인용)
-  // 🌙 테마 전환(소프트 다크 ↔ 라이트)
-  $('themebtn').onclick = () => {
-    const dark = document.body.classList.toggle('dark');
-    $('themebtn').textContent = dark ? '☀️' : '🌙';
-  };
-  $('peek').onclick = () => { expireAt = Date.now() - 1000; tick(); };
-  $('relock').onclick = () => { expireAt = Date.now() + (12*24*3600+3*3600+24*60+51)*1000; $('lockover').classList.remove('show'); tick(); };
+  let customer=getCustomer();
+
+  const TOTAL_DAYS=30;      // 링 % 표시 기준
+  let serverOffset=0, expireMs=0, hasLicense=false;
+
+  async function fetchLicense(){
+    if(!customer){ showNoLicense('고객 미지정 — 잠금화면 더블클릭으로 이름 입력'); return; }
+    const {data,error}=await sb.rpc('license_status',{p_customer:customer,p_tool:TOOL});
+    if(error){ showNoLicense('라이선스 조회 오류: '+error.message); return; }
+    const row=Array.isArray(data)?data[0]:data;
+    if(!row||!row.expire_at){ showNoLicense('"'+customer+'" 트래픽 대여 정보 없음 — 관리자 문의'); return; }
+    serverOffset=new Date(row.server_now).getTime()-Date.now();  // 서버-로컬 시간차(조작 방지)
+    expireMs=new Date(row.expire_at).getTime();
+    hasLicense=true; $('lockover').classList.remove('show'); setLockMsg('대여 기간이 만료됐어요'); tick();
+  }
+  function showNoLicense(msg){
+    hasLicense=false; $('lockover').classList.add('show'); setLockMsg(msg);
+    $('clock').textContent='--:--:--'; $('days').textContent='D-–'; $('prog').style.width='0%';
+    $('ring').style.setProperty('--pct','0%'); $('ringpct').textContent='–';
+  }
+  function tick(){
+    if(!hasLicense) return;
+    const ms=expireMs-(Date.now()+serverOffset);   // 서버시간 기준 남은 시간
+    if(ms<=0){ $('lockover').classList.add('show'); setLockMsg('대여 기간이 만료됐어요');
+      $('clock').textContent='00:00:00'; $('days').textContent='D-0'; $('prog').style.width='0%';
+      $('ring').style.setProperty('--pct','0%'); $('ringpct').textContent='0%'; $('rentbar').classList.add('warn'); return; }
+    const totalSec=Math.floor(ms/1000), days=Math.floor(totalSec/86400);
+    const h=Math.floor((totalSec%86400)/3600), m=Math.floor((totalSec%3600)/60), s=totalSec%60;
+    $('days').textContent='D-'+days;
+    $('clock').textContent=pad(h)+':'+pad(m)+':'+pad(s);
+    const remainPct=Math.max(2,Math.min(100,(totalSec/(TOTAL_DAYS*86400))*100));
+    $('prog').style.width=remainPct+'%'; $('ring').style.setProperty('--pct',remainPct+'%'); $('ringpct').textContent=Math.round(remainPct)+'%';
+    $('rentbar').classList.toggle('warn',days<3);
+  }
+  setInterval(tick,1000);
+  setInterval(fetchLicense,180000);  // 3분마다 서버 재확인(연장 반영·시계 조작 방지)
+  fetchLicense();
+
+  // 테마
+  $('themebtn').onclick=()=>{ const d=document.body.classList.toggle('dark'); $('themebtn').textContent=d?'☀️':'🌙'; };
+  // 만료 미리보기 / 다시 불러오기 / 연장 문의
+  $('peek').onclick=()=>{ $('lockover').classList.add('show'); setLockMsg('(미리보기) 만료 화면'); };
+  $('relock').onclick=()=>{ $('lockover').classList.remove('show'); fetchLicense(); };
+  const ext=document.querySelector('.extend'); if(ext) ext.onclick=()=>alert('연장은 관리자에게 문의해주세요.');
+  // 잠금화면 더블클릭 → 테스트 고객 재지정
+  $('lockover').addEventListener('dblclick',()=>{ localStorage.removeItem('traffic_customer'); customer=getCustomer(); fetchLicense(); });
 </script>
 </body>
 </html>
