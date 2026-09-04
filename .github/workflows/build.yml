@@ -1,14 +1,13 @@
-name: Build Publy App
+name: Build Publy Traffic App
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 # 같은 브랜치에서 새 버전이 올라오면 이전 설치 빌드를 중단한다.
-# stable 파일(Publy-Setup.exe / Publy-Mac-*.dmg)이 구버전으로 되돌아가는 것을 방지한다.
 concurrency:
-  group: publy-desktop-${{ github.ref }}
+  group: publy-traffic-desktop-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
