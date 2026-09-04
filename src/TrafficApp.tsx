@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { PublyUser, PublyAccount, getAccounts, upsertAccount, getTrafficLicenses, TRAFFIC_PLAN_LIMIT, ToolLicense } from "./lib/supabase";
 import { botFetch } from "./lib/botApi";
-import InflowCenter, { InflowSummary } from "./components/InflowCenter";
+import InflowCenter from "./components/InflowCenter";
 
 const BOT = "http://127.0.0.1:3363";
 
@@ -83,10 +83,6 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
   // 최장 대여기간(진행률 링) — 만료일까지의 총 기간을 정확히 알 수 없으니 30일 기준 게이지로 표시
   const pct = soonest ? Math.min(100, Math.round((remainSec / (30 * 86400)) * 100)) : 0;
 
-  // ── 📋 상단 컴팩트 4칸 요약(목업) + 상세 접이식 ──
-  const [summary, setSummary] = useState<InflowSummary | null>(null);
-  const [showDetail, setShowDetail] = useState(true); // 기본 펼침. 접어도 언마운트 X(display 토글=실행중 유지)
-
   // ── 💤 절전 방지(유입/예약/오토파일럿 실행 중) ──
   const [inflowBusy, setInflowBusy] = useState(false);
   useEffect(() => { window.electron?.keepAwake?.(inflowBusy).catch(() => {}); return () => { if (inflowBusy) window.electron?.keepAwake?.(false).catch(() => {}); }; }, [inflowBusy]);
@@ -158,60 +154,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
 
       {/* 본문 = 유입 엔진(InflowCenter) */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 18px" }}>
-        <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, background: C.soft, border: `1px solid ${C.line2}`, borderRadius: 9, padding: "9px 12px", marginBottom: 12 }}>
-          🔎 <b style={{ color: C.accent }}>트래픽 유입</b> — 키워드로 검색 → 진입 → 체류 → 액션까지 진짜 손님처럼. 관리자가 승인한 <b style={{ color: C.accent }}>대상·행동·한도</b>만 보여요.
-          {allowedFeatures.length === 0 && <span style={{ color: "#dc2626", fontWeight: 800 }}> · 현재 승인된 대여가 없어요(관리자 승인/연장 필요).</span>}
-        </div>
-
-        {/* 📋 목업 컴팩트 4칸 요약 — 현재 설정 한눈에(표시 전용, 입력은 아래 상세에서) */}
-        {summary && (() => {
-          const cardBg: React.CSSProperties = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 11, padding: "11px 13px", minWidth: 0 };
-          const num: React.CSSProperties = { width: 17, height: 17, borderRadius: 5, background: C.accent, color: "#fff", fontSize: 10.5, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", marginRight: 6 };
-          const h3: React.CSSProperties = { margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, display: "flex", alignItems: "center" };
-          const flabel: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.sub, margin: "8px 0 3px" };
-          const val: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: C.ink, wordBreak: "break-all" as const };
-          const devLabel = summary.device === "mobile" ? "모바일" : summary.device === "pc" ? "PC" : "모바일 / PC 혼합";
-          return (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-              <div style={cardBg}>
-                <h3 style={h3}><span style={num}>1</span> 대상 · 키워드 <span style={{ marginLeft: 6, fontSize: 10.5, color: C.accent, fontWeight: 800 }}>{summary.targetLabel}</span></h3>
-                <div style={flabel}>대상 주소</div>
-                <div style={{ ...val, color: summary.url ? C.ink : C.sub }}>{summary.url || "아래에서 주소를 입력하세요"}</div>
-                <div style={flabel}>검색 키워드</div>
-                <div style={{ ...val, color: summary.keywords ? C.ink : C.sub }}>{summary.keywords || "아래에서 키워드를 입력하세요"}</div>
-              </div>
-              <div style={cardBg}>
-                <h3 style={h3}><span style={num}>2</span> 방문 설정</h3>
-                <div style={flabel}>방문 횟수 · 텀</div>
-                <div style={val}>{summary.rounds}회 · {summary.termMin}~{summary.termMax}초 랜덤</div>
-                <div style={flabel}>접속 기기</div>
-                <div style={val}>{devLabel}</div>
-              </div>
-              <div style={cardBg}>
-                <h3 style={h3}><span style={num}>3</span> 방문 행동</h3>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 4 }}>
-                  {summary.actions.length ? summary.actions.map(a => (
-                    <span key={a} style={{ padding: "4px 9px", borderRadius: 7, border: `1.5px solid ${C.accent}`, background: C.soft, color: C.accent, fontSize: 11, fontWeight: 700 }}>{a}</span>
-                  )) : <span style={{ fontSize: 11.5, color: C.sub, fontWeight: 600 }}>아래에서 행동을 선택하세요</span>}
-                </div>
-              </div>
-              <div style={cardBg}>
-                <h3 style={h3}><span style={num}>4</span> 현재 순위 · 오토파일럿</h3>
-                <div style={flabel}>추적 키워드 · 목표</div>
-                <div style={val}>{summary.apKeyword || summary.keywords.split(",")[0]?.trim() || "—"}{summary.apEnabled ? ` · 목표 ${summary.apGoal}위` : ""}</div>
-                <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: C.accent }}>{summary.rankText} <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>현재</span></div>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* 상세 설정 접기/펼치기 — display 토글이라 접어도 InflowCenter 언마운트 안 됨(실행중 유지) */}
-        <button onClick={() => setShowDetail(v => !v)} style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.line2}`, background: C.win, color: C.accent, fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-          {showDetail ? "▲ 상세 설정 접기" : "▼ 상세 설정 펼치기 (키워드·행동·순위·그래프·진단)"}
-        </button>
-        <div style={{ display: showDetail ? "block" : "none" }}>
-          <InflowCenter showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} onSummary={setSummary} />
-        </div>
+        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} />
       </div>
 
       {/* 하단 대여 카운트다운 */}

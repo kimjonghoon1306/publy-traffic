@@ -108,10 +108,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-// 📋 트래픽 앱 상단 컴팩트 4칸 요약에 쓰는 스냅샷(목업 모양). onSummary로 부모에 내보낸다.
-export type InflowSummary = { targetType: "place" | "blog" | "store"; targetLabel: string; url: string; keywords: string; rounds: number; termMin: number; termMax: number; device: "mobile" | "pc" | "mix"; actions: string[]; rankText: string; apEnabled: boolean; apGoal: number; apKeyword: string };
-
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, onSummary }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; onSummary?: (s: InflowSummary) => void }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다. 없으면(미지정) 전부 허용.
   const FEATS: ("place" | "blog" | "store")[] = ["place", "blog", "store"];
@@ -259,17 +256,6 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [schedRounds, setSchedRounds] = useState(10);
   // 💤 화면·시스템 절전 방지 — 유입 실행중(텀 대기 포함) OR 예약 대기 OR 오토파일럿 가동 중이면 안 꺼지게(부모 keepAwake).
   useEffect(() => { onBusyChange?.(running || schedEnabled || apEnabled); }, [running, schedEnabled, apEnabled]);
-  // 📋 상단 컴팩트 4칸 요약(목업)에 현재 설정을 실시간 반영 — 표시 전용(입력은 아래 상세 패널에서).
-  useEffect(() => {
-    if (!onSummary) return;
-    const url = (targetType === "place" ? placeUrl : targetType === "store" ? storeUrl : blogUrl).trim();
-    const acts: string[] = [];
-    if (targetType === "place") { if (doSave) acts.push("저장"); if (doDir) acts.push("길찾기"); if (doCall) acts.push("전화"); if (doBook) acts.push("예약"); if (doTalk) acts.push("톡톡"); if (doShare) acts.push("공유"); if (doReview) acts.push("리뷰"); }
-    else if (targetType === "blog") { if (doLike) acts.push("공감"); if (doShare) acts.push("공유"); if (funnel) acts.push("풀퍼널(다른글·이웃)"); }
-    else { if (doWish) acts.push("찜"); if (doCart) acts.push("장바구니"); if (doOption) acts.push("옵션보기"); if (doShare) acts.push("공유"); }
-    const rankText = targetType === "store" ? "미지원" : apLastRank != null ? `${apLastRank}위` : apRankOut ? "30위 밖" : "미측정";
-    onSummary({ targetType, targetLabel: targetType === "place" ? "플레이스" : targetType === "blog" ? "블로그" : "스토어", url, keywords, rounds, termMin, termMax, device, actions: acts, rankText, apEnabled, apGoal, apKeyword });
-  }, [onSummary, targetType, placeUrl, blogUrl, storeUrl, keywords, rounds, termMin, termMax, device, doSave, doDir, doCall, doBook, doTalk, doShare, doReview, doLike, funnel, doWish, doCart, doOption, apLastRank, apRankOut, apEnabled, apGoal, apKeyword]);
   type InflowNotification = { id: string; message: string; createdAt: string };
   const notificationKey = `publy_inflow_notifications_${userId || "guest"}`;
   const [notifications, setNotifications] = useState<InflowNotification[]>(() => {
@@ -1007,6 +993,165 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       </div>
     </div>
   );
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🚦 회원 트래픽 앱 = 목업 화면(퍼블리_트래픽_목업.html)만.
+  //    관리자 컨트롤타워에서 승인한 것만 보임: 대상(visibleFeats)·행동(actionAllowed)·등급/한도·데이터모드(관리자지정, 화면엔 안 보임).
+  //    엔진(start/한도/SSE)·순위측정(runMeasureRank)·기록그래프는 그대로 재사용. 기존 관리자 렌더는 아래(memberMode=false).
+  if (memberMode) {
+    const GRADE = { basic: "베이직", pro: "프로", premium: "프리미엄", unlimited: "무제한" } as const;
+    const gradeLabel = featLic ? ((GRADE as any)[featLic.plan] || featLic.plan) : "";
+    const addr = targetType === "place" ? placeUrl : targetType === "store" ? storeUrl : blogUrl;
+    const setAddr = targetType === "place" ? setPlaceUrl : targetType === "store" ? setStoreUrl : setBlogUrl;
+    const addrPlaceholder = targetType === "place" ? "지도/플레이스 링크 붙여넣기" : targetType === "store" ? "스마트스토어 상품 주소 붙여넣기" : "블로그 글 주소 붙여넣기";
+    const rankText = targetType === "store" ? "미지원" : apLastRank != null ? `${apLastRank}위` : apRankOut ? "30위 밖" : "미측정";
+    const mInput: React.CSSProperties = { width: "100%", padding: "9px 11px", border: `1px solid ${C.line2}`, borderRadius: 8, background: C.panel2, color: C.ink, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box" };
+    const mCard: React.CSSProperties = { background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 11, padding: "12px 13px" };
+    const mH: React.CSSProperties = { margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, display: "flex", alignItems: "center" };
+    const mNum: React.CSSProperties = { width: 17, height: 17, borderRadius: 5, background: C.accent, color: "#fff", fontSize: 10.5, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", marginRight: 6 };
+    const mFl: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.sub, margin: "9px 0 4px" };
+    // 승인된 행동만 노출(로그인 없이 / 로그인 필요) — 관리자 allowed_actions 기준
+    const placeFree: [string, boolean, (b: boolean) => void, string][] = [["dir", doDir, setDoDir, "🧭 길찾기"], ["call", doCall, setDoCall, "📞 전화"], ["book", doBook, setDoBook, "📅 예약"], ["talk", doTalk, setDoTalk, "💬 톡톡"], ["share", doShare, setDoShare, "🔗 공유"]];
+    const placeLogin: [string, boolean, (b: boolean) => void, string][] = [["save", doSave, setDoSave, "💾 저장"], ["review", doReview, setDoReview, "✍️ 리뷰"]];
+    const blogFree: [string, boolean, (b: boolean) => void, string][] = [["share", doShare, setDoShare, "🔗 공유"], ["funnel", funnel, setFunnel, "📖 다른글·이웃"]];
+    const blogLogin: [string, boolean, (b: boolean) => void, string][] = [["like", doLike, setDoLike, "💚 공감"]];
+    const storeFree: [string, boolean, (b: boolean) => void, string][] = [["option", doOption, setDoOption, "🔍 옵션보기"], ["share", doShare, setDoShare, "🔗 공유"]];
+    const storeLogin: [string, boolean, (b: boolean) => void, string][] = [["wish", doWish, setDoWish, "💚 찜"], ["cart", doCart, setDoCart, "🛒 장바구니"]];
+    const freeActs = targetType === "place" ? placeFree : targetType === "store" ? storeFree : blogFree;
+    const loginActs = targetType === "place" ? placeLogin : targetType === "store" ? storeLogin : blogLogin;
+    const Pill = ([key, v, set, label]: [string, boolean, (b: boolean) => void, string]) => actionAllowed(key)
+      ? <span key={key + label} onClick={() => set(!v)} style={{ padding: "6px 11px", borderRadius: 8, border: `1.5px solid ${v ? C.accent : C.line2}`, background: v ? C.glow : C.panel, color: v ? C.accent : C.sub, fontSize: 12, fontWeight: 700, cursor: "pointer", userSelect: "none" }}>{label}</span>
+      : null;
+    const anyFree = freeActs.some(([k]) => actionAllowed(k));
+    const anyLogin = loginActs.some(([k]) => actionAllowed(k));
+
+    return (
+      <div style={{ fontFamily: "'Pretendard','Apple SD Gothic Neo',sans-serif", color: C.ink, display: "flex", flexDirection: "column" }}>
+        {/* 라이선스 없음 = 잠금 */}
+        {visibleFeats.length === 0 ? (
+          <div style={{ background: C.panel2, border: `1.5px dashed ${C.line2}`, borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
+            <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 6 }}>승인된 대여가 없어요</div>
+            <div style={{ fontSize: 12.5, color: C.sub, fontWeight: 600, lineHeight: 1.6 }}>관리자에게 트래픽 사용 승인(대상·기간)을 요청하세요.<br />승인되면 이 화면에 대상·행동이 자동으로 나타나요.</div>
+          </div>
+        ) : (<>
+          {/* hint */}
+          <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, background: C.glow, border: `1px solid ${C.line2}`, borderRadius: 9, padding: "9px 12px", marginBottom: 12 }}>
+            🔎 <b style={{ color: C.accent }}>트래픽 유입</b> — 키워드로 검색 → 진입 → 체류 → 액션까지 진짜 손님처럼. 관리자가 승인한 <b style={{ color: C.accent }}>대상·행동</b>만 보여요.
+          </div>
+
+          {/* 대상 탭 — 승인된 것만 진하게, 미승인은 흐리게 */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {([["place", "🗺️ 플레이스"], ["blog", "📝 블로그"], ["store", "🛒 스마트스토어"]] as [("place" | "blog" | "store"), string][]).map(([k, lb]) => {
+              const ok = allowFeat(k); const on = targetType === k;
+              return <div key={k} onClick={() => ok && setTargetType(k)} style={{ flex: 1, padding: "11px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, fontSize: 13.5, fontWeight: 800, cursor: ok ? "pointer" : "default", textAlign: "center", opacity: ok ? 1 : 0.4 }}>{lb}{!ok && <span style={{ fontSize: 10, fontWeight: 700 }}> 미승인</span>}</div>;
+            })}
+          </div>
+
+          {/* 4패널 */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <div style={mCard}>
+              <h3 style={mH}><span style={mNum}>1</span> 대상 · 키워드</h3>
+              <div style={mFl}>{targetType === "place" ? "내 플레이스 주소" : targetType === "store" ? "내 상품 주소" : "내 블로그 글 주소"}</div>
+              <input style={mInput} value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={addrPlaceholder} />
+              <div style={mFl}>검색 키워드 (여러 개는 , 로 구분)</div>
+              <input style={mInput} value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="예: 횡성시장맛집, 횡성한우" />
+            </div>
+            <div style={mCard}>
+              <h3 style={mH}><span style={mNum}>2</span> 방문 설정</h3>
+              <div style={mFl}>방문 횟수</div>
+              <input type="number" min={1} style={mInput} value={rounds} onChange={(e) => setRounds(Math.max(1, Number(e.target.value) || 1))} />
+              <div style={mFl}>방문 텀(초) · 기기</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input type="number" min={1} style={{ ...mInput, flex: 1 }} value={termMin} onChange={(e) => setTermMin(Math.max(1, Number(e.target.value) || 1))} />
+                <span style={{ alignSelf: "center", color: C.sub }}>~</span>
+                <input type="number" min={1} style={{ ...mInput, flex: 1 }} value={termMax} onChange={(e) => setTermMax(Math.max(1, Number(e.target.value) || 1))} />
+                <select style={{ ...mInput, flex: 1.2 }} value={device} onChange={(e) => setDevice(e.target.value as any)}>
+                  <option value="mobile">📱 모바일</option><option value="pc">🖥️ PC</option><option value="mix">🔀 혼합</option>
+                </select>
+              </div>
+            </div>
+            <div style={mCard}>
+              <h3 style={mH}><span style={mNum}>3</span> 방문해서 할 행동 <span style={{ marginLeft: 6, fontSize: 10, color: C.sub, fontWeight: 600 }}>(관리자 승인만)</span></h3>
+              {anyFree && <><div style={mFl}>🔓 로그인 없이</div><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{freeActs.map(Pill)}</div></>}
+              {anyLogin && <><div style={mFl}>🔑 로그인 필요</div><div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{loginActs.map(Pill)}</div></>}
+              {!anyFree && !anyLogin && <div style={{ fontSize: 11.5, color: C.sub, fontWeight: 600, marginTop: 6 }}>승인된 행동이 없어요(체류만).</div>}
+            </div>
+            <div style={mCard}>
+              <h3 style={mH}><span style={mNum}>4</span> 현재 순위</h3>
+              <div style={mFl}>추적 키워드</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: keywords ? C.ink : C.sub }}>{keywords.split(",")[0]?.trim() || "키워드를 입력하세요"}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: C.accent }}>{rankText} <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>현재</span></div>
+                {targetType !== "store" && <button onClick={runMeasureRank} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📍 순위 측정</button>}
+              </div>
+            </div>
+          </div>
+
+          {/* 유입 시작 / 정지 */}
+          {!running ? (
+            <button onClick={start} style={{ width: "100%", padding: 15, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 20px rgba(109,40,217,.3)" }}>🚀 유입 시작</button>
+          ) : (
+            <button onClick={stop} style={{ width: "100%", padding: 15, borderRadius: 12, border: `2px solid ${C.accent}`, background: C.panel2, color: C.accent, fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>⏹️ 정지 ({progress}%)</button>
+          )}
+          {!unlimited && <div style={{ marginTop: 8, fontSize: 11.5, color: C.sub, fontWeight: 700, textAlign: "center" }}>오늘 {used}/{limit}회 {gradeLabel && `· ${gradeLabel}`}</div>}
+
+          {/* 기록 그래프 + 기간 설정 (주단위·기간별 과거 데이터) */}
+          <div style={{ marginTop: 16, ...mCard }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 800 }}>📈 유입 기록</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[[7, "7일"], [30, "30일"], [90, "90일"], [365, "전체"]].map(([d, lb]) => (
+                  <button key={d as number} onClick={() => setChartDays(d as number)} style={{ padding: "5px 11px", borderRadius: 8, border: `1.5px solid ${chartDays === d ? C.accent : C.line2}`, background: chartDays === d ? C.glow : C.panel, color: chartDays === d ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{chartDays === d ? "✓ " : ""}{lb as string}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, marginBottom: 4 }}>{chartDays >= 365 ? "전체" : `최근 ${chartDays}일`} 유입 추이 · 총 {weekTotal}회</div>
+            {history.length > 0 ? <AreaChart data={history} C={C} /> : <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: C.sub, fontSize: 12.5, fontWeight: 600 }}>데이터가 쌓이면 그래프가 그려져요</div>}
+            {targetType !== "store" && <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.sub, margin: "12px 0 4px" }}>순위 변동(위=상위)</div>
+              <RankChart data={rankHist} goal={apGoal} C={C} />
+            </>}
+          </div>
+
+          {/* 실시간 로그 */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 800 }}>📜 실시간 로그</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setLogZoom(true)} disabled={!logs.length} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>🔍 크게 보기</button>
+                <button onClick={copyLogs} disabled={!logs.length} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>📋 복사</button>
+              </div>
+            </div>
+            <div ref={logBoxRef} style={{ background: C.logBg, color: C.logInk, borderRadius: 12, padding: "14px 16px", height: 240, overflowY: "auto", fontSize: 13.5, lineHeight: 1.75, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              {logs.length ? logs.map((entry, i) => entry.type === "text"
+                ? <div key={i}>{entry.text}</div>
+                : <div key={i} style={{ margin: "8px 0 12px" }}><div style={{ marginBottom: 5, fontWeight: 800 }}>📸 {entry.caption}</div><img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(280px,100%)", maxHeight: 190, objectFit: "contain", borderRadius: 9, border: "1px solid rgba(255,255,255,.18)" }} /></div>
+              ) : <div style={{ opacity: 0.5 }}>키워드 검색 → 진입 → 체류 → 액션 전 과정이 여기 실시간으로 표시돼요.</div>}
+            </div>
+          </div>
+        </>)}
+
+        {/* 🔍 로그 크게 보기 모달 */}
+        {logZoom && (
+          <div onClick={(e) => { if (e.target === e.currentTarget) setLogZoom(false); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(10,7,19,.78)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
+            <div style={{ width: "100%", maxWidth: 1000, height: "86vh", background: C.logBg, borderRadius: 16, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 30px 80px rgba(0,0,0,.5)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: `1px solid ${C.line2}` }}>
+                <b style={{ color: C.logInk, fontSize: 15 }}>📜 실시간 로그 — 크게 보기</b>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={copyLogs} disabled={!logs.length} style={{ padding: "7px 16px", borderRadius: 9, border: "none", background: C.panel, color: C.accent, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📋 복사</button>
+                  <button onClick={() => setLogZoom(false)} style={{ padding: "7px 16px", borderRadius: 9, border: "none", background: C.accent, color: "#fff", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+                </div>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", color: C.logInk, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", fontSize: 15, lineHeight: 1.85, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {logs.length ? logs.map((entry, i) => entry.type === "text" ? <div key={i}>{entry.text}</div> : <div key={i} style={{ margin: "8px 0 12px" }}><div style={{ marginBottom: 5, fontWeight: 800 }}>📸 {entry.caption}</div><img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(420px,100%)", maxHeight: 280, objectFit: "contain", borderRadius: 9 }} /></div>) : <div style={{ opacity: 0.5 }}>아직 로그가 없어요.</div>}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="inflow-center" style={{ fontFamily: "'Pretendard','Apple SD Gothic Neo',sans-serif", color: C.ink, display: "flex", flexDirection: "column" }}>
