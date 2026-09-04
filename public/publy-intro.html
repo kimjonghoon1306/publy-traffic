@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PUBLY</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Nanum+Myeongjo:wght@400;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#02030a;font-family:'Nanum Myeongjo',serif}
+  #gl{position:fixed;inset:0;display:block}
+  .vignette{position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:radial-gradient(120% 100% at 50% 42%, transparent 40%, rgba(2,3,10,.82) 100%)}
+  .grain{position:fixed;inset:-50%;z-index:3;pointer-events:none;opacity:.045;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:gr 5s steps(6) infinite}
+  @keyframes gr{0%{transform:translate(0,0)}25%{transform:translate(-5%,3%)}50%{transform:translate(3%,-5%)}75%{transform:translate(-3%,5%)}100%{transform:translate(0,0)}}
+
+  .overlay{position:fixed;inset:0;z-index:4;display:flex;flex-direction:column;
+    align-items:center;justify-content:flex-end;padding-bottom:12vh;pointer-events:none}
+  .logo{font-family:'Cormorant Garamond',serif;font-weight:700;
+    font-size:clamp(56px,12vw,130px);line-height:.9;letter-spacing:.06em;
+    opacity:0;transform:translateY(24px);animation:up 1.4s 3.4s cubic-bezier(.16,1,.3,1) forwards}
+  .logo span{background:linear-gradient(180deg,#fff 0%,#ffd9e4 30%,#fb7185 62%,#ec4899 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 34px rgba(236,72,153,.55))}
+  .rule{width:0;height:2px;margin:18px 0 16px;border-radius:2px;
+    background:linear-gradient(90deg,transparent,#fb7185,#ec4899,#fb7185,transparent);
+    box-shadow:0 0 20px rgba(244,63,94,.7);animation:rule 1.2s 4.4s cubic-bezier(.16,1,.3,1) forwards}
+  @keyframes rule{to{width:min(420px,62vw)}}
+  .tag{font-family:'Nanum Myeongjo',serif;font-size:clamp(15px,2.6vw,24px);
+    letter-spacing:.32em;color:#efe9e3;opacity:0;animation:tag 1.6s 4.7s forwards}
+  .tag b{color:#fb7185;font-weight:800}
+  @keyframes tag{0%{opacity:0;letter-spacing:.6em;filter:blur(8px)}100%{opacity:1;letter-spacing:.32em;filter:blur(0)}}
+  @keyframes up{to{opacity:1;transform:translateY(0)}}
+
+  .flash{position:fixed;inset:0;z-index:5;background:radial-gradient(circle at 50% 44%,rgba(255,225,235,.9),rgba(236,72,153,.2) 30%,transparent 62%);
+    opacity:0;pointer-events:none;animation:fl 1.1s 3.0s ease-out}
+  @keyframes fl{0%{opacity:0}18%{opacity:.9}100%{opacity:0}}
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div class="vignette"></div>
+  <div class="grain"></div>
+  <div class="flash"></div>
+  <div class="overlay">
+    <div class="logo"><span>PUBLY</span></div>
+    <div class="rule"></div>
+    <div class="tag">생각만 하세요, <b>발행은 자동으로</b></div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x02030a, 0.055);
+const cam = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, 0.1, 100);
+cam.position.set(0, 0, 15);
+const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('gl'), antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+
+// 글로우 스프라이트 텍스처
+function glowTex(r,g,b){
+  const s=64, cv=document.createElement('canvas'); cv.width=cv.height=s;
+  const cx=cv.getContext('2d'), gd=cx.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+  gd.addColorStop(0,`rgba(${r},${g},${b},1)`); gd.addColorStop(.4,`rgba(${r},${g},${b},.6)`);
+  gd.addColorStop(1,`rgba(${r},${g},${b},0)`);
+  cx.fillStyle=gd; cx.fillRect(0,0,s,s);
+  return new THREE.CanvasTexture(cv);
+}
+const texPink = glowTex(251,113,133), texWhite = glowTex(230,238,255);
+
+const world = new THREE.Group(); scene.add(world);
+world.rotation.z = 0.35;
+
+const R = 5;
+// ── 지구본 표면 파티클 (fibonacci sphere) ──
+function sphereGlobe(count, rad, tex, size, color){
+  const pos = new Float32Array(count*3);
+  const off = 2/count, inc = Math.PI*(3-Math.sqrt(5));
+  for(let i=0;i<count;i++){
+    const y = i*off-1+off/2, r = Math.sqrt(1-y*y), phi = i*inc;
+    pos[i*3]=Math.cos(phi)*r*rad; pos[i*3+1]=y*rad; pos[i*3+2]=Math.sin(phi)*r*rad;
+  }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const m=new THREE.PointsMaterial({size,map:tex,transparent:true,depthWrite:false,
+    blending:THREE.AdditiveBlending,color});
+  return new THREE.Points(g,m);
+}
+const globe = sphereGlobe(3800, R, texWhite, 0.11, 0xbfd0ff);
+const globePink = sphereGlobe(1400, R*1.002, texPink, 0.2, 0xff8fb0);
+world.add(globe, globePink);
+
+// ── 위도/경도 와이어 (은은한 그리드) ──
+const wire = new THREE.Group();
+const wm = new THREE.LineBasicMaterial({color:0xf43f5e, transparent:true, opacity:0.14, blending:THREE.AdditiveBlending});
+for(let la=-60;la<=60;la+=30){
+  const pts=[], y=Math.sin(la*Math.PI/180)*R, rr=Math.cos(la*Math.PI/180)*R;
+  for(let a=0;a<=360;a+=6) pts.push(new THREE.Vector3(Math.cos(a*Math.PI/180)*rr,y,Math.sin(a*Math.PI/180)*rr));
+  wire.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wm));
+}
+for(let lo=0;lo<180;lo+=30){
+  const pts=[];
+  for(let a=0;a<=360;a+=6){const la=a*Math.PI/180;pts.push(new THREE.Vector3(Math.cos(la)*Math.sin(lo*Math.PI/180)*R,Math.sin(la)*R,Math.cos(la)*Math.cos(lo*Math.PI/180)*R));}
+  wire.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wm));
+}
+world.add(wire);
+
+// ── 대기 글로우(핑크 후광) ──
+const atmo = new THREE.Mesh(
+  new THREE.SphereGeometry(R*1.28, 48, 48),
+  new THREE.ShaderMaterial({
+    transparent:true, blending:THREE.AdditiveBlending, side:THREE.BackSide, depthWrite:false,
+    uniforms:{c:{value:new THREE.Color(0xec4899)}},
+    vertexShader:`varying vec3 vN; void main(){ vN=normalize(normalMatrix*normal); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+    fragmentShader:`varying vec3 vN; uniform vec3 c; void main(){ float i=pow(.72-dot(vN,vec3(0,0,1.)),3.); gl_FragColor=vec4(c,1.)*i; }`
+  })
+);
+world.add(atmo);
+
+// ── 발행 아크 (표면 점→점, bezier, 순차 등장) ──
+const arcs=[];
+function randPt(){const u=Math.random(),v=Math.random(),th=2*Math.PI*u,ph=Math.acos(2*v-1);
+  return new THREE.Vector3(Math.sin(ph)*Math.cos(th),Math.cos(ph),Math.sin(ph)*Math.sin(th)).multiplyScalar(R);}
+function makeArc(delay){
+  const a=randPt(), b=randPt();
+  const mid=a.clone().add(b).multiplyScalar(0.5).setLength(R*(1.35+Math.random()*0.35));
+  const curve=new THREE.QuadraticBezierCurve3(a,mid,b);
+  const geo=new THREE.TubeGeometry(curve,40,0.035,8,false);
+  const mat=new THREE.MeshBasicMaterial({color:0xff5d7e,transparent:true,opacity:0,blending:THREE.AdditiveBlending});
+  const mesh=new THREE.Mesh(geo,mat); world.add(mesh);
+  // 끝점 발광 스프라이트
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:texPink,transparent:true,blending:THREE.AdditiveBlending,opacity:0}));
+  sp.position.copy(b); sp.scale.setScalar(0.6); world.add(sp);
+  arcs.push({mat,sp,delay,life:0});
+}
+for(let i=0;i<14;i++) makeArc(3.2 + i*0.42 + Math.random()*0.2);
+
+// ── 별 먼지 ──
+const starPos=new Float32Array(700*3);
+for(let i=0;i<700;i++){const rr=22+Math.random()*20,th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
+  starPos[i*3]=rr*Math.sin(ph)*Math.cos(th);starPos[i*3+1]=rr*Math.cos(ph);starPos[i*3+2]=rr*Math.sin(ph)*Math.sin(th);}
+const stars=new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.BufferAttribute(starPos,3)),
+  new THREE.PointsMaterial({size:0.13,map:texWhite,transparent:true,opacity:.7,depthWrite:false,blending:THREE.AdditiveBlending}));
+scene.add(stars);
+
+const t0=performance.now();
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+function loop(now){
+  const t=(now-t0)/1000;
+  // 도입: 카메라 줌인 + 회전 가속
+  const zoom = t<3 ? 15 - (1-Math.pow(1-t/3,3))*3.2 : 11.8;
+  cam.position.z += (zoom - cam.position.z)*0.06;
+  world.rotation.y += 0.0016 + Math.max(0,(2.4-t))*0.004;
+  wire.rotation.y = world.rotation.y;
+  stars.rotation.y += 0.0002;
+  globePink.material.opacity = 0.6+Math.sin(t*1.6)*0.25;
+  // 아크 수명 애니메이션
+  for(const a of arcs){
+    if(t>a.delay){a.life+=0.02;
+      const l=a.life, f=l<1?l:(l<2.4?1:Math.max(0,1-(l-2.4)/1.2));
+      a.mat.opacity=f*0.9; a.sp.material.opacity=Math.max(0,(l-0.4))*0.9*(l<3?1:0);
+      a.sp.scale.setScalar(0.5+Math.min(l,1)*0.5);
+      if(l>3.6){a.life=0;a.delay=t+2+Math.random()*3;} // 재사용 루프
+    }
+  }
+  renderer.render(scene,cam);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

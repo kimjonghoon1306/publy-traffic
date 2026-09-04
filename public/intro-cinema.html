@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PUBLY — Cinematic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Gowun+Batang:wght@400;700&family=Dancing+Script:wght@600;700&family=Nanum+Myeongjo:wght@400;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Gowun Batang',serif}
+  .film{position:fixed;inset:0;background:#000}
+
+  .scene{position:absolute;inset:0;opacity:0}
+  .scene img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .scene::after{content:'';position:absolute;inset:0;
+    background:linear-gradient(180deg, rgba(10,6,14,.15) 0%, rgba(10,6,14,.05) 40%, rgba(10,6,14,.62) 100%)}
+
+  /* 씬 타임라인 (재구성: 키워드→생성마법→몽타주→발행완료) */
+  /* ① 카페 키워드 입력 0-3.8s */
+  .s1{animation:sc 4.2s 0.2s both}       .s1 img{animation:kb 5s 0.2s both}
+  /* ② ★생성 마법 3.8-9s (하이라이트: 느린 푸시인) */
+  .s4{animation:sc 5.6s 3.6s both}       .s4 img{animation:push 6s 3.6s both}
+  /* ③ 몽타주 — 빠른 컷 3개 (마케터·체험단·블로거) 8.8-12.6s */
+  .s2{animation:cut 1.5s 8.8s both}      .s2 img{animation:kbfast 1.7s 8.8s both}
+  .s3{animation:cut 1.5s 10.1s both}     .s3 img{animation:kbfast2 1.7s 10.1s both}
+  .s1b{animation:cut 1.5s 11.4s both}    .s1b img{animation:kbfast 1.7s 11.4s both}
+  /* ④ 발행 완료 12.6-16s */
+  .s5{animation:sc 4s 12.6s both}        .s5 img{animation:push 4.4s 12.6s both}
+  @keyframes sc{0%{opacity:0}12%{opacity:1}84%{opacity:1}100%{opacity:0}}
+  @keyframes cut{0%{opacity:0}14%{opacity:1}80%{opacity:1}100%{opacity:0}}
+  @keyframes kb{0%{transform:scale(1.03)}100%{transform:scale(1.16) translate(-2%,-2%)}}
+  @keyframes push{0%{transform:scale(1.12)}100%{transform:scale(1.02)}}
+  @keyframes kbfast{0%{transform:scale(1.14) translate(2%,0)}100%{transform:scale(1.04)}}
+  @keyframes kbfast2{0%{transform:scale(1.04)}100%{transform:scale(1.15) translate(-2%,-1%)}}
+
+  /* 시네마틱 카피 */
+  .cap{position:absolute;left:0;right:0;bottom:16vh;text-align:center;padding:0 8vw;z-index:5;
+    color:#fff;opacity:0;font-family:'Nanum Myeongjo',serif;font-weight:400;
+    font-size:clamp(22px,4.6vw,46px);letter-spacing:.06em;line-height:1.5;
+    text-shadow:0 4px 30px rgba(0,0,0,.6)}
+  .cap em{font-style:normal;color:#ffb3c9;font-weight:800}
+  .c1{animation:cap 3.6s 0.8s both}     /* 당신은 키워드만 */
+  .c2{animation:cap 5s 4.2s both}       /* 글도, 이미지도 — 알아서 (생성마법 위) */
+  .c3{animation:cap 3.4s 12.8s both}    /* 네이버·티스토리까지, 자동으로 (발행완료 위) */
+  @keyframes cap{0%{opacity:0;transform:translateY(20px);filter:blur(12px)}
+    20%{opacity:1;transform:translateY(0);filter:blur(0)}
+    80%{opacity:1;transform:translateY(0);filter:blur(0)}
+    100%{opacity:0;transform:translateY(-12px);filter:blur(8px)}}
+
+  /* 마지막 로고 씬 */
+  .finale{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;opacity:0;
+    background:radial-gradient(120% 100% at 50% 45%, #1a0e18 0%, #0a060e 60%, #050308 100%);
+    animation:fin 5s 15.9s both}
+  @keyframes fin{0%{opacity:0}14%{opacity:1}100%{opacity:1}}
+  .logo{font-family:'Cormorant Garamond',serif;font-weight:600;
+    font-size:clamp(60px,13vw,150px);line-height:.9;letter-spacing:.05em;
+    background:linear-gradient(180deg,#fff 0%,#ffd9e4 32%,#fb7185 66%,#ec4899 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 40px rgba(236,72,153,.5));
+    opacity:0;transform:translateY(20px);animation:up 1.4s 16.5s cubic-bezier(.16,1,.3,1) forwards}
+  .rule{width:0;height:2px;margin:20px 0 16px;border-radius:2px;
+    background:linear-gradient(90deg,transparent,#fb7185,#ec4899,#fb7185,transparent);
+    box-shadow:0 0 20px rgba(244,63,94,.7);animation:rule 1.2s 17.3s both}
+  @keyframes rule{to{width:min(400px,60vw)}}
+  .tag{font-family:'Nanum Myeongjo',serif;font-size:clamp(15px,2.6vw,24px);
+    letter-spacing:.32em;color:#efe9e3;opacity:0;animation:tag 1.6s 17.6s forwards}
+  .tag b{color:#fb7185;font-weight:800}
+  @keyframes up{to{opacity:1;transform:translateY(0)}}
+  @keyframes tag{0%{opacity:0;letter-spacing:.6em;filter:blur(8px)}100%{opacity:1;letter-spacing:.32em;filter:blur(0)}}
+  .sign{font-family:'Dancing Script',cursive;font-weight:700;font-size:clamp(24px,4vw,40px);
+    color:#ffd0dd;margin-top:28px;letter-spacing:.01em;
+    text-shadow:0 2px 14px rgba(0,0,0,.5);filter:drop-shadow(0 0 12px rgba(236,72,153,.4));
+    opacity:0;animation:signIn 1.8s 18.3s forwards}
+  @keyframes signIn{0%{opacity:0;transform:translateY(10px) scale(.94)}100%{opacity:1;transform:translateY(0) scale(1)}}
+
+  /* 시네마틱 레터박스 + 그레인 */
+  .bar{position:absolute;left:0;right:0;height:8vh;background:#000;z-index:8}
+  .bar.t{top:0} .bar.b{bottom:0}
+  .grain{position:absolute;inset:-50%;z-index:7;pointer-events:none;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");animation:gr 5s steps(6) infinite}
+  @keyframes gr{0%{transform:translate(0,0)}50%{transform:translate(3%,-4%)}100%{transform:translate(0,0)}}
+
+  /* 컨트롤 (스피커·다시재생·확대) */
+  .film{cursor:pointer}
+  .ctrls{position:absolute;right:16px;bottom:calc(8vh + 14px);z-index:9;
+    display:flex;gap:10px;opacity:.85}
+  .cbtn{width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.22);
+    background:rgba(20,12,20,.5);backdrop-filter:blur(8px);color:#fff;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    transition:transform .15s, background .2s;-webkit-tap-highlight-color:transparent}
+  .cbtn:hover{background:rgba(236,72,153,.35);transform:translateY(-2px)}
+  .cbtn:active{transform:scale(.92)}
+
+  .tap-hint{position:absolute;left:50%;top:calc(8vh + 20px);transform:translateX(-50%);
+    z-index:9;font-family:'Nanum Myeongjo',serif;font-size:13px;letter-spacing:.06em;
+    color:rgba(255,255,255,.9);background:rgba(20,12,20,.42);backdrop-filter:blur(6px);
+    padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.18);
+    transition:opacity .6s;pointer-events:none;white-space:nowrap}
+  .tap-hint.hide{opacity:0}
+
+  /* ── 모바일 최적화 ── */
+  @media (max-width:640px){
+    .cap{bottom:19vh;font-size:clamp(19px,5.6vw,30px);letter-spacing:.03em;line-height:1.55;padding:0 7vw}
+    .bar{height:6vh}
+    .ctrls{right:12px;bottom:calc(6vh + 12px);gap:8px}
+    .cbtn{width:48px;height:48px}       /* 터치 타깃 크게 */
+    .tap-hint{top:calc(6vh + 14px);font-size:12px}
+    .logo{font-size:clamp(56px,18vw,110px)}
+    .tag{font-size:clamp(14px,4vw,20px);letter-spacing:.22em}
+    .sign{font-size:clamp(22px,6vw,32px)}
+    .rule{height:2px}
+  }
+  /* ── 태블릿(iPad 등) 최적화 641~1024px ── */
+  @media (min-width:641px) and (max-width:1024px){
+    .cap{bottom:18vh;font-size:clamp(24px,3.4vw,38px)}
+    .cbtn{width:50px;height:50px}          /* 터치 타깃 */
+    .ctrls{gap:10px}
+    .logo{font-size:clamp(72px,11vw,130px)}
+    .tag{font-size:clamp(17px,2.4vw,23px)}
+    .sign{font-size:clamp(26px,3.4vw,38px)}
+  }
+  /* 세로가 짧은 가로 모바일 대응 */
+  @media (max-height:480px){ .cap{bottom:14vh} }
+  /* 세로 화면(폰 세로): 이미지 꽉 채우고 카피 더 위로 */
+  @media (max-width:640px) and (orientation:portrait){ .cap{bottom:24vh} }
+</style></head>
+<body>
+  <div class="film">
+    <div class="scene s1"><img src="intro-assets/scene1.png"></div>
+    <div class="scene s4"><img src="intro-assets/scene4.png"></div>
+    <div class="scene s2"><img src="intro-assets/scene2.png"></div>
+    <div class="scene s3"><img src="intro-assets/scene3.png"></div>
+    <div class="scene s1b"><img src="intro-assets/scene1.png"></div>
+    <div class="scene s5"><img src="intro-assets/scene5.png"></div>
+
+    <div class="cap c1">당신은 <em>키워드</em>만</div>
+    <div class="cap c2">글도, 이미지도 — <em>알아서</em></div>
+    <div class="cap c3">네이버와 티스토리까지, <em>자동으로</em></div>
+
+    <div class="finale">
+      <div class="logo">PUBLY</div>
+      <div class="rule"></div>
+      <div class="tag">생각만 하세요, <b>발행은 자동으로</b></div>
+      <div class="sign">by TARRY</div>
+    </div>
+
+    <div class="bar t"></div><div class="bar b"></div>
+    <div class="grain"></div>
+
+    <!-- 컨트롤: 다시재생 · 확대 -->
+    <div class="ctrls">
+      <button class="cbtn" id="btnReplay" aria-label="다시재생">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+      </button>
+      <button class="cbtn" id="btnExpand" aria-label="크게 보기">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM6 15v3h3v2H4v-5h2zm12 3v-3h2v5h-5v-2h3z"/></svg>
+      </button>
+    </div>
+
+    <!-- 모바일 안내: 화면을 탭하면 크게 -->
+    <div class="tap-hint" id="tapHint">화면을 탭하면 가로로 크게 볼 수 있어요</div>
+  </div>
+
+<script>
+(function(){
+  const film=document.querySelector('.film');
+  const btnReplay=document.getElementById('btnReplay'),
+        btnExpand=document.getElementById('btnExpand'),
+        tapHint=document.getElementById('tapHint');
+  async function toggleFull(){
+    const el=document.documentElement;
+    if(!document.fullscreenElement){
+      try { await (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); } catch(e){}
+      // 모바일: 전체화면 진입 시 가로로 눕혀 넓게 (유튜브식). 미지원 기기는 무시.
+      try { if(screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch(e){}
+    } else {
+      try { if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+      try { (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document); } catch(e){}
+    }
+  }
+  btnExpand.addEventListener('click', e=>{ e.stopPropagation(); toggleFull(); });
+  btnReplay.addEventListener('click', e=>{ e.stopPropagation(); location.reload(); });
+  // 화면(영상) 탭 → 전체화면 확대 (모바일 핵심)
+  film.addEventListener('click', toggleFull);
+  setTimeout(()=>tapHint.classList.add('hide'), 4000);
+})();
+</script>
+</body></html>

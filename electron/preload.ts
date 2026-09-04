@@ -1,0 +1,20 @@
+import { contextBridge, ipcRenderer } from "electron";
+contextBridge.exposeInMainWorld("electron", {
+  getBotStatus:    () => ipcRenderer.invoke("get-bot-status"),
+  getAllBotStatus: () => ipcRenderer.invoke("get-all-bot-status"),
+  restartBots:     (name?: string) => ipcRenderer.invoke("restart-bots", name),
+  getBotSecret:    () => ipcRenderer.invoke("get-bot-secret"),
+  registerUser:    (userId: string) => ipcRenderer.invoke("register-user", userId),
+  unregisterUser:  (userId: string) => ipcRenderer.invoke("unregister-user", userId),
+  openPreview:     (html: string) => ipcRenderer.invoke("open-preview", html),
+  saveReportPdf:   (html: string, filename: string) => ipcRenderer.invoke("save-report-pdf", html, filename),
+  flowLaunchChrome: (slot?: number) => ipcRenderer.invoke("flow-launch-chrome", slot ?? 0),
+  flowStatus:       (slot?: number) => ipcRenderer.invoke("flow-status", slot ?? 0),
+  checkAppUpdate:   () => ipcRenderer.invoke("check-app-update"),
+  openAppUpdate:    (url: string) => ipcRenderer.invoke("open-app-update", url),
+  openLogFolder:    () => ipcRenderer.invoke("open-log-folder"),
+  readBotLog:       () => ipcRenderer.invoke("read-bot-log"),
+  getAppVersion:    () => ipcRenderer.invoke("get-app-version"),
+  keepAwake:        (on: boolean) => ipcRenderer.invoke("keep-awake", on),
+  focusApp:         () => ipcRenderer.invoke("focus-app"),
+});

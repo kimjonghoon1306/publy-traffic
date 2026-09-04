@@ -1,0 +1,17 @@
+node_modules
+release
+chromium
+dist
+dist-electron
+naver-bot
+neighbor-bot
+insta-bot
+electron
+sessions
+.git
+.vercel
+.env*
+*.dmg
+*.exe
+*.zip
+*.log

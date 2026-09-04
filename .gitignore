@@ -1,5 +1,36 @@
+# 의존성
 node_modules/
+*/node_modules/
+
+# 🔒 보안: 로그인 세션/쿠키 (절대 커밋 금지)
+sessions/
+*/sessions/
+*_downloads/
+*/flow_downloads/
+
+# 빌드 산출물
 dist/
+dist-electron/
+release/
+*/dist/
+.vite/
+chromium/
+
+# 환경변수/키
 .env
+.env.*
+*.key
+
+# OS/에디터
 .DS_Store
 *.log
+.vscode/
+.idea/
+
+# 임시
+tmp/
+*.tmp
+_flowtest*
+_flowrun*
+naver_state.json
+neighbor-bot/naver_state.json

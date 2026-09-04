@@ -1,0 +1,268 @@
+name: Build Publy App
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 같은 브랜치에서 새 버전이 올라오면 이전 설치 빌드를 중단한다.
+# stable 파일(Publy-Setup.exe / Publy-Mac-*.dmg)이 구버전으로 되돌아가는 것을 방지한다.
+concurrency:
+  group: publy-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install naver-bot dependencies
+        working-directory: naver-bot
+        run: npm install
+
+      - name: Bundle naver-bot (esbuild)
+        working-directory: naver-bot
+        run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
+
+      - name: Install neighbor-bot dependencies
+        working-directory: neighbor-bot
+        run: npm install
+
+      - name: Bundle neighbor-bot (esbuild)
+        working-directory: neighbor-bot
+        run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
+        env:
+          NODE_PATH: ../naver-bot/node_modules
+
+      - name: Install insta-bot dependencies
+        working-directory: insta-bot
+        run: npm install
+
+      - name: Bundle insta-bot (esbuild)
+        working-directory: insta-bot
+        run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
+        env:
+          NODE_PATH: ../naver-bot/node_modules
+
+      - name: Install Playwright Chromium (naver-bot)
+        working-directory: naver-bot
+        run: npx playwright install chromium
+
+      - name: Install Playwright Chromium (neighbor-bot)
+        working-directory: neighbor-bot
+        run: npx playwright install chromium
+
+      - name: Copy Chromium to bundle path
+        shell: pwsh
+        run: |
+          $chromiumSrc = $env:LOCALAPPDATA + '\ms-playwright'
+          if (Test-Path $chromiumSrc) {
+            Write-Host "Chromium found at: $chromiumSrc"
+            New-Item -ItemType Directory -Force -Path 'chromium' | Out-Null
+            Get-ChildItem "$chromiumSrc" -Directory | Where-Object { $_.Name -like 'chromium-*' -or $_.Name -like 'chromium_headless_shell-*' } | ForEach-Object {
+              Copy-Item -Recurse -Force $_.FullName 'chromium/'
+              Write-Host "Copied: $($_.Name)"
+            }
+            Write-Host "Final chromium dir:"
+            Get-ChildItem 'chromium/' | Select-Object Name
+          } else {
+            Write-Host "Chromium not found at $chromiumSrc, skipping"
+          }
+
+      - name: Install app dependencies
+        run: npm install
+
+      - name: Build Electron main process
+        run: npx tsc -p electron/tsconfig.json
+
+      - name: Build & Package
+        run: npm run electron:build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 웹사이트/카톡 공유용 고정 다운로드 링크가 버전마다 안 깨지도록
+      # 버전 없는 이름(Publy-Setup.exe)으로 한 벌 복사 → 릴리스에 함께 업로드
+      - name: Make stable-named installer (Publy-Setup.exe)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release/*.exe | Where-Object { $_.Name -ne 'Publy-Setup.exe' } | Select-Object -First 1
+          Copy-Item $exe.FullName release/Publy-Setup.exe -Force
+          Write-Host "Stable installer: $($exe.Name) -> Publy-Setup.exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Publy-Windows
+          path: release/*.exe
+          retention-days: 30
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Publy Latest
+          files: release/*.exe
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install naver-bot dependencies
+        working-directory: naver-bot
+        run: npm install
+
+      - name: Bundle naver-bot (esbuild)
+        working-directory: naver-bot
+        run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
+
+      - name: Install neighbor-bot dependencies
+        working-directory: neighbor-bot
+        run: npm install
+
+      - name: Bundle neighbor-bot (esbuild)
+        working-directory: neighbor-bot
+        run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
+        env:
+          NODE_PATH: ../naver-bot/node_modules
+
+      - name: Install insta-bot dependencies
+        working-directory: insta-bot
+        run: npm install
+
+      - name: Bundle insta-bot (esbuild)
+        working-directory: insta-bot
+        run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
+        env:
+          NODE_PATH: ../naver-bot/node_modules
+
+      - name: Install Playwright Chromium (naver-bot)
+        working-directory: naver-bot
+        run: npx playwright install chromium
+
+      - name: Install Playwright Chromium (neighbor-bot)
+        working-directory: neighbor-bot
+        run: npx playwright install chromium
+
+      - name: Copy Chromium to bundle path (macOS)
+        run: |
+          CHROMIUM_SRC="$HOME/Library/Caches/ms-playwright"
+          if [ -d "$CHROMIUM_SRC" ]; then
+            echo "Chromium found at: $CHROMIUM_SRC"
+            mkdir -p chromium
+            for dir in "$CHROMIUM_SRC"/chromium-* "$CHROMIUM_SRC"/chromium_headless_shell-*; do
+              if [ -d "$dir" ]; then
+                cp -r "$dir" chromium/
+                echo "Copied: $(basename $dir)"
+              fi
+            done
+            echo "Final chromium dir contents:"
+            ls chromium/
+          else
+            echo "Chromium not found, skipping"
+          fi
+
+      - name: Install app dependencies
+        run: npm install
+
+      - name: Build Electron main process
+        run: npx tsc -p electron/tsconfig.json
+
+      - name: Build & Package
+        run: npm run electron:build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Ad-hoc sign apps and repackage DMGs (fix "damaged")
+        run: |
+          set -e
+          # 1) electron-builder가 만든 앱은 서명이 깨져있음(linker stub) → 유효 ad-hoc으로 재서명
+          for app in release/mac-arm64/*.app release/mac-x64/*.app release/mac/*.app; do
+            [ -d "$app" ] || continue
+            echo "signing: $app"
+            codesign --force --deep --sign - "$app"
+            codesign --verify --deep --strict "$app"
+            echo "  valid signature: $app"
+          done
+          # 2) DMG는 서명 '전'에 만들어졌으므로, 서명된 앱으로 DMG를 다시 굽는다
+          repack() {
+            appdir="$1"; dmg="$2"
+            app=$(ls -d "$appdir"/*.app 2>/dev/null | head -1)
+            [ -n "$app" ] && [ -d "$app" ] || return 0
+            [ -f "$dmg" ] || return 0
+            echo "repacking $dmg  <=  $app"
+            rm -f "$dmg"
+            stage=$(mktemp -d)
+            cp -R "$app" "$stage/"
+            ln -s /Applications "$stage/Applications"
+            # hdiutil은 러너에서 이전 디스크이미지 작업이 덜 정리되면 "Resource busy"로 간헐 실패한다.
+            # 재시도 + 대기로 근본 방지한다.
+            ok=""
+            for attempt in 1 2 3 4 5; do
+              if hdiutil create -volname "Publy" -srcfolder "$stage" -ov -format UDZO "$dmg"; then
+                ok="1"; break
+              fi
+              echo "hdiutil create failed (attempt $attempt) → 정리 후 재시도"
+              rm -f "$dmg"
+              hdiutil detach /tmp/vchk >/dev/null 2>&1 || true
+              sleep 10
+            done
+            rm -rf "$stage"
+            [ -n "$ok" ] || { echo "hdiutil create가 5회 재시도 후에도 실패: $dmg"; return 1; }
+          }
+          for dmg in release/*-arm64.dmg; do [ -f "$dmg" ] && repack release/mac-arm64 "$dmg"; done
+          for dmg in release/*.dmg; do
+            case "$dmg" in
+              *-arm64.dmg) : ;;
+              *) if [ -d release/mac-x64 ]; then repack release/mac-x64 "$dmg"; else repack release/mac "$dmg"; fi ;;
+            esac
+          done
+          # 3) 검증: DMG 안 앱이 유효 서명이어야 다운로드시 "손상됨" 대신 "확인할 수 없음(그래도 열기 가능)"으로 뜸
+          for dmg in release/*.dmg; do
+            hdiutil attach "$dmg" -nobrowse -mountpoint /tmp/vchk >/dev/null 2>&1 || continue
+            if codesign --verify --deep --strict /tmp/vchk/*.app >/dev/null 2>&1; then
+              echo "DMG OK (valid signature): $dmg"
+            else
+              echo "DMG STILL BROKEN: $dmg"; hdiutil detach /tmp/vchk >/dev/null 2>&1 || true; exit 1
+            fi
+            hdiutil detach /tmp/vchk >/dev/null 2>&1 || true
+          done
+          # 4) 웹/공유용 고정 다운로드 링크가 버전마다 안 깨지게 버전없는 이름으로 복사
+          arm=$(ls release/*-arm64.dmg 2>/dev/null | head -1)
+          intel=$(ls release/*.dmg 2>/dev/null | grep -v -- '-arm64.dmg' | grep -v 'Publy-Mac-' | head -1)
+          [ -n "$arm" ] && cp "$arm" release/Publy-Mac-AppleSilicon.dmg && echo "stable arm: $arm -> Publy-Mac-AppleSilicon.dmg"
+          [ -n "$intel" ] && cp "$intel" release/Publy-Mac-Intel.dmg && echo "stable intel: $intel -> Publy-Mac-Intel.dmg"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Publy-Mac
+          path: release/*.dmg
+          retention-days: 30
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Publy Latest
+          files: release/*.dmg
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

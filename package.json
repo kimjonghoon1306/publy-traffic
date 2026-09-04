@@ -1,0 +1,123 @@
+{
+  "name": "publy-traffic",
+  "version": "2.10.105",
+  "description": "Publy - 네이버/티스토리 자동발행 앱",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build:web": "tsc --noEmit && vite build",
+    "build:bots": "npm --prefix naver-bot run build && npm --prefix neighbor-bot run build && npm --prefix insta-bot run build",
+    "build": "npm run build:web && npm run build:bots",
+    "test:safety": "npm run build:bots && node scripts/test-account-lock.mjs && node scripts/test-place360-contract.mjs",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\" \"cd naver-bot && npm start\" \"cd neighbor-bot && npm start\" \"cd insta-bot && npm start\"",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:mac": "npm run build && electron-builder --mac",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.5",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vercel/node": "^9.0.1",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^29.1.4",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.4.2",
+    "vite": "^5.2.0",
+    "vite-plugin-electron": "^0.28.4",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.publy.traffic",
+    "productName": "퍼블리 트래픽",
+    "copyright": "Copyright © 2024 Publy",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "naver-bot/dist",
+        "to": "naver-bot/dist"
+      },
+      {
+        "from": "naver-bot/node_modules",
+        "to": "naver-bot/node_modules"
+      },
+      {
+        "from": "neighbor-bot/dist",
+        "to": "neighbor-bot/dist"
+      },
+      {
+        "from": "insta-bot/dist",
+        "to": "insta-bot/dist"
+      },
+      {
+        "from": "chromium",
+        "to": "chromium"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "퍼블리 트래픽"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "public/icon.icns",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    }
+  }
+}

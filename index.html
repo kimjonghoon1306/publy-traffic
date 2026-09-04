@@ -1,341 +1,57 @@
 <!DOCTYPE html>
 <html lang="ko">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>퍼블리 · 개별 툴 틀 미리보기</title>
-<style>
-  :root{
-    --bg:#eef0f4; --win:#ffffff; --ink:#1f2430; --sub:#7b8394; --line:#e6e8ee;
-    --line2:#d7dbe4; --panel:#f7f8fb; --accent:#6d28d9; --accent-soft:#f2edfd;
-    --ok:#16a34a; --warn:#e0761a; --danger:#dc2626;
-  }
-  *{box-sizing:border-box;}
-  html,body{margin:0;height:100%;}
-  body{
-    font-family:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;
-    background:var(--bg); color:var(--ink);
-    display:flex; align-items:center; justify-content:center; padding:26px;
-    -webkit-font-smoothing:antialiased;
-  }
-  /* ── 사각형 툴 창(너무 크지 않게) ── */
-  .win{
-    width:100%; max-width:940px; height:min(88vh,660px);
-    background:var(--win); border:1px solid var(--line2); border-radius:14px;
-    box-shadow:0 24px 70px rgba(20,24,40,.22); overflow:hidden;
-    display:flex; flex-direction:column; position:relative;
-  }
-  /* 타이틀 바 */
-  .titlebar{
-    height:44px; flex-shrink:0; display:flex; align-items:center; gap:10px;
-    padding:0 12px 0 16px; border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg,#faf9ff,#f4f2fb);
-  }
-  .titlebar .logo{width:20px;height:20px;border-radius:6px;background:var(--accent);
-    display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:900;}
-  .titlebar .tname{font-size:13.5px;font-weight:800;}
-  .titlebar .tname small{color:var(--sub);font-weight:600;margin-left:6px;font-size:11.5px;}
-  .titlebar .winbtns{margin-left:12px;display:flex;gap:14px;color:#aab0bd;}
-  .themebtn{margin-left:auto;width:27px;height:27px;border-radius:8px;border:1px solid var(--line2);
-    background:var(--win);color:var(--sub);cursor:pointer;font-size:13px;line-height:1;
-    display:flex;align-items:center;justify-content:center;transition:transform .12s,border-color .14s;}
-  .themebtn:hover{border-color:var(--accent);transform:translateY(-1px);}
-  .titlebar .winbtns span{cursor:default;font-size:13px;line-height:1;}
-  /* 본문(세로 스크롤) */
-  .body{flex:1;overflow-y:auto;padding:14px 16px 16px;}
-  .hintbar{
-    font-size:12px;color:var(--sub);font-weight:600;line-height:1.6;
-    background:var(--accent-soft);border:1px solid #e6dcfb;border-radius:9px;
-    padding:9px 12px;margin-bottom:12px;
-  }
-  .hintbar b{color:var(--accent);}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-  @media(max-width:720px){.grid{grid-template-columns:1fr;}}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px 13px;}
-  .panel h3{margin:0 0 9px;font-size:12.5px;font-weight:800;display:flex;align-items:center;gap:6px;}
-  .panel h3 .n{width:17px;height:17px;border-radius:5px;background:var(--accent);color:#fff;
-    font-size:10.5px;font-weight:900;display:flex;align-items:center;justify-content:center;}
-  /* 표 */
-  table{width:100%;border-collapse:collapse;font-size:11.5px;}
-  th,td{padding:6px 7px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;}
-  th{color:var(--sub);font-weight:700;background:#fff;}
-  td{color:var(--ink);font-weight:600;}
-  tr:last-child td{border-bottom:none;}
-  .muted{color:#b7bcc8;}
-  /* 폼 요소(비활성 — 틀만) */
-  label.f{display:block;font-size:11px;font-weight:700;color:var(--sub);margin:10px 0 5px;}
-  .inp,.sel{width:100%;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;
-    background:#fff;font-size:12px;font-family:inherit;color:var(--ink);}
-  .sel{appearance:none;background-image:linear-gradient(45deg,transparent 50%,#9aa1af 50%),linear-gradient(135deg,#9aa1af 50%,transparent 50%);
-    background-position:calc(100% - 15px) 15px,calc(100% - 10px) 15px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
-  .rowbtns{display:flex;gap:6px;margin-top:9px;}
-  .btn{padding:7px 12px;border-radius:8px;border:1px solid var(--line2);background:#fff;
-    font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;font-family:inherit;}
-  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
-  .placeholder{margin-top:8px;font-size:11px;color:#b7bcc8;font-weight:600;text-align:center;
-    padding:14px;border:1px dashed var(--line2);border-radius:8px;}
-  .runbar{margin-top:14px;display:flex;gap:8px;}
-  .runbar .go{flex:1;padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--accent),#8b5cf6);
-    color:#fff;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit;}
-  .runbar .stop{padding:12px 16px;border-radius:10px;border:1px solid var(--line2);background:#fff;
-    color:var(--sub);font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;}
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#00ff88" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Publy" />
+    <meta name="description" content="네이버·티스토리 블로그 글을 AI가 대신 쓰고 자동으로 발행해요. 키워드만 입력하면 제목·글·이미지·발행까지 원클릭." />
 
-  /* ── 하단 실시간 대여 카운트다운 바 ── */
-  .rentbar{
-    flex-shrink:0;border-top:1px solid var(--line);background:#fbfbfd;
-    padding:9px 14px;display:flex;align-items:center;gap:14px;
-  }
-  .rentbar .lock{font-size:15px;}
-  .rentcol{display:flex;flex-direction:column;gap:3px;min-width:0;}
-  .rentcol .lab{font-size:10.5px;font-weight:700;color:var(--sub);}
-  .rentcol .val{font-size:14px;font-weight:900;letter-spacing:.3px;}
-  .rentcol .val .d{color:var(--accent);}
-  .rentcol .val .clock{color:var(--ink);font-variant-numeric:tabular-nums;}
-  .rentprog{flex:1;height:7px;border-radius:5px;background:#e9eaf0;overflow:hidden;min-width:60px;}
-  .rentprog>div{height:100%;background:linear-gradient(90deg,var(--accent),#8b5cf6);border-radius:5px;transition:width .5s;}
-  .rentbar .extend{padding:8px 15px;border-radius:9px;border:none;background:var(--accent);color:#fff;
-    font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;}
-  .rentbar .peek{padding:8px 11px;border-radius:9px;border:1px solid var(--line2);background:#fff;
-    font-size:11px;font-weight:700;color:var(--sub);cursor:pointer;font-family:inherit;white-space:nowrap;}
-  .rentbar.warn{background:#fff8f1;}
-  .rentbar.warn .rentcol .val .clock{color:var(--warn);}
+    <!-- 링크 공유 미리보기 (Open Graph / 카카오톡·페이스북 등) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PUBLY" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:url" content="https://publy.blogautopro.com/" />
+    <meta property="og:title" content="PUBLY — 블로그 글, AI가 대신 쓰고 자동 발행" />
+    <meta property="og:description" content="네이버·티스토리 블로그를 AI가 대신 쓰고 자동으로 발행해요. 키워드만 입력하면 제목·글·이미지·발행까지 원클릭." />
+    <meta property="og:image" content="https://publy.blogautopro.com/og.png?v=1" />
+    <meta property="og:image:secure_url" content="https://publy.blogautopro.com/og.png?v=1" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="PUBLY — 블로그 글 AI 자동발행" />
 
-  /* 만료 잠금 오버레이 */
-  .lockover{position:absolute;inset:0;background:rgba(255,255,255,.82);backdrop-filter:blur(3px);
-    display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20;text-align:center;padding:24px;}
-  .lockover.show{display:flex;}
-  .lockover .ic{font-size:40px;}
-  .lockover .t{font-size:17px;font-weight:900;}
-  .lockover .s{font-size:12.5px;color:var(--sub);font-weight:600;line-height:1.6;max-width:300px;}
-  .lockover .ex{margin-top:4px;padding:12px 26px;border-radius:11px;border:none;background:var(--accent);
-    color:#fff;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit;}
+    <!-- 트위터 카드 -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PUBLY — 블로그 글, AI가 대신 쓰고 자동 발행" />
+    <meta name="twitter:description" content="네이버·티스토리 블로그를 AI가 대신 쓰고 자동으로 발행해요. 키워드만 입력하면 원클릭." />
+    <meta name="twitter:image" content="https://publy.blogautopro.com/og.png?v=1" />
 
-  /* ── ✨ 포인트 강화 ── */
-  .accentstrip{height:3px;flex-shrink:0;background:linear-gradient(90deg,#6d28d9,#8b5cf6 55%,#c084fc);}
-  /* 라이브 상태 칩 */
-  .statuschip{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:3px 9px;border-radius:99px;
-    background:var(--accent-soft);border:1px solid #e6dcfb;font-size:10.5px;font-weight:800;color:var(--accent);}
-  .statuschip .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1.6s infinite;}
-  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(.7);}}
-  /* 패널에 생기 */
-  .panel{transition:border-color .16s, box-shadow .16s, transform .16s;}
-  .panel h3{padding-bottom:8px;border-bottom:1.5px solid #ece7fa;}
-  .panel:hover{border-color:#dcd2f7;box-shadow:0 6px 18px rgba(109,40,217,.08);transform:translateY(-1px);}
-  th{background:var(--accent-soft)!important;color:#7c5bd0!important;}
-  /* 버튼 인터랙션 */
-  .btn,.go,.stop,.extend,.peek,.ex,.winbtns span{transition:transform .12s, box-shadow .14s, background .14s, color .14s;}
-  .btn:hover{border-color:var(--accent);color:var(--accent);}
-  .go:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(109,40,217,.32);}
-  .go:active,.extend:active,.ex:active{transform:translateY(1px) scale(.99);}
-  .extend:hover{box-shadow:0 6px 16px rgba(109,40,217,.35);transform:translateY(-1px);}
-  .peek:hover{border-color:var(--accent);color:var(--accent);}
-  .winbtns span:hover{color:var(--accent);}
-  /* 하단 대여바 강조 */
-  .rentbar{background:linear-gradient(90deg,#f7f3ff,#fbfbfd 60%)!important;}
-  .rentbar .lock{animation:pulse 2.4s infinite;}
-  .rentcol .val .d{background:var(--accent);color:#fff!important;padding:1px 8px;border-radius:99px;font-size:12px;}
-  .rentcol .val .clock{font-size:15px;}
-  .rentbar.warn{background:linear-gradient(90deg,#fff2e6,#fff8f1 60%)!important;}
-  .rentbar.warn .rentcol .val .d{background:var(--warn);}
-  /* 남은 기간 원형 링 */
-  .ring{width:40px;height:40px;border-radius:50%;flex-shrink:0;position:relative;
-    display:flex;align-items:center;justify-content:center;
-    background:conic-gradient(var(--accent) var(--pct,40%), #e6e2f0 0);}
-  .ring::before{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--ringcenter,#fff);}
-  .ring span{position:relative;font-size:10px;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums;}
-  .rentbar.warn .ring{background:conic-gradient(var(--warn) var(--pct,40%), #f2e4d6 0);}
-  .rentbar.warn .ring span{color:var(--warn);}
-  .live{font-size:9px;font-weight:900;color:var(--accent);margin-left:5px;letter-spacing:.2px;}
-  .live::before{content:"●";margin-right:2px;animation:pulse 1.3s infinite;display:inline-block;}
-  .rentbar.warn .live{color:var(--warn);}
-
-  /* ── 🌙 소프트 다크 테마(너무 어둡지 않게, 차콜 톤) ── */
-  body.dark{
-    --bg:#1e222b; --win:#2b313d; --ink:#e9ebf2; --sub:#9aa2b4; --line:#3a4150;
-    --line2:#4a5265; --panel:#333a48; --accent:#a78bfa; --accent-soft:rgba(167,139,250,.15);
-    --warn:#f0a04b; --ringcenter:#2b313d;
-  }
-  body.dark .titlebar{background:linear-gradient(180deg,#333a48,#2b313d);}
-  body.dark th{background:rgba(167,139,250,.15)!important;color:#c4b5fd!important;}
-  body.dark .inp,body.dark .sel,body.dark .btn{background:#333a48;color:var(--ink);border-color:var(--line2);}
-  body.dark .btn{color:var(--sub);}
-  body.dark .hintbar{border-color:#463c66;}
-  body.dark .statuschip{border-color:#463c66;}
-  body.dark .panel h3{border-bottom-color:#3f3a52;}
-  body.dark .panel:hover{border-color:#524a6b;box-shadow:0 6px 18px rgba(0,0,0,.35);}
-  body.dark .ring{background:conic-gradient(var(--accent) var(--pct,40%), #444b5c 0);}
-  body.dark .rentbar{background:linear-gradient(90deg,#322a46,#2b313d 60%)!important;}
-  body.dark .rentbar.warn{background:linear-gradient(90deg,#3d3324,#2f2a22 60%)!important;}
-  body.dark .rentbar.warn .ring{background:conic-gradient(var(--warn) var(--pct,40%), #4a4232 0);}
-  body.dark .lockover{background:rgba(24,27,35,.86);}
-  body.dark .placeholder{border-color:var(--line2);color:#6e7688;}
-  body.dark .muted{color:#6e7688;}
-</style>
-</head>
-<body>
-  <div class="win" id="win">
-    <div class="accentstrip"></div>
-    <!-- 타이틀 바 -->
-    <div class="titlebar">
-      <div class="logo">P</div>
-      <div class="tname">트래픽 유입 <small>· 퍼블리 단품 툴</small></div>
-      <span class="statuschip"><span class="dot"></span>가동 대기</span>
-      <button class="themebtn" id="themebtn" title="라이트/다크 전환">🌙</button>
-      <div class="winbtns"><span>—</span><span>▢</span><span>✕</span></div>
-    </div>
-
-    <!-- 본문(스크롤) -->
-    <div class="body">
-      <div class="hintbar">🔎 <b>이 툴이 하는 일</b> — 키워드로 검색 → 대상 진입 → 체류 → 액션까지 자연 유입. <b>지금은 화면(틀)만</b>이고 기능은 다음에 붙습니다.</div>
-
-      <div class="grid">
-        <!-- ① 작업 대상 -->
-        <div class="panel">
-          <h3><span class="n">1</span> 작업 대상</h3>
-          <table>
-            <thead><tr><th>검색 키워드</th><th>대상</th><th>체류(초)</th><th>횟수</th></tr></thead>
-            <tbody>
-              <tr><td>강남 맛집</td><td>블로그 s9653</td><td>40~70</td><td>0</td></tr>
-              <tr><td>부업 추천</td><td>블로그 s9653</td><td>40~70</td><td>0</td></tr>
-              <tr><td class="muted">＋ 대상 추가…</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- ② 동작 설정 -->
-        <div class="panel">
-          <h3><span class="n">2</span> 동작 설정</h3>
-          <label class="f">접속 패턴(기기)</label>
-          <select class="sel"><option>혼합(랜덤)</option></select>
-          <label class="f">방문해서 할 행동</label>
-          <select class="sel"><option>공유 · 공감</option></select>
-          <label class="f">액션 확률</label>
-          <input class="inp" value="40%" />
-        </div>
-
-        <!-- ③ 작업 흐름 -->
-        <div class="panel">
-          <h3><span class="n">3</span> 작업 흐름</h3>
-          <table>
-            <thead><tr><th>단계</th><th>동작</th></tr></thead>
-            <tbody>
-              <tr><td>1</td><td>검색결과 탐색</td></tr>
-              <tr><td>2</td><td>대상 진입</td></tr>
-              <tr><td>3</td><td>본문 체류(스크롤)</td></tr>
-              <tr><td>4</td><td>액션 · 이탈</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- ④ 딜레이·옵션 -->
-        <div class="panel">
-          <h3><span class="n">4</span> 딜레이 · 옵션</h3>
-          <table>
-            <thead><tr><th>항목</th><th>값</th></tr></thead>
-            <tbody>
-              <tr><td>방문 텀</td><td>10~11초</td></tr>
-              <tr><td>체류 시간</td><td>60초</td></tr>
-              <tr><td>데이터 절약</td><td>초절약</td></tr>
-              <tr><td>안전 브레이크</td><td>5회 실패 정지</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="runbar">
-        <button class="go">🚀 유입 시작</button>
-        <button class="stop">정지</button>
-      </div>
-
-      <div class="placeholder">여기 아래로 로그·그래프 등 기능이 붙습니다 (지금은 틀만)</div>
-    </div>
-
-    <!-- 하단 실시간 대여 카운트다운 -->
-    <div class="rentbar" id="rentbar">
-      <div class="ring" id="ring" style="--pct:40%"><span id="ringpct">40%</span></div>
-      <div class="rentcol">
-        <span class="lab">대여 남은 기간 <em class="live">실시간 차감</em></span>
-        <span class="val"><span class="d" id="days">D-12</span> <span class="clock" id="clock">03:24:51</span></span>
-      </div>
-      <div class="rentprog"><div id="prog" style="width:40%"></div></div>
-      <button class="peek" id="peek">만료 미리보기</button>
-      <button class="extend">연장하기</button>
-    </div>
-
-    <!-- 만료 잠금 -->
-    <div class="lockover" id="lockover">
-      <div class="ic">🔒</div>
-      <div class="t">대여 기간이 만료됐어요</div>
-      <div class="s">이 툴의 사용 기간이 끝났습니다. 연장하시면 바로 다시 사용할 수 있어요.</div>
-      <button class="ex" id="relock">연장하고 계속 쓰기</button>
-    </div>
-  </div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-  // ── 실시간 대여 카운트다운 (Supabase 라이선스 · 서버시간 기준으로 시계 조작 방지) ──
-  const SB_URL='https://qhhoyxexxlimbjrbwrgq.supabase.co';
-  const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoaG95eGV4eGxpbWJqcmJ3cmdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTMzOTQsImV4cCI6MjA5Mjg4OTM5NH0.pw_qUR0oOxgt82S_DA6GTka3WP0JBu2vmWuKZ9VvTKM';
-  const sb=window.supabase.createClient(SB_URL,SB_KEY);
-  const TOOL='traffic';
-  const $=(id)=>document.getElementById(id);
-  const pad=(n)=>String(n).padStart(2,'0');
-  const setLockMsg=(m)=>{ const t=document.querySelector('#lockover .t'); if(t)t.textContent=m; };
-
-  // 테스트용 고객 지정: URL ?c=이름 > localStorage > 입력창
-  function getCustomer(){
-    const u=new URLSearchParams(location.search).get('c');
-    if(u){ localStorage.setItem('traffic_customer',u.trim()); return u.trim(); }
-    let c=localStorage.getItem('traffic_customer');
-    if(!c){ c=(prompt('테스트할 고객 이름 (컨트롤타워에서 발급한 고객)')||'').trim(); if(c) localStorage.setItem('traffic_customer',c); }
-    return c||'';
-  }
-  let customer=getCustomer();
-
-  const TOTAL_DAYS=30;      // 링 % 표시 기준
-  let serverOffset=0, expireMs=0, hasLicense=false;
-
-  async function fetchLicense(){
-    if(!customer){ showNoLicense('고객 미지정 — 잠금화면 더블클릭으로 이름 입력'); return; }
-    const {data,error}=await sb.rpc('license_status',{p_customer:customer,p_tool:TOOL});
-    if(error){ showNoLicense('라이선스 조회 오류: '+error.message); return; }
-    const row=Array.isArray(data)?data[0]:data;
-    if(!row||!row.expire_at){ showNoLicense('"'+customer+'" 트래픽 대여 정보 없음 — 관리자 문의'); return; }
-    serverOffset=new Date(row.server_now).getTime()-Date.now();  // 서버-로컬 시간차(조작 방지)
-    expireMs=new Date(row.expire_at).getTime();
-    hasLicense=true; $('lockover').classList.remove('show'); setLockMsg('대여 기간이 만료됐어요'); tick();
-  }
-  function showNoLicense(msg){
-    hasLicense=false; $('lockover').classList.add('show'); setLockMsg(msg);
-    $('clock').textContent='--:--:--'; $('days').textContent='D-–'; $('prog').style.width='0%';
-    $('ring').style.setProperty('--pct','0%'); $('ringpct').textContent='–';
-  }
-  function tick(){
-    if(!hasLicense) return;
-    const ms=expireMs-(Date.now()+serverOffset);   // 서버시간 기준 남은 시간
-    if(ms<=0){ $('lockover').classList.add('show'); setLockMsg('대여 기간이 만료됐어요');
-      $('clock').textContent='00:00:00'; $('days').textContent='D-0'; $('prog').style.width='0%';
-      $('ring').style.setProperty('--pct','0%'); $('ringpct').textContent='0%'; $('rentbar').classList.add('warn'); return; }
-    const totalSec=Math.floor(ms/1000), days=Math.floor(totalSec/86400);
-    const h=Math.floor((totalSec%86400)/3600), m=Math.floor((totalSec%3600)/60), s=totalSec%60;
-    $('days').textContent='D-'+days;
-    $('clock').textContent=pad(h)+':'+pad(m)+':'+pad(s);
-    const remainPct=Math.max(2,Math.min(100,(totalSec/(TOTAL_DAYS*86400))*100));
-    $('prog').style.width=remainPct+'%'; $('ring').style.setProperty('--pct',remainPct+'%'); $('ringpct').textContent=Math.round(remainPct)+'%';
-    $('rentbar').classList.toggle('warn',days<3);
-  }
-  setInterval(tick,1000);
-  setInterval(fetchLicense,180000);  // 3분마다 서버 재확인(연장 반영·시계 조작 방지)
-  fetchLicense();
-
-  // 테마
-  $('themebtn').onclick=()=>{ const d=document.body.classList.toggle('dark'); $('themebtn').textContent=d?'☀️':'🌙'; };
-  // 만료 미리보기 / 다시 불러오기 / 연장 문의
-  $('peek').onclick=()=>{ $('lockover').classList.add('show'); setLockMsg('(미리보기) 만료 화면'); };
-  $('relock').onclick=()=>{ $('lockover').classList.remove('show'); fetchLicense(); };
-  const ext=document.querySelector('.extend'); if(ext) ext.onclick=()=>alert('연장은 관리자에게 문의해주세요.');
-  // 잠금화면 더블클릭 → 테스트 고객 재지정
-  $('lockover').addEventListener('dblclick',()=>{ localStorage.removeItem('traffic_customer'); customer=getCustomer(); fetchLicense(); });
-</script>
-</body>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <title>Publy</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      input, textarea, select { -webkit-user-select: text !important; user-select: text !important; }
+      body { overflow: hidden; background: #02040a; }
+      /* iOS safe area */
+      body { padding-top: env(safe-area-inset-top); }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(r => console.log('[PWA] SW 등록됨', r.scope))
+            .catch(e => console.log('[PWA] SW 실패', e));
+        });
+      }
+    </script>
+  </body>
 </html>
