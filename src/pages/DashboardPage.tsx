@@ -967,12 +967,8 @@ export default function DashboardPage({user, onLogout, onAdminLogin, onThemeTogg
   const [showCrawlLock, setShowCrawlLock] = useState(false);
   // 📖 퍼블리 대백서 — 로그인하면 자동 팝업(‘다시 안 보기’ 체크 전까지). 헤더 📚 버튼으로 언제든 다시.
   const [showDaebaekseo, setShowDaebaekseo] = useState(false);
-  useEffect(()=>{ if(!user?.id) return; try{ if(localStorage.getItem("publy_guide_seen")&&localStorage.getItem("publy_daebaekseo_seen")!==String(DAEBAEKSEO_VERSION)) setShowDaebaekseo(true); }catch{} }, [user?.id]);
-  const closeGuideAndOpenBook = () => {
-    try { localStorage.setItem("publy_guide_seen", "1"); } catch {}
-    setShowGuide(false);
-    try { if (localStorage.getItem("publy_daebaekseo_seen") !== String(DAEBAEKSEO_VERSION)) setTimeout(() => setShowDaebaekseo(true), 250); } catch {}
-  };
+  // 트래픽 앱: 대백서·가이드 자동 팝업 제거 — 로그인하면 바로 트래픽 화면.
+  const closeGuideAndOpenBook = () => { try { localStorage.setItem("publy_guide_seen", "1"); } catch {} setShowGuide(false); };
   const [neighborUsed, setNeighborUsed] = useState(0);
   const [replyUsed, setReplyUsed] = useState(0);
   const [engageUsed, setEngageUsed] = useState(0);
@@ -5049,55 +5045,7 @@ POST3: (제목)|(이유)
 
           <div className="main">
 
-            {/* ── 사용한도 + 만료일 상태바 (항상 표시) ── */}
-            {(()=>{
-              const plan = user.plan;
-              const config = PLAN_CONFIG[plan] ?? PLAN_CONFIG.free;
-              const publishLimit = config.dailyPublish;
-              const neighborLimit = NEIGHBOR_DAILY_LIMIT[plan] ?? 10;
-              const engageLimit = ENGAGE_DAILY_LIMIT[plan] ?? 10;
-              const replyLimit = REPLY_DAILY_LIMIT[plan] ?? 10;
-              const expiry = quota ? new Date(quota.reset_date) : null;
-              const daysLeft = quota ? daysUntil(quota.reset_date) : null;
-              const dColor = daysLeft === null ? "var(--text3)" : daysLeft <= 3 ? "var(--danger)" : daysLeft <= 7 ? "#ff9f3f" : "var(--success)";
-              // ★무제한이라도 서이추·공감·품앗이는 '네이버 안전 권장치'로 사용량을 보여준다(락 아님, 참고용). 넘으면 경고색.
-              const items = [
-                { label:"✍️ 글쓰기", used: dailyPublishUsed, limit: publishLimit, color:"var(--accent)", safe:0 },
-                { label:"🤝 서이추", used: neighborUsed, limit: neighborLimit, color:"#00c8ff", safe:NAVER_SAFE_NEIGHBOR },
-                { label:"❤️ 공감·댓글", used: engageUsed, limit: engageLimit, color:"#ff6b9d", safe:NAVER_SAFE_ENGAGE },
-                { label:"💬 답방", used: replyUsed, limit: replyLimit, color:"#8b5cf6", safe:0 },
-              ];
-              return (
-                <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-                  {items.map(({label,used,limit,color,safe})=>{
-                    const unlimited = limit>=99999 || (["unlimited","admin"] as string[]).includes(plan);
-                    const useSafe = unlimited && safe>0;                 // 무제한이라도 안전 권장치로 표시
-                    const refLimit = useSafe ? safe : limit;
-                    const pct = (unlimited && !useSafe) ? 100 : Math.min(100, (used/refLimit)*100);
-                    const overSafe = useSafe && used>=safe;
-                    const over = overSafe || (!unlimited && used>=limit);
-                    const barColor = overSafe ? "#f59e0b" : over ? "var(--danger)" : color;   // 안전권장 초과=주황 경고, 실한도 초과=빨강
-                    return (
-                      <div key={label} style={{flex:1,minWidth:120,padding:"10px 14px",borderRadius:14,background:"var(--card)",border:`1px solid ${overSafe?"rgba(245,158,11,.45)":over?"rgba(255,83,99,.4)":"var(--border)"}`,transition:"border .2s"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                          <span style={{fontSize:12,fontWeight:700,color:"var(--text2)"}}>{label}</span>
-                          <span style={{fontSize:12,fontWeight:800,color:barColor}}>{used}<span style={{fontSize:11,color:"var(--text3)",fontWeight:500}}>{useSafe?` · 권장 ${safe}`:(unlimited?" · 무제한":`/${limit}`)}</span></span>
-                        </div>
-                        <div style={{height:5,borderRadius:99,background:"var(--border)",overflow:"hidden"}}>
-                          <div style={{height:"100%",borderRadius:99,width:`${pct}%`,background:barColor,transition:"width .4s"}}/>
-                        </div>
-                        {overSafe&&<div style={{fontSize:10.5,color:"#f59e0b",fontWeight:700,marginTop:4}}>⚠️ 네이버 안전 권장({safe})을 넘었어요 — 계정 보호 위해 잠시 쉬어가는 걸 권해요</div>}
-                      </div>
-                    );
-                  })}
-                  <div style={{padding:"10px 16px",borderRadius:14,background:"var(--card)",border:`1px solid ${daysLeft!==null&&daysLeft<=3?"rgba(255,83,99,.4)":daysLeft!==null&&daysLeft<=7?"rgba(255,159,63,.3)":"var(--border)"}`,whiteSpace:"nowrap"}}>
-                    <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:3}}>📅 만료일</div>
-                    <div style={{fontSize:13,fontWeight:800,color:dColor}}>{expiry?expiry.toLocaleDateString("ko-KR",{month:"numeric",day:"numeric"}):"—"}</div>
-                    <div style={{fontSize:11,color:dColor,fontWeight:600,marginTop:1}}>{formatDaysLeft(quota?.reset_date)}</div>
-                  </div>
-                </div>
-              );
-            })()}
+            {/* 트래픽 앱: 퍼블리 사용한도 상태바(글쓰기·서이추·공감·답방) 제거됨 */}
             {/* ═══ 🎛️ 컨트롤타워 탭 ═══ */}
             {tab==="control"&&(()=>{
               const cfg = PLAN_CONFIG[user.plan] ?? PLAN_CONFIG.free;

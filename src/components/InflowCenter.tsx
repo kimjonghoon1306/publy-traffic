@@ -214,6 +214,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [running, setRunning] = useState(false);
   type InflowLogEntry = { type: "text"; text: string } | { type: "shot"; caption: string; dataUrl: string };
   const [logs, setLogs] = useState<InflowLogEntry[]>([]);
+  const [logZoom, setLogZoom] = useState(false);   // 🔍 로그 크게 보기(앱 내 모달)
   const [used, setUsed] = useState(0);            // 전체 하루 한도 사용량(한도 계산용)
   const [todayScoped, setTodayScoped] = useState(0); // 현재 대상의 오늘 유입(KPI 표시용, 대상별 분리)
   const [progress, setProgress] = useState(0);
@@ -1947,7 +1948,10 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       <div style={{ order: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontSize: 13.5, fontWeight: 800 }}>📜 전체 진행 로그</span>
-          <button onClick={copyLogs} disabled={!logs.length} style={{ padding: "7px 14px", borderRadius: 9, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 13, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>📋 로그 전체복사</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => setLogZoom(true)} disabled={!logs.length} style={{ padding: "7px 14px", borderRadius: 9, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 13, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>🔍 크게 보기</button>
+            <button onClick={copyLogs} disabled={!logs.length} style={{ padding: "7px 14px", borderRadius: 9, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 13, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>📋 로그 전체복사</button>
+          </div>
         </div>
         <div ref={logBoxRef} style={{ background: C.logBg, color: C.logInk, borderRadius: 14, padding: "16px 18px", height: 520, overflowY: "auto", fontSize: 15, lineHeight: 1.8, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
           {logs.length ? logs.map((entry, i) => entry.type === "text"
@@ -1959,6 +1963,31 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
           ) : <div style={{ opacity: 0.5 }}>여기에 검색 → 진입 → 체류 → 액션 전 과정이 실시간으로 표시돼요.</div>}
         </div>
       </div>
+
+      {/* 🔍 로그 크게 보기 — 앱 내 모달(별도 창 아님) */}
+      {logZoom && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) setLogZoom(false); }}
+          style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(10,7,19,.78)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }}>
+          <div style={{ width: "100%", maxWidth: 1000, height: "86vh", background: C.logBg, borderRadius: 16, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 30px 80px rgba(0,0,0,.5)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: `1px solid ${C.line2}` }}>
+              <b style={{ color: C.logInk, fontSize: 15 }}>📜 실시간 로그 — 크게 보기</b>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={copyLogs} disabled={!logs.length} style={{ padding: "7px 16px", borderRadius: 9, border: "none", background: C.panel, color: C.accent, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📋 복사</button>
+                <button onClick={() => setLogZoom(false)} style={{ padding: "7px 16px", borderRadius: 9, border: "none", background: C.accent, color: "#fff", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>닫기</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", color: C.logInk, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", fontSize: 15, lineHeight: 1.85, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              {logs.length ? logs.map((entry, i) => entry.type === "text"
+                ? <div key={i}>{entry.text}</div>
+                : <div key={i} style={{ margin: "8px 0 12px" }}>
+                    <div style={{ marginBottom: 5, fontWeight: 800 }}>📸 {entry.caption}</div>
+                    <img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(420px,100%)", maxHeight: 280, objectFit: "contain", borderRadius: 9, border: "1px solid rgba(255,255,255,.18)" }} />
+                  </div>
+              ) : <div style={{ opacity: 0.5 }}>아직 로그가 없어요.</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminPageRaw from "./pages/AdminPage";
 const AdminPage = AdminPageRaw as React.ComponentType<any>;
 import DashboardPage from "./pages/DashboardPage";
+import TrafficApp from "./TrafficApp";
 import { PublyUser, refreshUserById, touchLastSeen, logoutServerSession, verifyAdminSession, clearAdminSession, getMemberSessionToken, isThisDeviceActive } from "./lib/supabase";
 
 type View = "login" | "admin-login" | "admin" | "dashboard";
@@ -194,8 +195,10 @@ export default function App() {
     />
   );
 
+  // 트래픽 앱 = 로그인 후 퍼블리 대시보드 대신 컴팩트 트래픽 화면(TrafficApp)만 렌더.
+  //   (DashboardPage는 코드로만 남겨두고 트래픽에선 사용 안 함 — import 유지로 타입 안전)
   if (view==="dashboard" && user) return (
-    <DashboardPage
+    <TrafficApp
       user={user}
       onLogout={handleLogout}
       onAdminLogin={() => setView("admin-login")}
