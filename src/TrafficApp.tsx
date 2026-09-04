@@ -71,6 +71,12 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
   const [nowTick, setNowTick] = useState(Date.now());
   useEffect(() => { const iv = window.setInterval(() => setNowTick(Date.now()), 1000); return () => window.clearInterval(iv); }, []);
   const elapsed = Math.floor((nowTick - licFetchedAt) / 1000);
+  // 🕐 실시간 시계(요일 포함) — 예: 9월 5일 (토) 오전 1:36:07
+  const clockStr = (() => {
+    const n = new Date(nowTick); const days = ["일", "월", "화", "수", "목", "금", "토"];
+    const h = n.getHours(); const ap = h < 12 ? "오전" : "오후"; const h12 = (h % 12) || 12;
+    return `${n.getMonth() + 1}월 ${n.getDate()}일 (${days[n.getDay()]}) ${ap} ${h12}:${String(n.getMinutes()).padStart(2, "0")}:${String(n.getSeconds()).padStart(2, "0")}`;
+  })();
   // 가장 먼저 만료되는 활성 라이선스를 하단 바에 표시(그게 실질 대여 기간)
   const soonest = lics.slice().sort((a, b) => (a.remain_sec ?? 0) - (b.remain_sec ?? 0))[0];
   const remainSec = soonest ? Math.max(0, (soonest.remain_sec ?? 0) - elapsed) : 0;
@@ -154,6 +160,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, background: C.soft, border: `1px solid ${C.line2}`, fontSize: 10.5, fontWeight: 800, color: botOnline ? "#f0417a" : C.sub }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: botOnline ? "#f0417a" : "#dc2626", boxShadow: botOnline ? "0 0 0 0 rgba(240,65,122,.7)" : "none", animation: botOnline ? "pulsePink 1.4s infinite" : "none" }} />{botOnline ? "온라인" : "오프라인"}
         </span>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: C.accent, fontVariantNumeric: "tabular-nums", ["WebkitAppRegion" as any]: "no-drag" }}>🕐 {clockStr}</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", ["WebkitAppRegion" as any]: "no-drag" }}>
           {/* 🎫 내 트래픽 등급 배지 — 대여 있으면 등급, 없으면 미결제(업그레이드 유도) */}
           {soonest
@@ -168,7 +175,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
 
       {/* 본문 = 유입 엔진(InflowCenter) */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 18px" }}>
-        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} externalAccounts={accounts} />
+        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} externalAccounts={accounts} memberEmail={user.email} memberName={user.name} />
       </div>
 
       {/* 하단 대여 카운트다운 */}

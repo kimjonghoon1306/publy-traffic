@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { BotEventStream, botFetch } from "../lib/botApi";
 import UsageGuide from "./UsageGuide";
 import SproutAssistant from "./SproutAssistant";
-import { INFLOW_DAILY_LIMIT, PLAN_CONFIG, getInflowDailyUsage, getInflowUsageHistory, getAccounts, PublyAccount, getAutopilot, saveAutopilot, getRankHistory, AutopilotConfig, getInflowSchedule, saveInflowSchedule, inflowScheduleRanToday, markInflowScheduleRan, getPerfReport, PerfReport, recordRankPoint, getMemberSessionToken, getAdminSessionToken, getInflowTargets, saveInflowTargets, inflowScope, getInflowStatToday, migrateLegacyInflowToScope } from "../lib/supabase";
+import { INFLOW_DAILY_LIMIT, PLAN_CONFIG, getInflowDailyUsage, getInflowUsageHistory, getAccounts, PublyAccount, getAutopilot, saveAutopilot, getRankHistory, AutopilotConfig, getInflowSchedule, saveInflowSchedule, inflowScheduleRanToday, markInflowScheduleRan, getPerfReport, PerfReport, recordRankPoint, getMemberSessionToken, getAdminSessionToken, getInflowTargets, saveInflowTargets, inflowScope, getInflowStatToday, migrateLegacyInflowToScope, sendTrafficLog } from "../lib/supabase";
 
 const BOT = "http://127.0.0.1:3364"; // neighbor-bot
 
@@ -108,7 +108,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode, externalAccounts }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[] }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다.
   //   회원앱(memberMode)=엄격: 승인된 것만(승인 없으면 아무것도 안 보임=잠금).
@@ -875,6 +875,18 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     if (!logs.length) return;
     navigator.clipboard.writeText(logs.map((entry) => entry.type === "text" ? entry.text : `📸 ${entry.caption}`).join("\n")).then(() => toast("로그 전체를 복사했어요", "success")).catch(() => toast("복사 실패", "error"));
   };
+  // 📨 관리자에게 로그 전송 — 문제 생기면 회원이 바로 관리자에게 로그를 보냄
+  const [sendingLog, setSendingLog] = useState(false);
+  const sendLogToAdmin = async () => {
+    if (!logs.length) { toast("보낼 로그가 없어요", "error"); return; }
+    setSendingLog(true);
+    try {
+      const text = logs.map((e) => e.type === "text" ? e.text : `📸 ${e.caption}`).join("\n");
+      await sendTrafficLog(memberEmail || userId || "", memberName || "", text.slice(0, 20000));
+      toast("관리자에게 로그를 보냈어요 ✅", "success");
+    } catch (e: any) { toast("전송 실패: " + (e?.message || "오류"), "error"); }
+    finally { setSendingLog(false); }
+  };
 
   const start = () => {
     if (running) return;
@@ -930,8 +942,14 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       ? [doOption && "🔍옵션탐색", doWish && "💚찜", doCart && "🛒장바구니", doShare && "🔗공유"]
       : [doLike && "💚공감", doShare && "🔗공유"]).filter(Boolean) as string[];
     const targetLabel = targetType === "place" ? "플레이스" : targetType === "store" ? "스마트스토어" : "블로그";
-    pushLog(`━━━━━ 🚀 트래픽 유입 시작 · 적용된 설정 ━━━━━`);
-    pushLog(`📍 대상: ${targetLabel} · 키워드 ${kwList.length}개 · ${n}회 방문`);
+    const targetUrl = (targetType === "place" ? placeUrl : targetType === "store" ? storeUrl : blogUrl).trim();
+    const acctNames = accounts.filter((a) => selectedAccts.has(a.id)).map((a) => a.username);
+    pushLog(`━━━━━ 🚀 트래픽 유입 시작 · 적용된 설정(전체) ━━━━━`);
+    pushLog(`📍 대상: ${targetLabel}  ·  주소: ${targetUrl || "(없음)"}`);
+    if (extras.length) pushLog(`➕ 추가 대상 ${extras.length}개(방문마다 로테이션)`);
+    pushLog(`🔎 키워드(${kwList.length}개): ${kwList.join(", ")}`);
+    pushLog(`🔁 방문 횟수: ${n}회${auto ? "(자동=오늘 한도까지)" : ""}`);
+    pushLog(`👤 로그인 계정: ${acctNames.length ? acctNames.join(", ") : "(선택 안 함 — 저장·찜·공감은 건너뜀)"}`);
     pushLog(`📶 접속패턴(기기): ${deviceLabel}`);
     const actionSec = Math.round(actionLabels.length * 2.5);
     const totalSec = Math.round(dwellSec + actionSec);
@@ -1305,6 +1323,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => setLogZoom(true)} disabled={!logs.length} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>🔍 크게 보기</button>
                 <button onClick={copyLogs} disabled={!logs.length} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>📋 복사</button>
+                <button onClick={sendLogToAdmin} disabled={!logs.length || sendingLog} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: logs.length ? `linear-gradient(135deg,${C.accent},${C.cyan})` : C.line2, color: "#fff", fontSize: 12, fontWeight: 800, cursor: logs.length && !sendingLog ? "pointer" : "default", fontFamily: "inherit" }}>{sendingLog ? "보내는 중…" : "📨 관리자에게 보내기"}</button>
               </div>
             </div>
             <div ref={logBoxRef} style={{ background: C.logBg, color: C.logInk, borderRadius: 12, padding: "14px 16px", height: 240, overflowY: "auto", fontSize: 13.5, lineHeight: 1.75, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>

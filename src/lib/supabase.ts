@@ -2213,6 +2213,12 @@ export function computeCareStatus(c: PostCare): { status: CareStatus; daysLeft?:
    서버시간 기준 만료판정은 license_status RPC(시계 조작 방지). */
 export type ToolLicense = { tool: "place" | "blog" | "store"; expire_at: string | null; data_saver?: string; remain_sec?: number; plan?: string; allowed_actions?: string[]; bonus_quota?: number };
 export const TRAFFIC_PLAN_LIMIT: Record<string, number> = { basic: 30, pro: 60, premium: 120, unlimited: 0 }; // 0=무제한
+// 📨 회원 → 관리자 로그 전송(traffic_logs). 관리자는 컨트롤타워에서 빨간 알림으로 확인.
+export async function sendTrafficLog(customer: string, name: string, content: string, memo = ""): Promise<void> {
+  const { error } = await supabase.rpc("traffic_log_send", { p_customer: customer, p_name: name, p_content: content, p_memo: memo });
+  if (error) throw new Error(error.message);
+}
+
 export async function getTrafficLicenses(customer: string): Promise<ToolLicense[]> {
   if (!customer) return [];
   try {
