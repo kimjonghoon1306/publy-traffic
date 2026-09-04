@@ -108,7 +108,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[] }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다. 없으면(미지정) 전부 허용.
   const FEATS: ("place" | "blog" | "store")[] = ["place", "blog", "store"];
@@ -177,6 +177,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [dwellDraft, setDwellDraft] = useState<string>(String(saved0.maxDwellSec ?? 30)); // 직접지정 입력 임시값(설정 버튼 눌러야 확정)
   const [dataSaver, setDataSaver] = useState<"normal" | "save" | "max">(saved0.dataSaver ?? "save"); // 💾 데이터(프록시) 절약 모드
   const [dataSaverInfo, setDataSaverInfo] = useState(false); // ⓘ 설명 팝업
+  // 🎫 관리자가 라이선스로 데이터 절약 모드를 지정하면 강제 적용(고객은 못 바꿈). ultra→max 매핑.
+  const licenseSaverLocked = !!licenseSaver;
+  useEffect(() => { if (!licenseSaver) return; const m = licenseSaver === "ultra" ? "max" : licenseSaver === "save" ? "save" : "normal"; setDataSaver(m as any); }, [licenseSaver]);
   // ➕ 추가 대상(주소 목록) — 대상(플레이스/블로그/스토어)별로 격리(서로 섞이지 않게)
   const [extraByType, setExtraByType] = useState<{ place: string[]; blog: string[]; store: string[] }>(() => {
     const legacy = private0.extraTargets ?? saved0.extraTargets ?? [];
@@ -1312,7 +1315,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
           </div>
         </div>
 
-        {/* 💾 데이터(프록시) 사용 모드 — 플레이스·블로그·스마트스토어 공통 */}
+        {/* 💾 데이터(프록시) 사용 모드 — 플레이스·블로그·스마트스토어 공통. 관리자 지정(licenseSaver) 시 숨김. */}
+        {!licenseSaverLocked && (
         <div>
           <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 7 }}>
             💾 데이터(프록시) 사용
@@ -1335,6 +1339,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             💡 <b style={{ color: C.ink }}>절약</b> 추천 — 순위 신호(클릭·체류·저장)는 100% 유지하면서 프록시 데이터를 아껴요. ⓘ를 눌러 자세히 보세요.
           </div>
         </div>
+        )}
 
         {/* 텀 + 횟수 */}
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>

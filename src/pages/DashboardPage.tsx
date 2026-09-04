@@ -3,6 +3,7 @@ import GoogleFlowCard from "../GoogleFlowCard";
 import { PublyUser, getQuota, getHistory, getAccounts, PublyQuota, PublyHistory, PublyAccount, upsertAccount, useQuota, refundQuota, addHistory, getHistoryContent, deleteHistory, deleteAllHistory, deleteFailedHistory, changeUserPassword, getNaverApiKeys, saveNaverApiKeys, NaverApiKeys, checkNaverQuota, incrementNaverQuota, getNaverDailyUsage, NAVER_DAILY_LIMIT, getUserNaverApiKeys, logError, PLAN_CONFIG, checkDailyPublishQuota, incrementDailyPublish, getDailyPublishUsage, getNeighborDailyUsage, NEIGHBOR_DAILY_LIMIT, getEngageDailyUsage, ENGAGE_DAILY_LIMIT, InstaDmTarget, InstaDmHistory, InstaDmQuota, getInstaDmTargets, addInstaDmTarget, deleteInstaDmTarget, getInstaDmHistory, addInstaDmHistory, getInstaDmQuota, upsertInstaDmQuota, incrementInstaDmUsage, INSTA_DM_DAILY_LIMIT, getReplyDailyUsage, REPLY_DAILY_LIMIT, pushLiveLog, getWeeklyActivity, WeeklyActivity, getActivityByRange, ActivityRange } from "../lib/supabase";
 import { supabase, submitBugReportRow, getMyResolvedBugAlerts, markBugNotified, PublyBugReport, getPlace360Access } from "../lib/supabase";
 import { markTitleChanged, checkReviveQuota, incrementReviveQuota } from "../lib/supabase";
+import { getTrafficLicenses } from "../lib/supabase";
 import NeighborPage from "./NeighborPage";
 import CrawlCenter from "../components/CrawlCenter";
 import InflowCenter from "../components/InflowCenter";
@@ -832,6 +833,28 @@ export default function DashboardPage({user, onLogout, onAdminLogin, onThemeTogg
     logoTapTimer.current = setTimeout(() => { logoTapCount.current = 0; }, 1400);
   };
   const [tab, setTab] = useState<MainTab>("control");
+  // 🎫 트래픽 라이선스 — 로그인 이메일로 컨트롤타워 승인 기능(place/blog/store) 조회.
+  //   승인+미만료(서버시간)만 allowedFeatures로 InflowCenter에 전달 → 승인된 탭만 보임.
+  const [allowedFeatures, setAllowedFeatures] = useState<("place"|"blog"|"store")[]>([]);
+  const [licenseSaver, setLicenseSaver] = useState<string>("");
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const lics = await getTrafficLicenses(user.email);
+        if (!alive) return;
+        const ok = lics.filter(l => (l.remain_sec ?? 0) > 0);
+        setAllowedFeatures(ok.map(l => l.tool));
+        // 데이터 절약모드: 승인된 기능 중 가장 강한 절약값 적용(관리자 지정, 고객은 못 봄)
+        const order: Record<string,number> = { normal: 0, save: 1, ultra: 2 };
+        const strongest = ok.map(l => l.data_saver || "ultra").sort((a,b)=>(order[b]??2)-(order[a]??2))[0];
+        setLicenseSaver(strongest || "");
+      } catch {}
+    };
+    void load();
+    const iv = window.setInterval(load, 180000); // 3분마다 재확인(연장·만료 반영)
+    return () => { alive = false; window.clearInterval(iv); };
+  }, [user.email]);
   const [pageReady, setPageReady] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showVideo, setShowVideo] = useState(false);   // 소개 영상 보기 모달
@@ -8204,7 +8227,7 @@ POST3: (제목)|(이유)
               <div aria-hidden={tab!=="crawl"} style={{ display: tab==="crawl" ? "block" : "none", pointerEvents: tab==="crawl" ? "auto" : "none" }}><CrawlCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} /></div>
             )}
             {visitedAutoTabs.has("inflow") && inflowEnabled && (
-              <div aria-hidden={tab!=="inflow"} style={{ display: tab==="inflow" ? "block" : "none", pointerEvents: tab==="inflow" ? "auto" : "none" }}><InflowCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} /></div>
+              <div aria-hidden={tab!=="inflow"} style={{ display: tab==="inflow" ? "block" : "none", pointerEvents: tab==="inflow" ? "auto" : "none" }}><InflowCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} /></div>
             )}
             {visitedAutoTabs.has("place") && place360Enabled && (
               <div aria-hidden={tab!=="place"} style={{ display: tab==="place" ? "block" : "none", pointerEvents: tab==="place" ? "auto" : "none" }}><Place360 showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} onOpenCrawl={()=>setTab("crawl")} onOpenReview={()=>setTab("place_reply")} /></div>

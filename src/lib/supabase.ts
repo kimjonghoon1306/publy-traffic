@@ -2196,3 +2196,32 @@ export function computeCareStatus(c: PostCare): { status: CareStatus; daysLeft?:
   if (c.rank_history?.length) return { status: "needs" };
   return { status: "new" };
 }
+
+/* ══ 🎫 트래픽 단품 툴 라이선스 (컨트롤타워에서 발급) ══
+   customer = 이 앱 로그인 이메일. 관리자 컨트롤타워에서 그 이메일로 기능(place/blog/store)을
+   승인하면 여기서 읽어 승인된 탭만 노출 + 데이터 절약 모드를 강제 적용한다.
+   서버시간 기준 만료판정은 license_status RPC(시계 조작 방지). */
+export type ToolLicense = { tool: "place" | "blog" | "store"; expire_at: string | null; data_saver?: string; remain_sec?: number };
+export async function getTrafficLicenses(customer: string): Promise<ToolLicense[]> {
+  if (!customer) return [];
+  try {
+    const { data, error } = await supabase
+      .from("tool_licenses")
+      .select("tool,expire_at,data_saver")
+      .eq("customer", customer)
+      .in("tool", ["place", "blog", "store"]);
+    if (error || !data) return [];
+    // 서버시간 기준 남은 초(시계 조작 방지) — 각 기능별로 RPC 조회
+    const out: ToolLicense[] = [];
+    for (const row of data as any[]) {
+      let remain = 0;
+      try {
+        const { data: st } = await supabase.rpc("license_status", { p_customer: customer, p_tool: row.tool });
+        const s = Array.isArray(st) ? st[0] : st;
+        remain = s?.remain_sec ? Number(s.remain_sec) : 0;
+      } catch {}
+      out.push({ tool: row.tool, expire_at: row.expire_at, data_saver: row.data_saver, remain_sec: remain });
+    }
+    return out;
+  } catch { return []; }
+}
