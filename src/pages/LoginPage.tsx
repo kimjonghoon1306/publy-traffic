@@ -94,8 +94,8 @@ const CSS = `
 
 /* 메인 카드 */
 .login-card {
-  position:relative; width:460px; z-index:10;
-  border-radius:28px; padding:26px 34px;
+  position:relative; width:540px; z-index:10;
+  border-radius:30px; padding:44px 48px;
   /* 가입 폼이 화면보다 커도 잘리지 않게 카드 안에서 스크롤(위아래 붙음 방지). card-float 제거(떠다니다 잘림) */
   max-height:calc(100vh - 24px); overflow-y:auto; overflow-x:hidden;
   /* ★glow-breathe(box-shadow 무한 애니메이션) 제거 — box-shadow는 GPU가속 안 돼 매 프레임 리페인트,
