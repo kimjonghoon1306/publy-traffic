@@ -2211,7 +2211,7 @@ export function computeCareStatus(c: PostCare): { status: CareStatus; daysLeft?:
    customer = 이 앱 로그인 이메일. 관리자 컨트롤타워에서 그 이메일로 기능(place/blog/store)을
    승인하면 여기서 읽어 승인된 탭만 노출 + 데이터 절약 모드를 강제 적용한다.
    서버시간 기준 만료판정은 license_status RPC(시계 조작 방지). */
-export type ToolLicense = { tool: "place" | "blog" | "store"; expire_at: string | null; data_saver?: string; remain_sec?: number; plan?: string; allowed_actions?: string[]; bonus_quota?: number };
+export type ToolLicense = { tool: "place" | "blog" | "store" | "backlink"; expire_at: string | null; data_saver?: string; remain_sec?: number; plan?: string; allowed_actions?: string[]; bonus_quota?: number };
 export const TRAFFIC_PLAN_LIMIT: Record<string, number> = { basic: 30, pro: 60, premium: 120, unlimited: 0 }; // 0=무제한
 // 📨 회원 → 관리자 로그 전송(traffic_logs). 관리자는 컨트롤타워에서 빨간 알림으로 확인.
 export async function sendTrafficLog(customer: string, name: string, content: string, memo = ""): Promise<void> {

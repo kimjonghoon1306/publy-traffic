@@ -822,7 +822,7 @@ export default function DashboardPage({user, onLogout, onAdminLogin, onThemeTogg
   const [tab, setTab] = useState<MainTab>("inflow");
   // 🎫 트래픽 라이선스 — 로그인 이메일로 컨트롤타워 승인 기능(place/blog/store) 조회.
   //   승인+미만료(서버시간)만 allowedFeatures로 InflowCenter에 전달 → 승인된 탭만 보임.
-  const [allowedFeatures, setAllowedFeatures] = useState<("place"|"blog"|"store")[]>([]);
+  const [allowedFeatures, setAllowedFeatures] = useState<("place"|"blog"|"store"|"backlink")[]>([]);
   const [licenseSaver, setLicenseSaver] = useState<string>("");
   const [inflowBusy, setInflowBusy] = useState(false); // 트래픽 유입 실행/예약/오토파일럿 중 = 절전 방지
   // 🎫 기능별 라이선스 상세(등급 한도·허용행동): { place: {limit, actions[], plan}, ... }

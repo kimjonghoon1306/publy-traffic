@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { BotEventStream, botFetch } from "../lib/botApi";
 import UsageGuide from "./UsageGuide";
 import SproutAssistant from "./SproutAssistant";
+import BacklinkTab from "./BacklinkTab";
 import { INFLOW_DAILY_LIMIT, PLAN_CONFIG, getInflowDailyUsage, getInflowUsageHistory, getAccounts, PublyAccount, getAutopilot, saveAutopilot, getRankHistory, AutopilotConfig, getInflowSchedule, saveInflowSchedule, inflowScheduleRanToday, markInflowScheduleRan, getPerfReport, PerfReport, recordRankPoint, getMemberSessionToken, getAdminSessionToken, getInflowTargets, saveInflowTargets, inflowScope, getInflowStatToday, migrateLegacyInflowToScope, sendTrafficLog } from "../lib/supabase";
 
 const BOT = "http://127.0.0.1:3364"; // neighbor-bot
@@ -133,16 +134,18 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다.
   //   회원앱(memberMode)=엄격: 승인된 것만(승인 없으면 아무것도 안 보임=잠금).
   //   관리자앱(memberMode 아님)=미지정이면 전부 허용(관리자는 다 봐야 함).
-  const FEATS: ("place" | "blog" | "store")[] = ["place", "blog", "store"];
-  const allowFeat = (f: "place" | "blog" | "store") => memberMode
+  const FEATS: ("place" | "blog" | "store" | "backlink")[] = ["place", "blog", "store", "backlink"];
+  const allowFeat = (f: "place" | "blog" | "store" | "backlink") => memberMode
     ? (!!allowedFeatures && allowedFeatures.includes(f))
     : (!allowedFeatures || allowedFeatures.length === 0 || allowedFeatures.includes(f));
   const visibleFeats = FEATS.filter(allowFeat);
+  const backlinkAllowed = allowFeat("backlink");
+  const inflowFeats = visibleFeats.filter((f): f is "place" | "blog" | "store" => f !== "backlink");  // 유입 대상만(백링크 제외)
   const theme: "dark" | "light" = extTheme === "dark" ? "dark" : "light";
   const C = THEMES[theme];
 
@@ -150,8 +153,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const formKey = "publy_inflow_form";
   const saved0: any = (() => { try { return JSON.parse(localStorage.getItem("publy_inflow_form") || "{}"); } catch { return {}; } })();
   const [targetType, setTargetType] = useState<"place" | "blog" | "store">(saved0.targetType ?? "place");
+  const [blTab, setBlTab] = useState(false);  // 🔗 백링크 탭 활성(유입 targetType과 분리 — 유입 로직 안 건드림)
   // 🎫 현재 대상이 미승인이면 승인된 첫 대상으로 자동 전환(미승인 화면에 갇히지 않게)
-  useEffect(() => { if (visibleFeats.length && !allowFeat(targetType)) setTargetType(visibleFeats[0]); }, [allowedFeatures, targetType]);
+  useEffect(() => { if (inflowFeats.length && !allowFeat(targetType)) setTargetType(inflowFeats[0]); }, [allowedFeatures, targetType]);
   // 🎫 현재 대상의 라이선스 등급 한도.
   //   ★트래픽은 결제 별도 → 회원앱(memberMode)은 퍼블리 등급(user.plan)을 절대 안 탄다.
   //     오직 컨트롤타워 발급(featLic)만으로 한도·무제한 결정(featLic 없으면 0=차단, 어차피 승인없으면 잠금화면).
@@ -296,7 +300,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   // 💤 화면·시스템 절전 방지 — 유입 실행중(텀 대기 포함) OR 예약 대기 OR 오토파일럿 가동 중이면 안 꺼지게(부모 keepAwake).
   useEffect(() => { onBusyChange?.(running || schedEnabled || apEnabled); }, [running, schedEnabled, apEnabled]);
   // 🔴 관리자가 승인을 취소하면(허용 대상이 줄면) — 실행 중이면 즉시 정지 + 화면 새로고침(회원앱만)
-  const prevFeatsRef = useRef<("place"|"blog"|"store")[] | undefined>(undefined);
+  const prevFeatsRef = useRef<("place"|"blog"|"store"|"backlink")[] | undefined>(undefined);
   useEffect(() => {
     if (!memberMode) { prevFeatsRef.current = allowedFeatures; return; }
     const prev = prevFeatsRef.current;
@@ -1233,12 +1237,21 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
 
           {/* 대상 탭 — 관리자가 승인한 것만 보임(미승인은 아예 렌더 안 함). 1개만 승인이면 탭 1개만. */}
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            {([["place", "🗺️ 플레이스"], ["blog", "📝 블로그"], ["store", "🛒 스마트스토어"]] as [("place" | "blog" | "store"), string][]).filter(([k]) => allowFeat(k)).map(([k, lb]) => {
-              const on = targetType === k;
-              return <div key={k} onClick={() => setTargetType(k)} style={{ flex: 1, padding: "11px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, fontSize: 13.5, fontWeight: 800, cursor: "pointer", textAlign: "center" }}>{lb}</div>;
+            {([["place", "🗺️ 플레이스"], ["blog", "📝 블로그"], ["store", "🛒 스마트스토어"], ["backlink", "🔗 백링크"]] as [("place" | "blog" | "store" | "backlink"), string][]).filter(([k]) => allowFeat(k)).map(([k, lb]) => {
+              // 백링크 탭은 blTab으로 분리(유입 targetType과 별개). 유입탭은 targetType.
+              const on = k === "backlink" ? blTab : (targetType === k && !blTab);
+              const onClick = k === "backlink" ? () => setBlTab(true) : () => { setTargetType(k as "place" | "blog" | "store"); setBlTab(false); };
+              return <div key={k} onClick={onClick} style={{ flex: 1, padding: "11px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, fontSize: 13.5, fontWeight: 800, cursor: "pointer", textAlign: "center" }}>{lb}</div>;
             })}
           </div>
 
+          {/* 🔗 백링크 탭이면 백링크 화면(도메인·현황·로그·색인키). 유입 본체는 아래 !blTab로 숨김(탭이동 초기화 방지 위해 언마운트 아님). */}
+          <div style={{ display: blTab ? "block" : "none" }}>
+            <BacklinkTab theme={theme} />
+          </div>
+
+          {/* 유입 본체 — 백링크 탭일 땐 숨김 */}
+          <div style={{ display: blTab ? "none" : "block" }}>
           {/* 4패널 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
             <div style={mCard}>
@@ -1411,6 +1424,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               ) : <div style={{ opacity: 0.5 }}>키워드 검색 → 진입 → 체류 → 액션 전 과정이 여기 실시간으로 표시돼요.</div>}
             </div>
           </div>
+          </div>{/* 유입 본체(!blTab) 닫음 */}
         </>)}
 
         {postPopupUI}

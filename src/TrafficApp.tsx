@@ -37,7 +37,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
   // ── 🎫 트래픽 라이선스 — 로그인 이메일로 컨트롤타워 승인 기능 조회(2초 폴링, 서버시간 기준) ──
   const [lics, setLics] = useState<ToolLicense[]>([]);
   const [licFetchedAt, setLicFetchedAt] = useState(0);
-  const [allowedFeatures, setAllowedFeatures] = useState<("place" | "blog" | "store")[]>([]);
+  const [allowedFeatures, setAllowedFeatures] = useState<("place" | "blog" | "store" | "backlink")[]>([]);
   const [licenseSaver, setLicenseSaver] = useState<string>("");
   const [licenseByFeat, setLicenseByFeat] = useState<Record<string, { limit: number; actions: string[]; plan: string }>>({});
   const licSigRef = useRef<string>("");
