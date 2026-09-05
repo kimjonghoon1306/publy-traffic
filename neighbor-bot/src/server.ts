@@ -1143,16 +1143,20 @@ app.post("/api/inflow", async (req, res) => {
   const inflowPlan = isVerifiedAdmin ? "admin" : (userId ? await getUserPlan(userId) : "free");
   // 🔐 트래픽 라이선스 서버검증 — 회원(비관리자)은 승인된 대상만·승인된 행동만(로컬 요청 조작 우회 차단).
   let licActionSet: Set<string> | null = null;
+  let licPlan: string | null = null;   // 트래픽 등급/한도의 소스오브트루스 = tool_licenses(컨트롤타워 발급). publy_users.plan 무시.
   if (!isVerifiedAdmin && userId) {
     const lic = await getTrafficLicenseForTool(userId, String(targetType));
     if (!lic || !lic.ok) return res.status(403).json({ error: "승인되지 않았거나 만료된 트래픽 대상입니다. 관리자에게 문의하세요." });
     licActionSet = new Set(lic.actions);
+    licPlan = lic.plan || "basic";     // 무제한(테리 테스트 발급 등)은 여기서 unlimited로 잡혀 한도 스킵된다.
   }
   const licAllow = (k: string) => isVerifiedAdmin || !licActionSet || licActionSet.has(k);
   sseSetup(res);
   let releaseAccount = () => {};
   try {
-    if (!await ensureActiveMember(userId, res, "inflow")) return;   // 🔒 기본 잠금
+    // 🔒 트래픽 권한은 tool_licenses(위 getTrafficLicenseForTool)가 유일 소스오브트루스다.
+    //    퍼블리의 옛 inflow_enabled 게이트(ensureActiveMember(...,"inflow"))는 트래픽 회원을 오차단하므로 쓰지 않는다.
+    //    (컨트롤타워에서 대상 승인/만료로 제어 → 미승인·만료는 이미 위 1147~1148에서 403 차단됨. 관리자는 isVerifiedAdmin으로 통과.)
     // 🔄 다계정 로테이션 — 저장·찜·공감에 쓸 계정 전체를 락(나머지 계정이 다른 작업과 충돌·세션깨짐 방지)
     let acctIdsArr: string[] | undefined;
     if (accountIds) { try { const a = JSON.parse(accountIds); if (Array.isArray(a) && a.length) acctIdsArr = Array.from(new Set(a.map(String).filter(Boolean))); } catch { acctIdsArr = undefined; } }
@@ -1161,7 +1165,8 @@ app.post("/api/inflow", async (req, res) => {
     if (!release) return;
     releaseAccount = release;
 
-    let plan = inflowPlan;
+    // 트래픽 등급/한도 = tool_licenses(licPlan) 우선. 관리자는 inflowPlan(admin). 회원은 컨트롤타워 발급 등급(basic/pro/premium/unlimited).
+    let plan = isVerifiedAdmin ? inflowPlan : (licPlan || inflowPlan);
     // 한도 체크는 대상(statScope)이 정해진 뒤에 아래에서 — 대상별 각각 카운트
 
     let target: InflowTarget;

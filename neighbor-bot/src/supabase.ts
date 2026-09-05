@@ -155,7 +155,8 @@ export async function incrementPlaceDetailQuota(userId: string): Promise<void> {
 }
 
 /* ══ 검색유입(트래픽) 하루 한도 — 관리자/무제한만 락 해제(999999) ══ */
-export const INFLOW_DAILY_LIMIT: Record<string, number> = { free: 20, basic: 50, pro: 100, unlimited: 999999, admin: 999999 };
+// 트래픽 등급별 하루 유입 한도 — 컨트롤타워/회원앱(TRAFFIC_PLAN_LIMIT)과 반드시 동일: 베이직30/프로60/프리미엄120/무제한∞.
+export const INFLOW_DAILY_LIMIT: Record<string, number> = { free: 20, basic: 30, pro: 60, premium: 120, unlimited: 999999, admin: 999999 };
 // 🎯 한도 카운터도 대상(scope)별로 분리 — place/blog/store 사용료를 각각 받으므로 한도도 각각 차감.
 //   scope 없으면(구경로) userId 통합키(하위호환).
 function inflowQuotaKey(userId: string, scope = ""): string { return `inflow_daily_${userId}${scope ? "_" + scope : ""}_${koreaDateKey()}`; }

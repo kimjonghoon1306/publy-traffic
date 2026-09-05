@@ -1251,6 +1251,29 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                   <button onClick={() => setPostPopup("login")} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1.5px solid #d97706`, background: C.panel, color: "#d97706", fontSize: 11.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📚 로그인해 내 글</button>
                 </div>
               )}
+              {/* 🎯 지정된 대상(글) 전체목록 — '내 글 불러오기'로 여러 글을 지정하면 첫 글만 위 칸에 보이고 나머지는 여기서 전부 확인·삭제 */}
+              {(() => {
+                const pickedList = [addr, ...extraTargets].map((u) => (u || "").trim()).filter(Boolean);
+                if (pickedList.length < 2) return null;
+                const removeAt = (i: number) => { const all = [...pickedList]; all.splice(i, 1); setAddr(all[0] || ""); setExtraTargets(all.slice(1)); setPickedPostCount(all.length); };
+                return (
+                  <div style={{ marginTop: 8, padding: "9px 11px", borderRadius: 9, background: C.glow, border: `1px solid ${C.accent}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: C.accent }}>🎯 지정된 {targetType === "blog" ? "글" : "대상"} {pickedList.length}개 <span style={{ color: C.sub, fontWeight: 700 }}>· 방문마다 번갈아</span></span>
+                      <button onClick={() => { setExtraTargets([]); setPickedPostCount(addr.trim() ? 1 : 0); toast("지정 목록 해제 — 첫 주소만 남겼어요", "info"); }} style={{ marginLeft: "auto", padding: "3px 9px", borderRadius: 7, border: `1px solid ${C.line2}`, background: C.panel, color: C.sub, fontSize: 10.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>전체 해제</button>
+                    </div>
+                    <div style={{ maxHeight: 150, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                      {pickedList.map((u, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "6px 8px", borderRadius: 7, background: C.panel, border: `1px solid ${C.line}` }}>
+                          <span style={{ fontSize: 10.5, fontWeight: 800, color: C.sub, flexShrink: 0, minWidth: 14 }}>{i + 1}</span>
+                          <span style={{ fontSize: 11.5, color: C.ink, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }} title={u}>{u}</span>
+                          <span onClick={() => removeAt(i)} style={{ cursor: "pointer", color: "#dc2626", fontSize: 15, fontWeight: 900, flexShrink: 0, lineHeight: 1 }}>×</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* 💾 대상 저장(설정됐는지 확인용) + 저장 목록 골라쓰기 */}
               <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
                 <input style={{ ...mInput, flex: 1 }} value={savingName} onChange={(e) => setSavingName(e.target.value)} placeholder={targetType === "place" ? "이 매장 이름(예: 강남점)" : targetType === "store" ? "이 상품 이름" : "이 블로그 이름"} />
