@@ -1,12 +1,12 @@
 {
   "name": "publy-traffic",
-  "version": "2.10.144",
+  "version": "2.10.145",
   "description": "Publy - 네이버/티스토리 자동발행 앱",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build:web": "tsc --noEmit && vite build",
-    "build:bots": "npm --prefix naver-bot run build && npm --prefix neighbor-bot run build && npm --prefix insta-bot run build",
+    "build:bots": "npm --prefix naver-bot run build && npm --prefix neighbor-bot run build && npm --prefix insta-bot run build && npm --prefix backlink-bot run build",
     "build": "npm run build:web && npm run build:bots",
     "test:safety": "npm run build:bots && node scripts/test-account-lock.mjs && node scripts/test-place360-contract.mjs",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\" \"cd naver-bot && npm start\" \"cd neighbor-bot && npm start\" \"cd insta-bot && npm start\"",
@@ -60,6 +60,10 @@
       {
         "from": "insta-bot/dist",
         "to": "insta-bot/dist"
+      },
+      {
+        "from": "backlink-bot/dist",
+        "to": "backlink-bot/dist"
       },
       {
         "from": "chromium",

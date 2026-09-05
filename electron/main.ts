@@ -9,6 +9,7 @@ let tray: Tray | null = null;
 let botProcess: ChildProcess | null = null;
 let neighborBotProcess: ChildProcess | null = null;
 let instaBotProcess: ChildProcess | null = null;
+let backlinkBotProcess: ChildProcess | null = null;
 
 // ── 봇 서버 워치독 등록부 ──
 // 각 봇 서버가 자신을 여기 등록한다. 주기적 health 체크가 "죽었거나 응답 없는(hung)"
@@ -369,6 +370,19 @@ async function startInstaBotServer() {
   });
 }
 
+// 🔗 백링크 봇(3374) — 백링크 게시·색인. playwright는 봇형 소스만 쓰고 대부분 API형이라 naver-bot node_modules 공유.
+async function startBacklinkBotServer() {
+  await forkBotServer({
+    name: "backlink-bot",
+    botPath: resourceDir("backlink-bot"),
+    chromiumPath: resourceDir("chromium"),
+    port: 3374,
+    extraEnv: { NODE_PATH: path.join(resourceDir("naver-bot"), "node_modules") },
+    getProc: () => backlinkBotProcess,
+    setProc: p => { backlinkBotProcess = p; },
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     // 🚦 트래픽 앱은 퍼블리(전체화면)와 달리 "작은 사각형 창"(목업 기준). 최대화·전체화면 막아 항상 컴팩트.
@@ -439,6 +453,7 @@ app.whenReady().then(async () => {
   await startBotServer();
   await startNeighborBotServer();
   await startInstaBotServer();
+  await startBacklinkBotServer();
   startBotWatchdog();            // ★ 봇 서버 자동 감시·복구 시작
   createWindow();
   createTray();                  // 창을 닫아도 예약 실행은 트레이에서 계속

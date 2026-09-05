@@ -49,6 +49,14 @@ jobs:
         env:
           NODE_PATH: ../naver-bot/node_modules
 
+      - name: Install backlink-bot dependencies
+        working-directory: backlink-bot
+        run: npm install
+
+      - name: Bundle backlink-bot (esbuild)
+        working-directory: backlink-bot
+        run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
+
       - name: Install Playwright Chromium (naver-bot)
         working-directory: naver-bot
         run: npx playwright install chromium
@@ -149,6 +157,14 @@ jobs:
         run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
         env:
           NODE_PATH: ../naver-bot/node_modules
+
+      - name: Install backlink-bot dependencies
+        working-directory: backlink-bot
+        run: npm install
+
+      - name: Bundle backlink-bot (esbuild)
+        working-directory: backlink-bot
+        run: npx esbuild src/server.ts --bundle --platform=node --target=node20 --outfile=dist/server.js --external:playwright
 
       - name: Install Playwright Chromium (naver-bot)
         working-directory: naver-bot
