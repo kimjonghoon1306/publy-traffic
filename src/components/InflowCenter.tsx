@@ -209,6 +209,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [spread, setSpread] = useState(saved0.spread ?? false);   // ⏱️ 시간 분산
   const [spreadHours, setSpreadHours] = useState<number>(saved0.spreadHours ?? 3);
   const [doReview, setDoReview] = useState<boolean>(saved0.doReview ?? false); // ✍️ 리뷰(관리자 락)
+  const [doNeighbor, setDoNeighbor] = useState<boolean>(saved0.doNeighbor ?? false); // 👥 이웃추가(블로그·로그인 필요)
   const [reviewText, setReviewText] = useState<string>(saved0.reviewText ?? "");
   const [auto, setAuto] = useState(saved0.auto ?? false);
   const [actionRate, setActionRate] = useState<number>(saved0.actionRate ?? 100); // 🎲 액션 발동 확률(%)
@@ -814,12 +815,12 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     try {
       localStorage.setItem(formKey, JSON.stringify({
         targetType, keywordsPlace, keywordsBlog, keywordsStore, rounds, termMin, termMax, device,
-        doSave, doShare, doDir, doCall, doBook, doTalk, doLike, doWish, doCart, doOption, funnel, spread, spreadHours, doReview, reviewText, auto, actionRate, intensity, maxDwellSec, dataSaver, kwWeights,
+        doSave, doShare, doDir, doCall, doBook, doTalk, doLike, doNeighbor, doWish, doCart, doOption, funnel, spread, spreadHours, doReview, reviewText, auto, actionRate, intensity, maxDwellSec, dataSaver, kwWeights,
       }));
       // 추가대상은 대상별 전체(extraByType)를 저장해야 다른 탭 것이 안 사라진다
       localStorage.setItem(privateKey, JSON.stringify({ placeUrl, blogUrl, storeUrl, extraByType }));
     } catch {}
-  }, [formKey, privateKey, targetType, placeUrl, blogUrl, storeUrl, keywordsPlace, keywordsBlog, keywordsStore, rounds, termMin, termMax, device, doSave, doShare, doDir, doCall, doBook, doTalk, doLike, doWish, doCart, doOption, funnel, spread, spreadHours, doReview, reviewText, auto, actionRate, intensity, maxDwellSec, dataSaver, extraByType, kwWeights]);
+  }, [formKey, privateKey, targetType, placeUrl, blogUrl, storeUrl, keywordsPlace, keywordsBlog, keywordsStore, rounds, termMin, termMax, device, doSave, doShare, doDir, doCall, doBook, doTalk, doLike, doNeighbor, doWish, doCart, doOption, funnel, spread, spreadHours, doReview, reviewText, auto, actionRate, intensity, maxDwellSec, dataSaver, extraByType, kwWeights]);
 
   // 🔔 앱 내 자동 알림 — 날짜/주차 마커로 중복을 막고, 다음 실행 때 놓친 알림도 알림함에 쌓는다.
   useEffect(() => {
@@ -931,7 +932,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     const params = new URLSearchParams({
       targetType, keywords: kwList.join(","), rounds: String(n),
       termMin: String(termMin), termMax: String(termMax),
-      doSave: String(doSave), doLike: String(doLike), doShare: String(doShare),
+      doSave: String(doSave), doLike: String(doLike), doNeighbor: String(doNeighbor), doShare: String(doShare),
       doDir: String(doDir), doCall: String(doCall), doBook: String(doBook), doTalk: String(doTalk),
       doWish: String(doWish), doCart: String(doCart), doOption: String(doOption), device,
       fullFunnel: String(funnel),
@@ -1189,7 +1190,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     const placeFree: [string, boolean, (b: boolean) => void, string][] = [["dir", doDir, setDoDir, "🧭 길찾기"], ["call", doCall, setDoCall, "📞 전화"], ["book", doBook, setDoBook, "📅 예약"], ["talk", doTalk, setDoTalk, "💬 톡톡"], ["share", doShare, setDoShare, "🔗 공유"]];
     const placeLogin: [string, boolean, (b: boolean) => void, string][] = [["save", doSave, setDoSave, "💾 저장"], ["review", doReview, setDoReview, "✍️ 리뷰"]];
     const blogFree: [string, boolean, (b: boolean) => void, string][] = [["share", doShare, setDoShare, "🔗 공유"], ["funnel", funnel, setFunnel, "🌀 퍼널유입(다른글·이웃)"]];
-    const blogLogin: [string, boolean, (b: boolean) => void, string][] = [["like", doLike, setDoLike, "💚 공감"]];
+    const blogLogin: [string, boolean, (b: boolean) => void, string][] = [["like", doLike, setDoLike, "💚 공감"], ["neighbor", doNeighbor, setDoNeighbor, "👥 이웃추가"]];
     const storeFree: [string, boolean, (b: boolean) => void, string][] = [["option", doOption, setDoOption, "🔍 옵션보기"], ["share", doShare, setDoShare, "🔗 공유"]];
     const storeLogin: [string, boolean, (b: boolean) => void, string][] = [["wish", doWish, setDoWish, "💚 찜"], ["cart", doCart, setDoCart, "🛒 장바구니"]];
     const freeActs = targetType === "place" ? placeFree : targetType === "store" ? storeFree : blogFree;
@@ -1896,6 +1897,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               {actionAllowed("share") && <ActionChk v={doShare} set={setDoShare} label="🔗 공유" />}
             </>) : (<>
               {actionAllowed("like") && <ActionChk v={doLike} set={setDoLike} label="💚 공감 🔑" />}
+              {actionAllowed("neighbor") && <ActionChk v={doNeighbor} set={setDoNeighbor} label="👥 이웃추가 🔑" />}
               {actionAllowed("share") && <ActionChk v={doShare} set={setDoShare} label="🔗 공유" />}
             </>)}
             <ActionChk v={auto} set={setAuto} label="⚙️ 자동(오늘 한도까지)" />

@@ -5482,7 +5482,7 @@ async function inflowDwellRead(page: any, log: (m: string) => void, shouldStop?:
 }
 
 // 저장/공감 등 액션(로그인 필요). 셀렉터는 방어적 — 실패해도 유입 자체는 유효.
-type InflowActions = { save?: boolean; like?: boolean; share?: boolean; directions?: boolean; call?: boolean; booking?: boolean; talk?: boolean; review?: boolean; reviewText?: string; wish?: boolean; cart?: boolean; optionView?: boolean; rate?: number; loginAvailable?: boolean };
+type InflowActions = { save?: boolean; like?: boolean; neighbor?: boolean; share?: boolean; directions?: boolean; call?: boolean; booking?: boolean; talk?: boolean; review?: boolean; reviewText?: string; wish?: boolean; cart?: boolean; optionView?: boolean; rate?: number; loginAvailable?: boolean };
 // 🔎 공유/더보기 버튼 못 찾을 때 실제 DOM의 후보 요소(text·class·aria)를 로그로 덤프 → 셀렉터 교정용
 async function dumpShareCandidates(page: any, log: (m: string) => void): Promise<void> {
   try {
@@ -5603,6 +5603,18 @@ async function inflowActions(page: any, target: InflowTarget, actions: InflowAct
         }
       } else {
         if (!await clickFirst(['a.spi_sns_share', 'a[class*="spi_sns_share"]', 'a:text-is("공유")', 'a:has-text("공유")', 'button:has-text("공유")', '[class*="share"] a'], "  🔗 공유")) { log("  ⚙️ [진단] 공유 버튼 못 찾음 — 네이버 화면 변경 의심."); await dumpShareCandidates(page, log); }
+      }
+    }
+    // 👥 이웃추가 — 블로그 전용·로그인 필요·진짜 팬 신호. 페이지 이동 가능성 있어 맨 마지막에 실행.
+    if (target.type === "blog" && roll(actions.neighbor)) {
+      const clicked = await clickFirst(['a:has-text("이웃추가")', 'button:has-text("이웃추가")', 'a[href*="BuddyAddForm"]', 'a[href*="BuddyAdd"]', 'a:has-text("서로이웃")', '[class*="buddy"] a'], "  👥 이웃추가");
+      if (clicked) {
+        await page.waitForTimeout(inflowRndInt(900, 1800));
+        // 서로이웃 신청 폼이 떴으면 서로이웃 라디오 선택 후 확인(서이추 검증본 셀렉터 재사용). best-effort.
+        await page.evaluate(() => { const r = document.querySelector("#bothBuddyRadio, input[name='relation'][value='1']") as HTMLInputElement | null; if (r) r.click(); }).catch(() => {});
+        await clickFirst(['a:has-text("다음")', 'button:has-text("다음")', 'a:has-text("확인")', 'button:has-text("확인")', 'button:has-text("신청")', 'a.btn_ok'], "  👥 이웃신청");
+      } else {
+        log("  ⚙️ [진단] 이웃추가 버튼 못 찾음 — 로그인 필요/이미 이웃/차단 가능.");
       }
     }
   } catch (e: any) {

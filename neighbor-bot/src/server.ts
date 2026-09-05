@@ -1130,7 +1130,7 @@ app.get("/api/post-body", async (req, res) => {
 
 /* ── 🆕 NEW 트래픽 유입 (검색유입, SSE) — 기본 잠금(관리자가 켠 회원만), 관리자=락 해제 ── */
 app.post("/api/inflow", async (req, res) => {
-  const { userId, accountId, accountIds, keywords, targetType, placeUrl, blogId, logNo, rounds, termMin, termMax, doSave, doLike, doShare, doDir, doCall, doBook, doTalk, doWish, doCart, doOption, device, fullFunnel, spreadHours, doReview, reviewText, visible, actionRate, dwellBaseSec, dwellCustomSec, dataSaver, extraTargets, keywordWeights } = req.body as Record<string, string>;
+  const { userId, accountId, accountIds, keywords, targetType, placeUrl, blogId, logNo, rounds, termMin, termMax, doSave, doLike, doNeighbor, doShare, doDir, doCall, doBook, doTalk, doWish, doCart, doOption, device, fullFunnel, spreadHours, doReview, reviewText, visible, actionRate, dwellBaseSec, dwellCustomSec, dataSaver, extraTargets, keywordWeights } = req.body as Record<string, string>;
   if (!keywords || !targetType) return res.status(400).json({ error: "keywords·targetType 필요" });
   const memberToken = String(req.get("X-Publy-Session") || "");
   const adminToken = String(req.get("X-Publy-Admin-Session") || "");
@@ -1253,7 +1253,7 @@ app.post("/api/inflow", async (req, res) => {
       rounds: n,
       device: (device === "pc" || device === "mix") ? device : "mobile",
       intervalSec: [tmin, tmax],
-      actions: { save: doSave === "true" && licAllow("save"), like: doLike === "true" && licAllow("like"), share: doShare === "true" && licAllow("share"), directions: doDir === "true" && licAllow("dir"), call: doCall === "true" && licAllow("call"), booking: doBook === "true" && licAllow("book"), talk: doTalk === "true" && licAllow("talk"), wish: doWish === "true" && licAllow("wish"), cart: doCart === "true" && licAllow("cart"), optionView: doOption === "true" && licAllow("option"), review: doReview === "true" && reviewOk && licAllow("review"), reviewText: reviewText || "" },
+      actions: { save: doSave === "true" && licAllow("save"), like: doLike === "true" && licAllow("like"), share: doShare === "true" && licAllow("share"), directions: doDir === "true" && licAllow("dir"), call: doCall === "true" && licAllow("call"), booking: doBook === "true" && licAllow("book"), talk: doTalk === "true" && licAllow("talk"), wish: doWish === "true" && licAllow("wish"), cart: doCart === "true" && licAllow("cart"), optionView: doOption === "true" && licAllow("option"), neighbor: doNeighbor === "true" && licAllow("neighbor"), review: doReview === "true" && reviewOk && licAllow("review"), reviewText: reviewText || "" },
       fullFunnel: fullFunnel === "true" && licAllow("funnel"),
       spreadHours: spreadHours ? Math.max(0, parseFloat(spreadHours)) : 0,
       visible: visible === "true",
@@ -1261,7 +1261,7 @@ app.post("/api/inflow", async (req, res) => {
       dwellBaseSec: dwellBaseSec ? Math.max(5, parseFloat(dwellBaseSec)) : 60,
       dwellCustomSec: dwellCustomSec ? Math.max(0, parseFloat(dwellCustomSec)) : 0,
       dataSaver: (dataSaver === "save" || dataSaver === "max") ? dataSaver : "normal",
-      requireLogin: doSave === "true" || doLike === "true" || doWish === "true" || doCart === "true" || reviewOk,   // 저장·공감·찜·장바구니·리뷰는 로그인 필요(예약·톡톡·공유·옵션탐색은 로그인 없이)
+      requireLogin: doSave === "true" || doLike === "true" || doNeighbor === "true" || doWish === "true" || doCart === "true" || reviewOk,   // 저장·공감·이웃추가·찜·장바구니·리뷰는 로그인 필요(예약·톡톡·공유·옵션탐색은 로그인 없이)
       onLog: (msg) => sseSend(res, { type: "log", msg }),
       onProgress: (done, total) => sseSend(res, { type: "progress", done, total }),
       onShot: (caption, dataUrl) => sseSend(res, { type: "shot", caption, dataUrl }),   // 📸 화면 캡처 전송
