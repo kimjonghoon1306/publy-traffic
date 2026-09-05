@@ -2228,7 +2228,7 @@ export async function getTrafficLicenses(customer: string): Promise<ToolLicense[
       .from("tool_licenses")
       .select("tool,expire_at,data_saver,plan,allowed_actions,bonus_quota")
       .eq("customer", customer)
-      .in("tool", ["place", "blog", "store"]);
+      .in("tool", ["place", "blog", "store", "backlink"]);
     if (error || !data) return [];
     const rows = data as any[];
     if (!rows.length) return [];
