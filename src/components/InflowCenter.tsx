@@ -441,7 +441,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       else if (d.type === "posts") { const arr = (d.posts || []) as { url: string; title: string; date: string }[]; setMyPosts(arr); setSelectedPosts(new Set(arr.map((p) => p.url))); pushLog(`✅ 공개 글 ${arr.length}개 불러옴`); toast(`📚 공개 글 ${arr.length}개를 불러왔어요`, "success"); setMyPostsLoading(false); es.close(); }
       else if (d.type === "error") { pushLog(`❌ 공개 글 수집 실패 — ${d.msg}`); toast(d.msg, "error"); setMyPostsLoading(false); es.close(); }
     };
-    es.onerror = () => { pushLog(`❌ 공개 글 수집 연결 오류 — 봇 서버(3334)를 확인해주세요`); toast("공개 글 수집 실패 — 봇 서버(3334) 확인", "error"); setMyPostsLoading(false); es.close(); };
+    es.onerror = () => { pushLog(`❌ 공개 글 수집 연결 오류 — 봇 서버(3364)를 확인해주세요`); toast("공개 글 수집 실패 — 봇 서버(3364) 확인", "error"); setMyPostsLoading(false); es.close(); };
   };
 
   // 🔐 로그인해서 내 글 불러오기 — 계정 관리에서 연결한 계정으로 내 글 목록 수집(SSE). 모든 과정 라이브 로그.
@@ -492,7 +492,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       const j = await r.json();
       if (j.error) { toast(j.error, "error"); }
       else { setDiag(j); toast(`최적화 점수 ${j.score}점`, "success"); }
-    } catch { toast("진단 실패 — 봇 서버(3334)를 확인하세요", "error"); }
+    } catch { toast("진단 실패 — 봇 서버(3364)를 확인하세요", "error"); }
     finally { setDiagLoading(false); }
   };
 
@@ -526,7 +526,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
         pushLog(`📍 현재 "${kw}" ${j.rank}위${apEnabled ? ` (목표 ${apGoal}위)` : ""} — 기록했어요`);
         toast(`현재 "${kw}" ${j.rank}위 — 기록했어요`, "success");
       }
-    } catch { pushLog("❌ 순위 측정 실패 — 봇 서버(3334)를 확인해주세요"); toast("순위 측정 실패 — 봇 서버(3334) 확인", "error"); }
+    } catch { pushLog("❌ 순위 측정 실패 — 봇 서버(3364)를 확인해주세요"); toast("순위 측정 실패 — 봇 서버(3364) 확인", "error"); }
     finally { setRankLoading(false); }
   };
 
@@ -564,7 +564,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       // 순위 못 찾음(에러 없음) = 30위 밖 → 측정은 됨, 목표 미달로 보고 유입
       pushLog("📍 순위 30위 밖 — 유입으로 끌어올려요.");
       return { measured: true, reached: false };
-    } catch { pushLog("📍 순위 측정 실패 — 봇 서버(3334) 확인"); return fail; }
+    } catch { pushLog("📍 순위 측정 실패 — 봇 서버(3364) 확인"); return fail; }
   };
 
   // 🔎 키워드 발굴 — 입력한 키워드 seed로 숨은 키워드 추천
@@ -580,7 +580,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       const list = (j.keywords || []).map((k: any)=>k.keyword).filter((k: string)=>k && !already.has(k)).slice(0, 24);
       if (!list.length) { toast("새로운 추천 키워드가 없어요", "info"); }
       setKwSuggest(list);
-    } catch { toast("키워드 추천 실패 — 봇 서버(3334) 확인", "error"); }
+    } catch { toast("키워드 추천 실패 — 봇 서버(3364) 확인", "error"); }
     finally { setKwLoading(false); }
   };
   const addSuggestedKeyword = (k: string) => {
@@ -624,7 +624,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       const BAD = ["불친절", "비싸", "느리", "오래 기다", "대기", "주차", "좁", "위생", "별로", "실망", "짜", "불만", "아쉬"];
       const count = (words: string[]) => words.map(w => ({ word: w, n: reviews.filter(rv => rv.includes(w)).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
       setRevResult({ total: reviews.length, likes: count(LIKE).slice(0, 6), dislikes: count(BAD).slice(0, 6) });
-    } catch { toast("리뷰 분석 실패 — 봇 서버(3334) 확인", "error"); }
+    } catch { toast("리뷰 분석 실패 — 봇 서버(3364) 확인", "error"); }
     finally { setRevLoading(false); }
   };
 
@@ -643,7 +643,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       else if (d.type === "stats") { setBlogDiag(d.stats); pushLog("✅ 블로그 진단 완료"); toast("블로그 진단 완료", "success"); setBlogDiagLoading(false); es.close(); }
       else if (d.type === "error") { pushLog(`❌ 블로그 진단 실패 — ${d.msg}`); toast(d.msg, "error"); setBlogDiagLoading(false); es.close(); }
     };
-    es.onerror = () => { pushLog("❌ 블로그 진단 연결 오류 — 봇 서버(3334) 확인"); toast("블로그 진단 실패 — 봇 서버(3334) 확인", "error"); setBlogDiagLoading(false); es.close(); };
+    es.onerror = () => { pushLog("❌ 블로그 진단 연결 오류 — 봇 서버(3364) 확인"); toast("블로그 진단 실패 — 봇 서버(3364) 확인", "error"); setBlogDiagLoading(false); es.close(); };
   };
 
   // 🛒 스토어 상품 진단(store 전용) — /api/store-info. 프록시+브라우저로 상품 페이지 읽어 리뷰수·찜·평점·가격.
@@ -658,7 +658,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       else if (d.type === "store") { setStoreInfo(d.info); pushLog("✅ 상품 진단 완료"); toast("상품 진단 완료", "success"); setStoreInfoLoading(false); es.close(); }
       else if (d.type === "error") { pushLog(`❌ 상품 진단 실패 — ${d.msg}`); toast(d.msg, "error"); setStoreInfoLoading(false); es.close(); }
     };
-    es.onerror = () => { pushLog("❌ 상품 진단 연결 오류 — 봇 서버(3334) 확인"); toast("상품 진단 실패 — 봇 서버(3334) 확인", "error"); setStoreInfoLoading(false); es.close(); };
+    es.onerror = () => { pushLog("❌ 상품 진단 연결 오류 — 봇 서버(3364) 확인"); toast("상품 진단 실패 — 봇 서버(3364) 확인", "error"); setStoreInfoLoading(false); es.close(); };
   };
 
   // 🥊 경쟁사 추적 — 내 키워드 상위 경쟁사 vs 나
@@ -671,7 +671,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       const j = await r.json();
       if (j.error) toast(j.error, "error");
       else setComp(j);
-    } catch { toast("경쟁사 조회 실패 — 봇 서버(3334) 확인", "error"); }
+    } catch { toast("경쟁사 조회 실패 — 봇 서버(3364) 확인", "error"); }
     finally { setCompLoading(false); }
   };
 
@@ -1000,7 +1000,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
         pushLog(j.active
           ? `🔒 프록시 IP 사용 — 내 실제 IP를 가려서 안전하게 접속해요`
           : `🌐 프록시 미배정 — 내 IP 그대로 접속해요(관리자에게 프록시 배정 요청 가능)`);
-      } catch { pushLog(`🌐 프록시 상태 확인 실패 — 봇 서버(3334)를 확인해주세요`); }
+      } catch { pushLog(`🌐 프록시 상태 확인 실패 — 봇 서버(3364)를 확인해주세요`); }
     })();
     pushLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     const es = new BotEventStream(`${BOT}/api/inflow`, {
@@ -1019,7 +1019,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       else if (d.type === "inflow_done") { setSessOk(d.success || 0); pushLog(`🏁 완료 — 총 ${d.done}회 방문, 성공 ${d.success}회`); toast(`유입 완료 · 성공 ${d.success}회`, "success"); setRunning(false); es.close(); esRef.current = null; if (scheduledRunPendingRef.current) { scheduledRunPendingRef.current = false; if (userId && Number(d.success) > 0) void markInflowScheduleRan(userId, scheduledRunScopeRef.current || currentScope); } refreshStats(); if (apEnabled && (targetType === "place" || targetType === "blog")) { pushLog("📍 순위 자동 측정 중…"); autopilotCheckRef.current().then(() => { if (userId) getRankHistory(userId, chartDays, currentScope).then(setRankHist).catch(() => {}); }); } }
       else if (d.type === "error") { scheduledRunPendingRef.current = false; pushLog(`❌ ${d.msg}`); toast(d.msg, "error"); setRunning(false); es.close(); esRef.current = null; }
     };
-    es.onerror = () => { scheduledRunPendingRef.current = false; pushLog("❌ 봇 연결 오류 — 봇 서버(포트 3334)가 켜져 있는지 확인해주세요"); toast("봇 연결 오류", "error"); setRunning(false); es.close(); esRef.current = null; };
+    es.onerror = (detail?: string) => { scheduledRunPendingRef.current = false; const why = detail ? ` — ${detail}` : " — 봇 서버(포트 3364)가 켜져 있는지 확인해주세요(앱을 완전히 껐다 켜기)"; pushLog(`❌ 유입 시작 실패${why}`); toast(`유입 시작 실패${detail ? " · " + detail : " · 봇 연결 확인"}`, "error"); setRunning(false); es.close(); esRef.current = null; };
     es.onclose = () => setRunning(false);
   };
   startRef.current = start;
