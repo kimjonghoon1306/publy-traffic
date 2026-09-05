@@ -5581,6 +5581,8 @@ async function inflowActions(page: any, target: InflowTarget, actions: InflowAct
         ], "  🔗 URL 복사(공유 신호)");
         if (!copied) {
           const opened = await clickFirst([
+            // ★실측 DOM진단(2026-09-05): 신뷰어 헤더 공유버튼 class="civ__header__btn--share" 텍스트"공유" = 진짜 공유레이어 트리거. 최우선.
+            '[class*="civ__header__btn--share"]', 'a[class*="civ__header__btn--share"]', 'button[class*="civ__header__btn--share"]',
             'a.naver-splugin', '.naver-splugin', '[class*="naver-splugin"]',
             'a:has-text("공유하기")', 'button:has-text("공유하기")',
             'button[aria-label*="공유"]', 'a[aria-label*="공유"]',
