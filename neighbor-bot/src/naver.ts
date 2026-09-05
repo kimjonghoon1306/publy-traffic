@@ -5574,19 +5574,30 @@ async function inflowActions(page: any, target: InflowTarget, actions: InflowAct
         // 블로그(PC/모바일 새 뷰)는 공유가 '더보기(⋯/⋮)' 메뉴 안에 있음(실측 스샷 2026-09-04).
         //   ① 더보기·공유 트리거 클릭 → ② 공유 레이어에서 'URL 복사'만(카톡·밴드 등 외부이동/새창 방지) → ③ Esc로 닫기.
         //   ★플레이스용 [class*="share"] a 를 블로그에 쓰면 카카오톡·밴드 공유 링크를 눌러 창이 튀므로 분리한다.
-        const opened = await clickFirst([
-          'a:has-text("공유하기")', 'button:has-text("공유하기")',
-          'button[aria-label*="공유"]', 'a[aria-label*="공유"]',
-          'button.btn_share', 'a.btn_share', 'button[class*="share"]',
-          'button[aria-label*="더보기"]', 'button.btn_more', 'a.btn_more', '.btn_etc',
-        ], "  🔗 공유 메뉴 열기");
-        if (opened) {
-          await page.waitForTimeout(inflowRndInt(700, 1500));
-          const copied = await clickFirst(['button:has-text("URL 복사")', 'a:has-text("URL 복사")', 'button:text-is("복사")', 'a:text-is("복사")', 'a:has-text("링크 복사")'], "  🔗 링크 복사(공유 신호)");
-          if (!copied) log("  🔗 공유 레이어 열림 — 복사 버튼은 못 찾아 열람 신호만");
-          await page.keyboard.press("Escape").catch(() => {});
-        } else {
-          log("  ⚙️ [진단] 블로그 공유 버튼 못 찾음 — 더보기(⋯) 메뉴 셀렉터 확인 필요."); await dumpShareCandidates(page, log);
+        // 실측 DOM(2026-09-05 진단): 공유 트리거=<a class="naver-splugin">공유하기</a>, 복사=<a class="_copy_url">URL복사</a>(띄어쓰기 없음).
+        //   ① URL복사(_copy_url)가 이미 보이면 그것만 눌러 URL 복사 = 안전한 공유 신호(외부창 X). ② 없으면 공유하기(naver-splugin) 열고 복사.
+        let copied = await clickFirst([
+          'a._copy_url', '._copy_url', '[class*="_copy_url"]', 'a:has-text("URL복사")', 'button:has-text("URL복사")',
+        ], "  🔗 URL 복사(공유 신호)");
+        if (!copied) {
+          const opened = await clickFirst([
+            'a.naver-splugin', '.naver-splugin', '[class*="naver-splugin"]',
+            'a:has-text("공유하기")', 'button:has-text("공유하기")',
+            'button[aria-label*="공유"]', 'a[aria-label*="공유"]',
+            'button.btn_share', 'a.btn_share', 'button[class*="share"]',
+            'button[aria-label*="더보기"]', 'button.btn_more', 'a.btn_more', '.btn_etc', '[class*="MoreMenu"]',
+          ], "  🔗 공유 메뉴 열기");
+          if (opened) {
+            await page.waitForTimeout(inflowRndInt(700, 1500));
+            copied = await clickFirst([
+              'a._copy_url', '._copy_url', 'a:has-text("URL복사")', 'button:has-text("URL복사")',
+              'button:has-text("URL 복사")', 'a:has-text("URL 복사")', 'button:text-is("복사")', 'a:text-is("복사")', 'a:has-text("링크 복사")',
+            ], "  🔗 링크 복사(공유 신호)");
+            if (!copied) log("  🔗 공유 레이어 열림 — 복사 버튼은 못 찾아 열람 신호만");
+            await page.keyboard.press("Escape").catch(() => {});
+          } else {
+            log("  ⚙️ [진단] 블로그 공유 버튼 못 찾음 — 더보기(⋯) 메뉴 셀렉터 확인 필요."); await dumpShareCandidates(page, log);
+          }
         }
       } else {
         if (!await clickFirst(['a.spi_sns_share', 'a[class*="spi_sns_share"]', 'a:text-is("공유")', 'a:has-text("공유")', 'button:has-text("공유")', '[class*="share"] a'], "  🔗 공유")) { log("  ⚙️ [진단] 공유 버튼 못 찾음 — 네이버 화면 변경 의심."); await dumpShareCandidates(page, log); }
