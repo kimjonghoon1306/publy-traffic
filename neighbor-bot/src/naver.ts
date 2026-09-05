@@ -5574,28 +5574,26 @@ async function inflowActions(page: any, target: InflowTarget, actions: InflowAct
         // 블로그(PC/모바일 새 뷰)는 공유가 '더보기(⋯/⋮)' 메뉴 안에 있음(실측 스샷 2026-09-04).
         //   ① 더보기·공유 트리거 클릭 → ② 공유 레이어에서 'URL 복사'만(카톡·밴드 등 외부이동/새창 방지) → ③ Esc로 닫기.
         //   ★플레이스용 [class*="share"] a 를 블로그에 쓰면 카카오톡·밴드 공유 링크를 눌러 창이 튀므로 분리한다.
-        // 실측 DOM(2026-09-05 진단): 공유 트리거=<a class="naver-splugin">공유하기</a>, 복사=<a class="_copy_url">URL복사</a>(띄어쓰기 없음).
-        //   ① URL복사(_copy_url)가 이미 보이면 그것만 눌러 URL 복사 = 안전한 공유 신호(외부창 X). ② 없으면 공유하기(naver-splugin) 열고 복사.
-        let copied = await clickFirst([
-          'a._copy_url', '._copy_url', '[class*="_copy_url"]', 'a:has-text("URL복사")', 'button:has-text("URL복사")',
-        ], "  🔗 URL 복사(공유 신호)");
+        // 실측 DOM(2026-09-06 진단): 공유버튼(URL복사=_copy_url, 공유하기=naver-splugin)이 숨은 레이어 안에 있어
+        //   Playwright clickFirst는 "안 보임"으로 판단해 클릭 거부 → 못 눌렀음. 해결=JS로 직접 .click()(가시성 무관).
+        //   ① URL복사(_copy_url)를 JS로 바로 클릭(외부창 없는 안전한 공유 신호) ② 없으면 공유하기 열고 다시 URL복사.
+        const jsClickShare = async (needle: string): Promise<boolean> => await page.evaluate((n: string) => {
+          const els = Array.from(document.querySelectorAll('a,button,span,[role="button"]')) as any[];
+          const el = els.find(e => String(e.className || "").includes(n) || (e.textContent || "").replace(/\s+/g, "").includes(n));
+          if (el) { el.click(); return true; }
+          return false;
+        }, needle).catch(() => false);
+
+        let copied = await jsClickShare("_copy_url") || await jsClickShare("URL복사");
+        if (copied) log("  🔗 URL 복사 완료(공유 신호)");
         if (!copied) {
-          const opened = await clickFirst([
-            // ★실측 DOM진단(2026-09-05): 신뷰어 헤더 공유버튼 class="civ__header__btn--share" 텍스트"공유" = 진짜 공유레이어 트리거. 최우선.
-            '[class*="civ__header__btn--share"]', 'a[class*="civ__header__btn--share"]', 'button[class*="civ__header__btn--share"]',
-            'a.naver-splugin', '.naver-splugin', '[class*="naver-splugin"]',
-            'a:has-text("공유하기")', 'button:has-text("공유하기")',
-            'button[aria-label*="공유"]', 'a[aria-label*="공유"]',
-            'button.btn_share', 'a.btn_share', 'button[class*="share"]',
-            'button[aria-label*="더보기"]', 'button.btn_more', 'a.btn_more', '.btn_etc', '[class*="MoreMenu"]',
-          ], "  🔗 공유 메뉴 열기");
+          const opened = await jsClickShare("civ__header__btn--share") || await jsClickShare("naver-splugin") || await jsClickShare("공유하기");
           if (opened) {
-            await page.waitForTimeout(inflowRndInt(700, 1500));
-            copied = await clickFirst([
-              'a._copy_url', '._copy_url', 'a:has-text("URL복사")', 'button:has-text("URL복사")',
-              'button:has-text("URL 복사")', 'a:has-text("URL 복사")', 'button:text-is("복사")', 'a:text-is("복사")', 'a:has-text("링크 복사")',
-            ], "  🔗 링크 복사(공유 신호)");
-            if (!copied) log("  🔗 공유 레이어 열림 — 복사 버튼은 못 찾아 열람 신호만");
+            log("  🔗 공유 메뉴 열림");
+            await page.waitForTimeout(inflowRndInt(900, 1600));
+            copied = await jsClickShare("_copy_url") || await jsClickShare("URL복사");
+            if (copied) log("  🔗 URL 복사 완료(공유 신호)");
+            else log("  🔗 공유 레이어 열림 — 복사 버튼은 못 찾아 열람 신호만");
             await page.keyboard.press("Escape").catch(() => {});
           } else {
             log("  ⚙️ [진단] 블로그 공유 버튼 못 찾음 — 더보기(⋯) 메뉴 셀렉터 확인 필요."); await dumpShareCandidates(page, log);
