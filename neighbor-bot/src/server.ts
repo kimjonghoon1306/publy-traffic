@@ -1140,12 +1140,13 @@ app.post("/api/inflow", async (req, res) => {
   //   plan만 보고 우회하면 회원이 admin/unlimited userId를 사칭해 권한상승할 수 있어 금지.
   const isVerifiedAdmin = adminToken ? await verifyAdminSession(adminToken) : false;
   if (!isVerifiedAdmin && (!userId || !await verifyInflowSession(memberToken, userId))) return res.status(401).json({ error: "회원 세션이 올바르지 않습니다" });
-  const inflowPlan = isVerifiedAdmin ? "admin" : (userId ? await getUserPlan(userId) : "free");
+  const authToken = isVerifiedAdmin ? adminToken : memberToken;
+  const inflowPlan = isVerifiedAdmin ? "admin" : (userId ? await getUserPlan(userId, authToken) : "free");
   // 🔐 트래픽 라이선스 서버검증 — 회원(비관리자)은 승인된 대상만·승인된 행동만(로컬 요청 조작 우회 차단).
   let licActionSet: Set<string> | null = null;
   let licPlan: string | null = null;   // 트래픽 등급/한도의 소스오브트루스 = tool_licenses(컨트롤타워 발급). publy_users.plan 무시.
   if (!isVerifiedAdmin && userId) {
-    const lic = await getTrafficLicenseForTool(userId, String(targetType));
+    const lic = await getTrafficLicenseForTool(userId, String(targetType), authToken);
     if (!lic || !lic.ok) return res.status(403).json({ error: "승인되지 않았거나 만료된 트래픽 대상입니다. 관리자에게 문의하세요." });
     licActionSet = new Set(lic.actions);
     licPlan = lic.plan || "basic";     // 무제한(테리 테스트 발급 등)은 여기서 unlimited로 잡혀 한도 스킵된다.
@@ -1236,7 +1237,7 @@ app.post("/api/inflow", async (req, res) => {
     res.on("close", () => { stopped = true; });
 
     // ✍️ 리뷰 자동작성은 관리자 락(기본 잠금) — 권한 없으면 안내 후 리뷰만 건너뜀
-    const reviewOk = doReview === "true" ? await inflowReviewAllowed(userId) : false;
+    const reviewOk = doReview === "true" ? await inflowReviewAllowed(userId, authToken) : false;
     if (doReview === "true" && !reviewOk) sseSend(res, { type: "log", msg: "🔒 리뷰 자동작성은 관리자 승인이 필요해요 — 리뷰는 건너뛰고 진행합니다" });
 
     // 🔄 다계정 로테이션 — 위에서 파싱·락한 acctIdsArr를 그대로 사용(저장·찜·공감을 여러 계정 번갈아)
@@ -1244,6 +1245,7 @@ app.post("/api/inflow", async (req, res) => {
       accountId: accountId || "",
       accountIds: acctIdsArr,
       ownerUserId: userId || undefined,
+      authToken,
       keywords: kwList,
       keywordWeights: kwWeightsArr,
       target,

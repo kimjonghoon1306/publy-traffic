@@ -227,24 +227,36 @@ export async function consumeInflowQuota(token: string, userId: string, limit: n
 }
 
 // ✍️ 리뷰 자동작성 권한 — 기본 잠금. 관리자·무제한 플랜은 항상 허용, 그 외엔 inflow_review_enabled=true인 회원만.
-export async function inflowReviewAllowed(userId?: string | null): Promise<boolean> {
+async function getUserViaRpc(token: string | undefined, userId: string): Promise<any | null> {
+  if (!token) return null;
+  const { data, error } = await supabase.rpc("bot_get_user", { p_token: token, p_user_id: userId });
+  if (error) throw error;
+  return data || null;
+}
+
+export async function inflowReviewAllowed(userId?: string | null, token?: string): Promise<boolean> {
   if (!userId) return false;
   if (userId === "admin-publy") return true;
   try {
-    const { data } = await supabase.from("publy_users").select("plan,inflow_review_enabled").eq("id", userId).maybeSingle();
+    let data: any = null;
+    try { data = await getUserViaRpc(token, userId); } catch { /* Phase A: RPC 미배포 시 기존 조회 */ }
+    if (!data) ({ data } = await supabase.from("publy_users").select("plan,inflow_review_enabled").eq("id", userId).maybeSingle());
     const plan = (data as any)?.plan;
     if (plan === "admin" || plan === "unlimited") return true;   // 관리자·무제한은 락 없음
     return (data as any)?.inflow_review_enabled === true;
   } catch { return false; }
 }
 
-export async function checkMembershipAccess(userId: string, feature?: "crawl" | "place360" | "inflow"): Promise<{ ok: boolean; plan: string; reason?: string }> {
+export async function checkMembershipAccess(userId: string, feature?: "crawl" | "place360" | "inflow", token?: string): Promise<{ ok: boolean; plan: string; reason?: string }> {
   if (userId === "admin-publy") return { ok: true, plan: "admin" };
   try {
-    const [{ data: user }, { data: quota }] = await Promise.all([
-      supabase.from("publy_users").select("plan,is_active,crawl_enabled,place360_enabled,inflow_enabled,inflow_review_enabled").eq("id", userId).maybeSingle(),
+    let user: any = null;
+    try { user = await getUserViaRpc(token, userId); } catch { /* Phase A: RPC 미배포 시 기존 조회 */ }
+    const [{ data: legacyUser }, { data: quota }] = await Promise.all([
+      user ? Promise.resolve({ data: null }) : supabase.from("publy_users").select("plan,is_active,crawl_enabled,place360_enabled,inflow_enabled,inflow_review_enabled").eq("id", userId).maybeSingle(),
       supabase.from("publy_quotas").select("reset_date").eq("user_id", userId).maybeSingle(),
     ]);
+    user ||= legacyUser;
     const plan = user?.plan || "free";
     if (!user || user.is_active === false) return { ok: false, plan, reason: "비활성 회원" };
     if (!quota?.reset_date || new Date(quota.reset_date).getTime() <= Date.now()) return { ok: false, plan, reason: "이용기간 만료" };
@@ -354,15 +366,17 @@ export async function incrementTitleEditQuota(userId: string): Promise<void> {
 }
 
 /* ── 회원 플랜 조회 ── */
-export async function getUserPlan(userId: string): Promise<string> {
-  return (await checkMembershipAccess(userId)).plan;
+export async function getUserPlan(userId: string, token?: string): Promise<string> {
+  return (await checkMembershipAccess(userId, undefined, token)).plan;
 }
 
 // 🔐 트래픽 라이선스 서버검증 — 회원이 로컬요청 조작해도 미승인 대상/잠긴 행동 우회 못하게.
 //   userId→email(publy_users)→tool_licenses(customer,tool). 만료·status·행동·등급을 서버가 판단.
-export async function getTrafficLicenseForTool(userId: string, tool: string): Promise<{ ok: boolean; plan: string; actions: string[]; bonus: number } | null> {
+export async function getTrafficLicenseForTool(userId: string, tool: string, token?: string): Promise<{ ok: boolean; plan: string; actions: string[]; bonus: number } | null> {
   try {
-    const { data: u } = await supabase.from("publy_users").select("email").eq("id", userId).maybeSingle();
+    let u: any = null;
+    try { u = await getUserViaRpc(token, userId); } catch { /* Phase A: RPC 미배포 시 기존 조회 */ }
+    if (!u) ({ data: u } = await supabase.from("publy_users").select("email").eq("id", userId).maybeSingle());
     const email = (u as any)?.email;
     if (!email) return null;
     const { data } = await supabase.from("tool_licenses").select("plan,allowed_actions,bonus_quota,expire_at,status").eq("customer", email).eq("tool", tool).maybeSingle();
@@ -374,8 +388,12 @@ export async function getTrafficLicenseForTool(userId: string, tool: string): Pr
 }
 
 /* ── 관리자 블로그 검색 API 키 조회 ── */
-export async function getAdminBlogSearchKeys(): Promise<{ clientId: string; clientSecret: string } | null> {
+export async function getAdminBlogSearchKeys(token?: string): Promise<{ clientId: string; clientSecret: string } | null> {
   try {
+    if (token) {
+      const { data, error } = await supabase.rpc("bot_get_datalab_keys", { p_token: token });
+      if (!error && data?.client_id && data?.client_secret) return { clientId: data.client_id, clientSecret: data.client_secret };
+    }
     const { data: idRow } = await supabase
       .from("publy_settings")
       .select("value")
@@ -466,11 +484,19 @@ function normalizeProxyServer(server: string): string {
 }
 
 // 특정 user_id(계정 또는 회원)에 배정된 프록시를 조회. feature 토글 반영.
-async function _lookupProxy(userId: string, feature?: string): Promise<ProxyConfig | null> {
+async function _lookupProxy(userId: string, feature?: string, token?: string): Promise<ProxyConfig | null> {
   const key = `${userId}::${feature || ""}`;
   const cached = _proxyCache.get(key);
   if (cached && Date.now() - cached.ts < PROXY_CACHE_MS) return cached.proxy;
   try {
+    if (token) {
+      const { data, error } = await supabase.rpc("bot_get_account_proxy", { p_token: token, p_user_id: userId, p_feature: feature || null });
+      if (!error && data?.server) {
+        const proxy = { server: normalizeProxyServer(data.server), username: (data.username || "").replace(/[\s]+/g, "") || undefined, password: (data.password || "").trim() || undefined };
+        _proxyCache.set(key, { proxy, ts: Date.now() });
+        return proxy;
+      }
+    }
     const { data: map } = await supabase
       .from("publy_account_proxy")
       .select("proxy_id, features")
@@ -504,14 +530,14 @@ async function _lookupProxy(userId: string, feature?: string): Promise<ProxyConf
 
 // 계정(accountId)에 직접 배정된 프록시 우선, 없으면 그 계정을 쓰는 회원(ownerUserId)에 배정된 프록시를 쓴다.
 //   → 관리자가 "회원"에게 프록시를 배정하면, 그 회원이 어느 계정으로 돌리든 프록시가 적용된다.
-export async function getProxyForAccount(userId?: string | null, feature?: string, ownerUserId?: string | null): Promise<ProxyConfig | null> {
+export async function getProxyForAccount(userId?: string | null, feature?: string, ownerUserId?: string | null, token?: string): Promise<ProxyConfig | null> {
   // ★크롤링은 accountId=""(공개검색)이라 userId가 비어도 ownerUserId(회원 배정)로 프록시를 찾아야 한다.
   let proxy: ProxyConfig | null = null;
-  if (userId) proxy = await _lookupProxy(userId, feature);
-  if (!proxy && ownerUserId && ownerUserId !== userId) proxy = await _lookupProxy(ownerUserId, feature);
+  if (userId) proxy = await _lookupProxy(userId, feature, token);
+  if (!proxy && ownerUserId && ownerUserId !== userId) proxy = await _lookupProxy(ownerUserId, feature, token);
   // 🔒 프록시는 기본 — 배정이 없어도 기본 프록시로 항상 연결(테리: 프록시 항상 ON).
   //    크레덴셜은 코드가 아니라 DB(publy_settings.default_inflow_proxy)에서 읽어 공개레포 노출 방지.
-  if (!proxy) proxy = await getDefaultProxy();
+  if (!proxy) proxy = await getDefaultProxy(token);
   if (proxy) incrementProxyUsage().catch(() => {});   // 🌐 프록시 접속 카운트(B, 사용량 실시간 체크)
   return proxy;
 }
@@ -519,10 +545,15 @@ export async function getProxyForAccount(userId?: string | null, feature?: strin
 // 🔒 기본 프록시(모든 회원 공통 폴백) — publy_settings.default_inflow_proxy 의 JSON
 //    { "server":"gw.dataimpulse.com:823", "username":"...", "password":"..." }
 let _defaultProxyCache: { proxy: ProxyConfig | null; ts: number } | null = null;
-async function getDefaultProxy(): Promise<ProxyConfig | null> {
+async function getDefaultProxy(token?: string): Promise<ProxyConfig | null> {
   if (_defaultProxyCache && Date.now() - _defaultProxyCache.ts < PROXY_CACHE_MS) return _defaultProxyCache.proxy;
   let proxy: ProxyConfig | null = null;
   try {
+    if (token) {
+      const { data, error } = await supabase.rpc("bot_get_default_proxy", { p_token: token });
+      if (!error && data?.server) proxy = { server: normalizeProxyServer(data.server), username: data.username || undefined, password: data.password || undefined };
+    }
+    if (proxy) { _defaultProxyCache = { proxy, ts: Date.now() }; return proxy; }
     const { data } = await supabase.from("publy_settings").select("value").eq("key", "default_inflow_proxy").maybeSingle();
     if (data?.value) {
       // value가 jsonb면 이미 객체, text면 문자열 → 둘 다 안전 처리

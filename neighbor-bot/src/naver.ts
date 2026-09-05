@@ -53,10 +53,10 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
    업체 미선정 상태여도 안전: 배정된 프록시가 없으면 그냥 로컬 IP로 뜬다. */
 async function launchBrowser(
   userId: string | null | undefined,
-  opts: { headless?: boolean; maximized?: boolean; slowMo?: number; log?: (s: string) => void; feature?: string; ownerUserId?: string | null } = {}
+  opts: { headless?: boolean; maximized?: boolean; slowMo?: number; log?: (s: string) => void; feature?: string; ownerUserId?: string | null; authToken?: string } = {}
 ) {
   const args = opts.maximized ? [...LAUNCH_ARGS, "--start-maximized"] : LAUNCH_ARGS;
-  const proxy = await getProxyForAccount(userId, opts.feature, opts.ownerUserId);
+  const proxy = await getProxyForAccount(userId, opts.feature, opts.ownerUserId, opts.authToken);
   if (proxy) {
     const masked = (() => {
       try {
@@ -5775,6 +5775,7 @@ export async function diagnosePlace(params: { placeUrl: string; onLog?: (m: stri
 export async function searchInflow(params: {
   accountId: string;
   ownerUserId?: string;
+  authToken?: string;               // 검증된 회원 또는 관리자 세션 — 민감 프록시 RPC용
   keywords: string[];              // 여러 키워드 로테이션
   keywordWeights?: number[];       // 키워드별 비중(가중치). 없으면 균등
   target: InflowTarget;            // 플레이스 or 블로그(단일)
@@ -5857,7 +5858,7 @@ export async function searchInflow(params: {
     let browser: any = null;
     let proxyUnavailable = false;
     try {
-      browser = await launchBrowser(acct, { headless: !params.visible, feature: "inflow", ownerUserId: params.ownerUserId, log });
+      browser = await launchBrowser(acct, { headless: !params.visible, feature: "inflow", ownerUserId: params.ownerUserId, authToken: params.authToken, log });
       // 접속 기기 결정 — mix면 방문마다 랜덤(사람처럼 모바일/PC 섞임)
       const dev = params.device === "mix" ? (Math.random() < 0.5 ? "pc" : "mobile") : (params.device === "pc" ? "pc" : "mobile");
       const context = await browser.newContext(
