@@ -3045,35 +3045,19 @@ POST3: (제목)|(이유)
   async function saveUser(u: UserFull) {
     const e = editMap[u.id]||{}; setSaving(u.id);
     try {
+      // 🔒🔒 트래픽 앱은 publy_users.plan(등급)·publy_quotas(발행한도)를 절대 건드리지 않는다.
+      //   이 테이블들은 퍼블리와 공유 → 여기서 등급/한도를 저장하면 퍼블리 회원 등급이 오염된다(2026-09-05 실제 사고).
+      //   트래픽 등급/한도는 관리자 컨트롤타워(tool_licenses)로만 발급한다. 여기선 메모·연락처만 저장.
       const upd: any = {};
-      if (e.plan&&e.plan!==u.plan) upd.plan=e.plan;
       if (e.memo!==undefined) upd.memo=e.memo;
       if (e.phone!==undefined) upd.phone=e.phone;
       if (Object.keys(upd).length>0) {
-        const {data,error}=await supabase.from("publy_users").update(upd).eq("id",u.id).select("id,plan,memo,phone");
+        const {data,error}=await supabase.from("publy_users").update(upd).eq("id",u.id).select("id,memo,phone");
         if(error) throw new Error(`회원정보 저장 실패: ${error.message}`);
         const saved=data?.[0];
-        if(!saved || (upd.plan!==undefined&&saved.plan!==upd.plan) || (upd.memo!==undefined&&saved.memo!==upd.memo) || (upd.phone!==undefined&&saved.phone!==upd.phone)) throw new Error("회원정보/등급 저장 실패 — 권한/RLS로 반영된 행이 없거나 값이 일치하지 않습니다");
+        if(!saved || (upd.memo!==undefined&&saved.memo!==upd.memo) || (upd.phone!==undefined&&saved.phone!==upd.phone)) throw new Error("회원정보 저장 실패 — 권한/RLS로 반영된 행이 없거나 값이 일치하지 않습니다");
       }
-      const quotaUpdate:any={};
-      if(e.plan&&e.plan!==u.plan) quotaUpdate.total_quota=PLAN_QUOTA[e.plan]||10;
-      if(e.quota!==undefined){
-        if(!u.quota) throw new Error("한도 저장 실패 — 회원의 publy_quotas 행이 없습니다");
-        const total=Number(e.quota); if(!Number.isFinite(total)||total<0) throw new Error("한도는 0 이상의 숫자여야 합니다");
-        quotaUpdate.total_quota=total; quotaUpdate.used_quota=Math.min(u.quota.used_quota,total);
-      }
-      if(e.days!==undefined){
-        if(!u.quota) throw new Error("만료일 저장 실패 — 회원의 publy_quotas 행이 없습니다");
-        const days=Number(e.days); if(!Number.isFinite(days)) throw new Error("기간은 숫자여야 합니다");
-        const d=new Date(u.quota.reset_date); d.setDate(d.getDate()+days); quotaUpdate.reset_date=d.toISOString();
-      }
-      if(Object.keys(quotaUpdate).length){
-        const {data,error}=await supabase.from("publy_quotas").update(quotaUpdate).eq("user_id",u.id).select("user_id,total_quota,used_quota,reset_date");
-        if(error) throw new Error(`한도/만료일 저장 실패: ${error.message}`);
-        const saved=data?.[0];
-        if(!saved || Object.entries(quotaUpdate).some(([k,v])=>(saved as Record<string,unknown>)[k]!==v)) throw new Error("한도/만료일 저장 실패 — 권한/RLS로 반영된 행이 없거나 값이 일치하지 않습니다");
-      }
-      await loadUsers(); setEditMap(p=>{const n={...p};delete n[u.id];return n;}); alert("저장됨");
+      await loadUsers(); setEditMap(p=>{const n={...p};delete n[u.id];return n;}); alert("저장됨 (등급·한도는 컨트롤타워에서 관리)");
     } catch(e:any) { alert("오류: "+e.message); }
     finally { setSaving(null); }
   }
@@ -3082,9 +3066,8 @@ POST3: (제목)|(이유)
     if (!confirm("이 회원의 오늘 사용 건수를 모두 0으로 초기화할까요?\n(발행·서이추·공감·댓글·답방·지수·품앗이 전부)")) return;
     try {
       const today = new Date().toISOString().slice(0, 10);
-      // 1) 발행 quota(누적 사용량) 0으로
-      await supabase.from("publy_quotas").update({ used_quota: 0 }).eq("user_id", uid);
-      // 2) 모든 기능 일일 카운터 통째 삭제 — publy_settings의 `{기능}_daily_{uid}_{오늘}` 키
+      // 🔒 트래픽은 publy_quotas(퍼블리 발행 누적 한도, 퍼블리와 공유)를 건드리지 않는다 — 공유테이블 오염 방지(2026-09-05).
+      // 일일 카운터만 통째 삭제 — publy_settings의 `{기능}_daily_{uid}_{오늘}` 키
       //    (발행/서이추/공감/답방/지수/품앗이 전부가 이 형식으로 저장됨 → 지우면 전부 0/한도)
       const { error } = await supabase.from("publy_settings").delete().like("key", `%_daily_${uid}_${today}`);
       if (error) throw new Error(error.message);
@@ -3106,10 +3089,11 @@ POST3: (제목)|(이유)
   async function toggleMultiDevice(u: UserFull) { try { const cur=u.allow_multi_device===true; const next=!cur; const {data,error}=await supabase.from("publy_users").update({allow_multi_device:next, ...(next?{active_device_id:null}:{})}).eq("id",u.id).select("id,allow_multi_device"); if(error)throw new Error(error.message); if(!data?.[0]||data[0].allow_multi_device!==next)throw new Error("권한/RLS로 반영된 행이 없습니다"); await loadUsers(); showToast(next?`🔓 ${u.name||u.email} 여러 기기 허용(어디서나 열림)`:`🔒 ${u.name||u.email} 한 기기만 로그인`, "success"); } catch(e:any){ showToast("기기 설정 저장 실패 — "+e.message, "error"); } }
   async function addNote(uid: string) { if (!newNote.trim()) return; try { const content=newNote.trim(); const {data,error}=await supabase.from("publy_notes").insert({user_id:uid,content}).select("id,user_id,content"); if(error)throw new Error(error.message); if(!data?.[0]||data[0].user_id!==uid||data[0].content!==content)throw new Error("권한/RLS로 반영된 행이 없습니다"); setNewNote(""); await loadUsers(); } catch(e:any){alert("메모 추가 실패 — "+e.message);} }
   async function addPayment(uid: string, plan: string) {
-    if (!newPayAmt) return; setAddingPay(true);
-    try { const amount=Number(newPayAmt); if(!Number.isFinite(amount))throw new Error("결제 금액이 올바르지 않습니다"); const {data:pay,error:payError}=await supabase.from("publy_payments").insert({user_id:uid,amount,plan,method:"manual",status:"completed",note:newPayNote||undefined}).select("id,user_id,amount,plan"); if(payError)throw new Error(payError.message); if(!pay?.[0]||pay[0].user_id!==uid||pay[0].plan!==plan)throw new Error("결제 내역이 권한/RLS로 저장되지 않았습니다"); const {data:userRows,error:userError}=await supabase.from("publy_users").update({plan}).eq("id",uid).select("id,plan"); if(userError)throw new Error(userError.message); if(!userRows?.[0]||userRows[0].plan!==plan)throw new Error("회원 등급이 권한/RLS로 저장되지 않았습니다"); const expected=PLAN_QUOTA[plan]||10; const {data:quotaRows,error:quotaError}=await supabase.from("publy_quotas").update({total_quota:expected}).eq("user_id",uid).select("user_id,total_quota"); if(quotaError)throw new Error(quotaError.message); if(!quotaRows?.[0]||quotaRows[0].total_quota!==expected)throw new Error("회원 한도가 권한/RLS로 저장되지 않았습니다"); setNewPayAmt(""); setNewPayNote(""); await loadUsers(); alert("✅ 결제와 등급/한도를 저장했습니다."); }
-    catch(e:any){alert("결제 등록 실패 — "+e.message);}
-    finally { setAddingPay(false); }
+    // 🔒🔒 트래픽 앱은 결제/등급을 여기서 처리하지 않는다.
+    //   publy_users.plan·publy_quotas는 퍼블리와 공유하는 테이블 → 여기서 등급/한도를 저장하면 퍼블리 회원 등급이 오염된다(2026-09-05 사고).
+    //   트래픽 결제·등급은 관리자 컨트롤타워(tool_licenses)에서만 발급한다.
+    void uid; void plan;
+    alert("트래픽 등급·결제는 관리자 컨트롤타워(tool_licenses)에서 발급합니다.\n여기서 저장하면 퍼블리 회원 등급이 바뀌므로 비활성화했어요.");
   }
   async function changeAdminPw() {
     if (!newPw1 || newPw1 !== newPw2) { setPwMsg("비밀번호를 확인하세요"); return; }
