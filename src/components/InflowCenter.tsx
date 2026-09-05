@@ -1247,7 +1247,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
 
           {/* 🔗 백링크 탭이면 백링크 화면(도메인·현황·로그·색인키). 유입 본체는 아래 !blTab로 숨김(탭이동 초기화 방지 위해 언마운트 아님). */}
           <div style={{ display: blTab ? "block" : "none" }}>
-            <BacklinkTab theme={theme} />
+            <BacklinkTab theme={theme} memberEmail={memberEmail} memberName={memberName} />
           </div>
 
           {/* 유입 본체 — 백링크 탭일 땐 숨김 */}

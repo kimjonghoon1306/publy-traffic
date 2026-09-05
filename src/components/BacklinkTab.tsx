@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { supabase, getMemberSessionToken } from "../lib/supabase";
+import { supabase, getMemberSessionToken, sendTrafficLog } from "../lib/supabase";
 
 // 🔗 회원 백링크 탭 — 트래픽 앱 안의 4번째 기능(플레이스/블로그/스토어/백링크).
 //   회원이 본인 도메인 입력 → 자동 게시·색인 → 상세 로그·현황. 빙키(색인)는 관리자가 넣어주거나 본인이 넣음.
@@ -23,7 +23,7 @@ const LOGC = (dark: boolean): Record<string, { bg: string; fg: string; label: st
 });
 const PLAN_LABEL: Record<string, string> = { basic: "베이직", pro: "프로", premium: "프리미엄" };
 
-export default function BacklinkTab({ theme }: { theme: "dark" | "light" }) {
+export default function BacklinkTab({ theme, memberEmail, memberName }: { theme: "dark" | "light"; memberEmail?: string; memberName?: string }) {
   const dark = theme === "dark";
   const C = dark
     ? { bg: "#14121c", win: "#1c1a26", ink: "#e8e6f0", sub: "#9a95ad", line: "#2a2735", panel: "#232030", accent: "#a78bfa", soft: "#2e1065" }
@@ -43,6 +43,8 @@ export default function BacklinkTab({ theme }: { theme: "dark" | "light" }) {
   const [keyInput, setKeyInput] = useState("");
   const [keyMsg, setKeyMsg] = useState("");
   const [keyOpen, setKeyOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sentMsg, setSentMsg] = useState("");
 
   const loadSubs = useCallback(async () => {
     try {
@@ -87,6 +89,18 @@ export default function BacklinkTab({ theme }: { theme: "dark" | "light" }) {
     await supabase.rpc("backlink_set_my_indexnow", { p_token: token, p_key: "" });
     setKeyMasked(null); setKeyMsg("키를 삭제했어요 — 본인 키를 새로 넣으세요"); loadMyKey();
   }, [token, loadMyKey]);
+
+  // 📨 문제 생기면 로그 전체를 관리자에게 전송(트래픽과 동일 traffic_log_send). 관리자 로그함으로 도착.
+  const sendLogToAdmin = useCallback(async () => {
+    setSending(true); setSentMsg("");
+    try {
+      const head = `[🔗 백링크] 도메인: ${cur?.target_domain || "-"} · 등급: ${cur?.plan || "-"} · 오늘 ${cur?.today_posted ?? 0}/${cur?.daily_limit ?? 0} · 누적 ${cur?.total_posted ?? 0} · 색인 ${cur?.indexed ?? 0} · 재시도 ${cur?.failed ?? 0}`;
+      const body = logs.map(l => `[${l.kind}] ${l.msg} (${l.at ? new Date(l.at).toLocaleString("ko-KR") : ""})`).join("\n");
+      await sendTrafficLog(memberEmail || "", memberName || "", (head + "\n\n" + body).slice(0, 20000), "백링크");
+      setSentMsg("✅ 관리자에게 로그를 보냈어요 — 곧 확인 후 도와드려요");
+    } catch (e: any) { setSentMsg("전송 실패: " + (e?.message || e)); }
+    setSending(false); setTimeout(() => setSentMsg(""), 5000);
+  }, [cur, logs, memberEmail, memberName]);
 
   const card = (extra: React.CSSProperties = {}): React.CSSProperties => ({ background: C.win, border: `1px solid ${C.line}`, borderRadius: 14, padding: 16, ...extra });
   const chip = (bg: string, fg: string): React.CSSProperties => ({ padding: "3px 11px", borderRadius: 99, fontSize: 11.5, fontWeight: 800, background: bg, color: fg });
@@ -183,10 +197,15 @@ export default function BacklinkTab({ theme }: { theme: "dark" | "light" }) {
 
         {/* 진행 보고서 — 8단계 상세 로그(주소 비공개, 신뢰지표만) */}
         <div style={card()}>
-          <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 4, display: "flex", alignItems: "center", gap: 8, color: C.ink }}>
+          <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 4, display: "flex", alignItems: "center", gap: 8, color: C.ink, flexWrap: "wrap" }}>
             <span style={{ width: 4, height: 15, borderRadius: 2, background: C.accent }} />진행 보고서
             <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 단계별 상세 (안전상 게시 주소는 비공개)</span>
+            <button onClick={sendLogToAdmin} disabled={!logs.length || sending}
+              style={{ marginLeft: "auto", padding: "6px 12px", borderRadius: 8, border: "none", background: logs.length ? C.accent : C.line, color: "#fff", fontSize: 12, fontWeight: 800, cursor: logs.length && !sending ? "pointer" : "default" }}>
+              {sending ? "보내는 중…" : "📨 관리자에게 보내기"}
+            </button>
           </div>
+          {sentMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700, marginBottom: 8 }}>{sentMsg}</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
             {logs.length === 0 ? (
               <div style={{ textAlign: "center", color: C.sub, padding: 20, fontSize: 13 }}>곧 자동으로 게시가 시작됩니다 (예약 대기 중)</div>
