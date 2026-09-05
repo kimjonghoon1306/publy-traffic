@@ -2162,7 +2162,9 @@ Output (JSON object only): {"keyword":"핵심키워드","title":"새 제목","st
 
   async function loadUsers() {
     setLoading(true);
-    const {data} = await supabase.from("publy_users").select("*").order("created_at",{ascending:false});
+    // 🔒 비밀번호 해시(password_hash)는 조회하지 않는다 — 안전 컬럼만 명시 조회(anon에 비번 노출 차단, 2026-09-05).
+    const {data,error} = await supabase.from("publy_users").select("id,email,name,plan,app_type,is_active,created_at,updated_at,phone,memo,joined_plan,last_login,last_seen,crawl_enabled,place360_enabled,active_device_id,allow_multi_device,active_mobile_device_id,active_app_device_id,inflow_enabled,inflow_review_enabled").order("created_at",{ascending:false});
+    if (error) { console.error("[회원목록] 로드 실패", error); alert("회원목록을 불러오지 못했어요: "+error.message+"\n(권한/네트워크 확인)"); setLoading(false); return; }
     if (!data) { setLoading(false); return; }
     const full = await Promise.all(data.map(async u => {
       const [{data:q},{data:p},{data:n},{count}] = await Promise.all([
