@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { PublyUser, PublyAccount, getAccounts, upsertAccount, deleteTrafficAccount, getTrafficLicenses, TRAFFIC_PLAN_LIMIT, ToolLicense, getMemberSessionToken } from "./lib/supabase";
 import { botFetch } from "./lib/botApi";
 import InflowCenter from "./components/InflowCenter";
-// import OrderHome from "./components/OrderHome";  // M2 홈화면 — 본문 분기 완성+M3와 함께 활성화 예정(현재 보류)
+import OrderHome from "./components/OrderHome";
 
 const BOT = "http://127.0.0.1:3363";
 
@@ -40,9 +40,11 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
   const [licFetchedAt, setLicFetchedAt] = useState(0);
   const [allowedFeatures, setAllowedFeatures] = useState<("place" | "blog" | "store" | "backlink")[]>([]);
   const [activeTool, setActiveTool] = useState<string>("");   // 🎫 현재 선택한 탭 — 하단 대여 그래프를 이 탭 기준으로(탭마다 만료 다름).
+  const [homeView, setHomeView] = useState(true);   // 🏠 로그인 후 첫 화면=홈(주문·신청). 승인된 기능 쓰려면 대시보드로.
   const [licenseSaver, setLicenseSaver] = useState<string>("");
   const [licenseByFeat, setLicenseByFeat] = useState<Record<string, { limit: number; actions: string[]; plan: string }>>({});
   const licSigRef = useRef<string>("");
+  const homeInitRef = useRef(false);   // 🏠 첫 라이선스 로드 시 1회만: 승인 기능 있으면 대시보드 직행, 없으면 홈 유지.
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -62,6 +64,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
         });
         const sig = JSON.stringify([feats.slice().sort(), strongest, byFeat, ok.map(l => Math.round((l.remain_sec ?? 0) / 60))]);
         if (sig !== licSigRef.current) { licSigRef.current = sig; setLics(ok); setAllowedFeatures(feats); setLicenseSaver(strongest); setLicenseByFeat(byFeat); setLicFetchedAt(Date.now()); }
+        if (!homeInitRef.current) { homeInitRef.current = true; if (feats.length > 0) setHomeView(false); }   // 기존 회원(승인有)=대시보드 직행, 신규(승인0)=홈에서 주문
       } catch {}
     };
     void load();
@@ -173,14 +176,20 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
           {/* 🎫 대표 등급 배지 제거(2026-09-06 테리) — 등급은 탭마다 개별 표시되므로 헤더 중복 삭제 */}
           <span style={{ fontSize: 11.5, color: C.sub, fontWeight: 700 }}>{user.name || user.email}</span>
           <button onClick={onThemeToggle} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.line2}`, background: C.win, color: C.ink, cursor: "pointer", fontSize: 13 }}>{dark ? "☀️" : "🌙"}</button>
+          <button onClick={() => setHomeView(h => !h)} style={btn(C.panel, C.accent)}>{homeView ? "📊 대시보드" : "🏠 홈·주문"}</button>
           <button onClick={() => setShowAcc(true)} style={btn(C.panel, C.accent)}>🔗 계정</button>
           <button onClick={onLogout} style={btn(C.panel, C.sub)}>로그아웃</button>
         </div>
       </div>
 
-      {/* 본문 = 유입 엔진(InflowCenter) */}
+      {/* 본문 = 홈(주문) ↔ 유입 엔진(InflowCenter). ★ 조건부 렌더(언마운트) 금지 → display 토글로 InflowCenter 실행 유지(CLAUDE.md A원칙). */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 18px" }}>
-        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} licenseRemainByFeat={licenseRemainByFeat} onActiveToolChange={setActiveTool} onBusyChange={setInflowBusy} externalAccounts={accounts} memberEmail={user.email} memberName={user.name} />
+        <div style={{ display: homeView ? "block" : "none" }}>
+          <OrderHome token={getMemberSessionToken()} theme={theme} memberName={user.name} approvedFeats={allowedFeatures} onGoDashboard={() => setHomeView(false)} />
+        </div>
+        <div style={{ display: homeView ? "none" : "block" }}>
+          <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} licenseRemainByFeat={licenseRemainByFeat} onActiveToolChange={setActiveTool} onBusyChange={setInflowBusy} externalAccounts={accounts} memberEmail={user.email} memberName={user.name} />
+        </div>
       </div>
 
       {/* 하단 대여 카운트다운 */}
