@@ -40,6 +40,9 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const [domainMsg, setDomainMsg] = useState("");
   // 빙키(색인 키) — 값 있으면 켜진 것. 관리자가 넣어줬든 본인이 넣었든 이 칸에 보임.
   const [keyMasked, setKeyMasked] = useState<string | null>(null);
+  const [keyScope, setKeyScope] = useState<string>("own");     // admin=관리자공용키 / own=본인키 / off
+  const [isAdminKey, setIsAdminKey] = useState(false);          // true=지금 보이는 키가 관리자가 넣어준 공용키
+  const [keyWaiting, setKeyWaiting] = useState(false);          // true=색인 대기(본인키 없고 관리자 지정도 아님)
   const [keyInput, setKeyInput] = useState("");
   const [keyMsg, setKeyMsg] = useState("");
   const [keyOpen, setKeyOpen] = useState(false);
@@ -60,7 +63,14 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   }, [token]);
 
   const loadMyKey = useCallback(async () => {
-    try { const { data } = await supabase.rpc("backlink_my_indexnow", { p_token: token }); const r = (data && data[0]) || null; setKeyMasked(r?.key_masked || null); } catch {}
+    try {
+      const { data } = await supabase.rpc("backlink_my_indexnow", { p_token: token });
+      const r = (data && data[0]) || null;
+      setKeyMasked(r?.key_masked || null);
+      setKeyScope(r?.scope || "own");
+      setIsAdminKey(!!r?.is_admin_key);
+      setKeyWaiting(!!r?.waiting);
+    } catch {}
   }, [token]);
 
   useEffect(() => { loadSubs(); loadMyKey(); const iv = setInterval(loadSubs, 20000); return () => clearInterval(iv); }, [loadSubs, loadMyKey]);
@@ -161,34 +171,67 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
           </div>
         </div>
 
-        {/* 🔑 색인 키 — 값 있으면 켜진 것. 관리자가 넣어줬든 본인이 넣었든 이 칸에 보임(테리 방식) */}
-        <div style={card({ marginBottom: 12, border: `1px solid ${keyOn ? "#16a34a55" : C.line}` })}>
+        {/* 🔑 색인 키 — 관리자가 공용키를 넣어줬으면(isAdminKey) 회원화면에도 "관리자가 넣어줌"으로 보임.
+            그대로 둬도 되고, 삭제 후 본인 키를 넣을 수도 있음(테리 방식). 발급받기 버튼 포함. */}
+        <div style={card({ marginBottom: 12, border: `1px solid ${keyOn ? "#16a34a55" : (keyWaiting ? "#f59e0b55" : C.line)}` })}>
           <div onClick={() => setKeyOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
             <b style={{ fontSize: 14, color: C.ink }}>🔑 색인 키 <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 검색·AI가 더 빨리 읽게</span></b>
-            <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, ...chip(keyOn ? logC.post.bg : C.panel, keyOn ? logC.post.fg : C.sub) }}>
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: keyOn ? "#16a34a" : C.sub, boxShadow: keyOn ? "0 0 7px #16a34a" : "none" }} />
-              {keyOn ? "키 등록됨 🟢" : "키 없음"}
+            <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, ...chip(keyOn ? logC.post.bg : (keyWaiting ? logC.warn.bg : C.panel), keyOn ? logC.post.fg : (keyWaiting ? logC.warn.fg : C.sub)) }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: keyOn ? "#16a34a" : (keyWaiting ? "#f59e0b" : C.sub), boxShadow: keyOn ? "0 0 7px #16a34a" : "none" }} />
+              {keyOn ? (isAdminKey ? "관리자가 넣어줌 🟢" : "내 키 등록됨 🟢") : (keyWaiting ? "색인 대기 🟡" : "키 없음")}
             </span>
             <span style={{ color: C.sub, fontSize: 13 }}>{keyOpen ? "▲" : "▼"}</span>
           </div>
-          {keyOn && !keyOpen && <div style={{ marginTop: 8, fontSize: 12.5, color: C.sub }}>등록된 키: <b style={{ color: logC.post.fg }}>🟢 {keyMasked}</b> <span style={{ color: C.sub }}>(관리자 또는 본인이 넣은 키)</span></div>}
+          {!keyOpen && (
+            keyOn ? (
+              <div style={{ marginTop: 8, fontSize: 12.5, color: C.sub }}>
+                {isAdminKey
+                  ? <><b style={{ color: logC.post.fg }}>🟢 관리자가 색인키를 넣어줬어요</b> <span>({keyMasked}) — 그대로 두면 알아서 처리돼요</span></>
+                  : <>내 색인키: <b style={{ color: logC.post.fg }}>🟢 {keyMasked}</b></>}
+              </div>
+            ) : keyWaiting ? (
+              <div style={{ marginTop: 8, fontSize: 12.5, color: logC.warn.fg, fontWeight: 700 }}>
+                🟡 색인 키가 없어 <b>색인 요청이 대기 중</b>이에요 — 아래에서 <b>내 키를 발급·등록</b>하면 검색·AI가 더 빨리(약 3일) 읽어가요. <span style={{ color: C.sub, fontWeight: 600 }}>(게시는 계속 진행돼요)</span>
+              </div>
+            ) : null
+          )}
           {keyOpen && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 12.5, color: C.sub, lineHeight: 1.8, marginBottom: 10 }}>
-                색인 키가 있으면 검색엔진에 <b style={{ color: C.ink }}>“지금 읽어줘”</b> 신호를 보내 <b style={{ color: C.ink }}>더 빨리(약 3일)</b> 반영돼요.
-                {keyMasked ? <><br />지금 등록된 키: <b style={{ color: logC.post.fg }}>🟢 {keyMasked}</b> — 본인 키로 바꾸려면 <b>삭제</b> 후 새로 넣으세요.</> : <><br />없어도 자동으로 처리돼요(선택).</>}
-              </div>
-              <div style={{ fontSize: 12, color: C.ink, lineHeight: 2, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: C.soft }}>
-                <b>📋 본인 키 발급 — 3단계</b><br />
-                <b style={{ color: C.accent }}>1.</b> <span style={{ textDecoration: "underline" }}>빙 웹마스터도구(bing.com/webmasters)</span> 접속 → 사이트 등록<br />
-                <b style={{ color: C.accent }}>2.</b> 오른쪽 위 ⚙️설정 → API 액세스 → API 키 → <b>키(32자리)</b> 복사<br />
+              {/* 상태 안내 */}
+              {isAdminKey ? (
+                <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.8, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: logC.post.bg }}>
+                  <b style={{ color: logC.post.fg }}>🟢 관리자가 색인키를 넣어줬어요</b> <span style={{ color: logC.post.fg }}>({keyMasked})</span><br />
+                  <span style={{ color: C.sub }}>아무것도 안 해도 돼요 — 검색·AI가 내 사이트를 더 빨리 읽어가요.
+                  <b style={{ color: C.ink }}> 내 키로 바꾸고 싶으면</b> 아래 [내 키 넣기]로 발급받아 붙여넣으세요.</span>
+                </div>
+              ) : keyMasked ? (
+                <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.8, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: logC.post.bg }}>
+                  <b style={{ color: logC.post.fg }}>🟢 내 색인키가 등록돼 있어요</b> <span style={{ color: logC.post.fg }}>({keyMasked})</span><br />
+                  <span style={{ color: C.sub }}>바꾸려면 아래에 새 키를 넣고, 비우려면 <b>삭제</b>를 누르세요.</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12.5, color: logC.warn.fg, lineHeight: 1.8, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: logC.warn.bg, fontWeight: 600 }}>
+                  🟡 <b>색인 요청 대기 중</b> — 아직 내 색인키가 없어요. 아래에서 <b>내 키를 발급·등록</b>하면 검색엔진에 <b>“지금 읽어줘”</b> 신호를 보내 <b>더 빨리(약 3일)</b> 반영돼요. <span style={{ color: C.sub }}>(백링크 게시는 키 없이도 계속 진행돼요)</span>
+                </div>
+              )}
+
+              {/* 빙키 발급받기 버튼 + 3단계 안내 */}
+              <button onClick={() => { try { window.open("https://www.bing.com/webmasters", "_blank"); } catch {} }}
+                style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1.5px solid ${C.accent}`, background: C.soft, color: C.accent, fontWeight: 900, fontSize: 13.5, cursor: "pointer", marginBottom: 10 }}>
+                🔷 빙 색인키 발급받기 (빙 웹마스터도구 열기) ↗
+              </button>
+              <div style={{ fontSize: 12, color: C.ink, lineHeight: 2, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: C.panel, border: `1px solid ${C.line}` }}>
+                <b>📋 내 키 발급 — 3단계</b><br />
+                <b style={{ color: C.accent }}>1.</b> 위 버튼으로 <b>빙 웹마스터도구</b> 접속 → 내 사이트 등록<br />
+                <b style={{ color: C.accent }}>2.</b> 오른쪽 위 ⚙️설정 → <b>API 액세스 → IndexNow 키</b> 복사(32자리)<br />
                 <b style={{ color: C.accent }}>3.</b> 아래에 붙여넣고 저장
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <input value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder={keyMasked ? "본인 키로 바꾸려면 붙여넣기" : "발급받은 색인 키 붙여넣기"}
+                <input value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder={isAdminKey ? "내 키로 바꾸려면 붙여넣기(선택)" : keyMasked ? "본인 키로 바꾸려면 붙여넣기" : "발급받은 색인 키 붙여넣기"}
                   style={{ flex: 1, minWidth: 160, padding: "12px 13px", border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, color: C.ink, fontSize: 13.5 }} />
-                <button onClick={saveMyKey} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>저장</button>
-                {keyMasked && <button onClick={clearMyKey} style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${logC.fail.fg}`, background: C.win, color: logC.fail.fg, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>삭제</button>}
+                <button onClick={saveMyKey} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>내 키 넣기</button>
+                {/* 삭제 = 본인키일 때만(관리자 공용키로 되돌림). 관리자키 상태에선 삭제 대상이 없음 */}
+                {keyMasked && !isAdminKey && <button onClick={clearMyKey} style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${logC.fail.fg}`, background: C.win, color: logC.fail.fg, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>삭제</button>}
               </div>
               {keyMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700, marginTop: 8 }}>{keyMsg}</div>}
             </div>
