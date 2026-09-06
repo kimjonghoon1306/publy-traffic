@@ -12,6 +12,7 @@ if (typeof (globalThis as any).WebSocket === "undefined") {
 import { createClient } from "@supabase/supabase-js";
 import { getAdapter, listAdapterDomains } from "./adapters";
 import { runDiscovery } from "./discover";
+import { runGenerate } from "./generate";
 import { PublishInput } from "./adapters/types";
 import { isIndexedBing } from "./indexCheck";
 import { submitIndexNow, groupByHost, INDEXNOW_ENGINES } from "./indexnow";
@@ -35,6 +36,7 @@ app.use((req, res, next) => {
   if (req.path === "/member-publish-stream") return next();
   if (req.path === "/admin-publish-stream") return next();   // 관리자 실행탭도 EventSource(SSE)라 Bearer 못붙임. adminToken은 핸들러 RPC가 자체검증.
   if (req.path === "/discover-stream") return next();        // 어댑터 발굴(SSE)도 Bearer 못붙임. secret은 핸들러가 검증.
+  if (req.path === "/generate-stream") return next();        // 어댑터 생성(SSE)도 Bearer 못붙임. secret은 핸들러가 검증.
   // /health 포함 그 외 전부 인증. ★ naver-bot과 동일 패턴 = 401 응답을 "Unauthorized"(대문자)로 통일해야
   //   앱(main.ts killPort)이 '토큰 다른 옛 우리 봇'으로 인식해 재시작 시 좀비를 정리한다(예전엔 /health 예외+소문자라 좀비가 안 죽어 옛 봇이 계속 3374를 물었음).
   if (req.get("Authorization") === `Bearer ${AUTH_TOKEN}`) return next();
@@ -55,6 +57,28 @@ app.get("/discover-stream", async (req, res) => {
   try {
     await runDiscovery(send, async (r) => {
       try { await sb.rpc("backlink_discovery_record", { p_token: secret, p_domain: r.domain, p_kind: r.kind, p_verdict: r.verdict, p_test_url: r.testUrl || "", p_note: r.note }); } catch { /* 저장 실패 무시 */ }
+    });
+  } catch (e: any) { send({ type: "error", msg: e?.message || String(e) }); }
+  res.end();
+});
+
+// ── ⚙️ 어댑터 생성(SSE): 수량만큼 실제 생성 → 분류·등급 → backlink_sources 배치 ──
+//   GET /generate-stream?secret=456789&count=N
+app.get("/generate-stream", async (req, res) => {
+  const secret = String(req.query.secret || "");
+  const count = Math.max(1, Math.min(500, Number(req.query.count) || 10));
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  const send = (obj: any) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  if (secret !== "456789") { send({ type: "error", msg: "unauthorized" }); return res.end(); }
+  const runId = crypto.randomUUID();
+  // gist 토큰(우리소유 A급 생성용)
+  let gistToken = "";
+  try { const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: secret, p_key: "github_gist_token" }); if (ght) gistToken = String(ght); } catch { /* 없으면 gist 스킵 */ }
+  try {
+    await runGenerate(count, gistToken, (o) => { if (o.type === "done") o.runId = runId; send(o); }, async (g) => {
+      try { await sb.rpc("backlink_gen_record", { p_token: secret, p_run_id: runId, p_domain: g.domain, p_scale: g.scale, p_grade: g.grade, p_detail_url: g.detailUrl || "", p_ok: g.ok, p_note: g.note }); } catch { /* 저장 실패 무시 */ }
     });
   } catch (e: any) { send({ type: "error", msg: e?.message || String(e) }); }
   res.end();

@@ -235,6 +235,25 @@ async function submitIndexNow(host: string, key: string, urls: string[]) {
   } catch { return { result: "error", status: 0 }; }
 }
 
+// ── ⚙️ 어댑터 생성(웹/폰 가능, 순수 fetch) — 우리소유 gist(A) + telegra/graph(B) 수량만큼 생성·배치 ──
+async function genOne(slot: number, gistToken: string): Promise<{ domain: string; scale: string; grade: string; detailUrl?: string; ok: boolean; note: string }> {
+  try {
+    if (slot < 2) {   // 우리소유 gist (A급)
+      if (!gistToken) return { domain: "gist.github.com", scale: "owned", grade: "A", ok: false, note: "github 토큰 미설정" };
+      const res = await fetch("https://api.github.com/gists", { method: "POST", headers: { "Authorization": `token ${gistToken}`, "Content-Type": "application/json", "Accept": "application/vnd.github+json", "User-Agent": "publy-backlink" }, body: JSON.stringify({ description: "source seed", public: true, files: { [`seed_${Date.now()}.md`]: { content: "# seed" } } }) });
+      const j: any = await res.json().catch(() => ({}));
+      if (!res.ok || !j?.html_url) return { domain: "gist.github.com", scale: "owned", grade: "A", ok: false, note: `HTTP ${res.status}` };
+      return { domain: "gist.github.com", scale: "owned", grade: "A", detailUrl: j.html_url, ok: true, note: "우리소유 dofollow 생성" };
+    }
+    const api = (slot % 2 === 0) ? "https://api.telegra.ph" : "https://api.graph.org";
+    const dom = (slot % 2 === 0) ? "telegra.ph" : "graph.org";
+    const acc = await fetch(`${api}/createAccount`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ short_name: "src", author_name: "src" }).toString() });
+    const aj: any = await acc.json().catch(() => ({}));
+    if (!aj?.ok) return { domain: dom, scale: "api", grade: "B", ok: false, note: "계정 생성 실패" };
+    return { domain: dom, scale: "api", grade: "B", detailUrl: `https://${dom}`, ok: true, note: "계정 발급(무한생성 가능)" };
+  } catch (e) { return { domain: "?", scale: "api", grade: "C", ok: false, note: `오류: ${(e as any)?.message || e}` }; }
+}
+
 // ── 핵심 게시 로직(SSE 실행·스케줄러 공유). send 콜백으로 로그 전송(SSE는 스트림, 스케줄러는 무시). posted 반환. ──
 async function runPublish(sb: any, send: (o: any) => void, adminToken: string, orderId: string, targetDomain: string, count: number, kwOverride: string): Promise<number> {
   const targetUrl = targetDomain.startsWith("http") ? targetDomain : `https://${targetDomain}`;
@@ -381,6 +400,35 @@ Deno.serve(async (req) => {
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as any)?.message || String(e) }), { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
     }
+  }
+
+  // ── ⚙️ 어댑터 생성 모드(웹/폰 가능): 수량만큼 생성 → 분류·등급 → backlink_sources 배치. SSE 에너지바. ──
+  if (mode === "generate") {
+    const genSecret = url.searchParams.get("secret") || "";
+    const genCount = Math.max(1, Math.min(500, Number(url.searchParams.get("count")) || 10));
+    const stream2 = new ReadableStream({
+      async start(controller) {
+        const send = (obj: any) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        if (genSecret !== "456789") { send({ type: "error", msg: "unauthorized" }); controller.close(); return; }
+        const runId = crypto.randomUUID();
+        let gistToken = "";
+        try { const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: genSecret, p_key: "github_gist_token" }); if (ght) gistToken = String(ght); } catch { /* 없으면 gist 스킵 */ }
+        send({ type: "log", kind: "wait", msg: `⚙️ 어댑터 생성 시작 — ${genCount}개 (우리소유·API 섞어 도배 방지)` });
+        let ok = 0, fail = 0, owned = 0, api = 0;
+        for (let i = 0; i < genCount; i++) {
+          const g = await genOne(i % 5, gistToken);
+          try { await sb.rpc("backlink_gen_record", { p_token: genSecret, p_run_id: runId, p_domain: g.domain, p_scale: g.scale, p_grade: g.grade, p_detail_url: g.detailUrl || "", p_ok: g.ok, p_note: g.note }); } catch { /* 저장실패 무시 */ }
+          if (g.ok) { ok++; if (g.scale === "owned") owned++; else api++; send({ type: "log", kind: "post", msg: `✅ [${g.grade}급·${g.scale === "owned" ? "우리소유" : "API"}] ${g.domain} 생성 (${ok}/${genCount})` }); }
+          else { fail++; send({ type: "log", kind: "warn", msg: `✖ ${g.domain} 실패 — ${g.note}` }); }
+          send({ type: "progress", done: i + 1, total: genCount, ok, fail });
+          await new Promise(r => setTimeout(r, 250));
+        }
+        send({ type: "log", kind: "done", msg: `🎉 생성 완료 — 성공 ${ok} · 실패 ${fail} (우리소유 ${owned} · API ${api})` });
+        send({ type: "done", ok, fail, owned, api, runId });
+        controller.close();
+      },
+    });
+    return new Response(stream2, { headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" } });
   }
 
   // ── SSE 실행 모드(관리자/회원 수동 실행) ──
