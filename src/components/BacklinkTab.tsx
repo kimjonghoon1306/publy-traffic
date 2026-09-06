@@ -146,6 +146,11 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     setRunning(true); if (!paused) setLogs([]);   // 이어하기면 이전 로그 유지
     pushLog("wait", paused ? `▶ 이어하기 — ${cur.target_domain}, 남은 곳부터 ${want}개 계속합니다` : `준비 중… ${cur.target_domain}에 ${want}개 발송을 시작합니다`);
     setPaused(false);
+    // 🔑 색인키 출처를 로그에 명확히(테리: 본인키/관리자키 구분 이쁘게). 소스·주소는 비노출, 키 출처만.
+    if (isAdminKey) pushLog("index", "🔑 관리자 빙(색인)키가 입력되어 있어요 — 관리자 키로 색인합니다");
+    else if (keyMasked) pushLog("index", "🔑 본인 빙(색인)키를 입력하셨어요 — 내 키로 색인합니다");
+    else if (keyWaiting) pushLog("wait", "🔑 색인키 대기 중 — 게시는 진행되고, 키를 넣으면 색인이 시작돼요");
+    else pushLog("wait", "🔑 아직 색인키가 없어요 — [🔑 색인 키]에 넣으면 빙 검색 반영이 빨라져요");
     const url = `${BOT}/member-publish-stream?token=${encodeURIComponent(token)}&orderId=${encodeURIComponent(cur.id)}&targetDomain=${encodeURIComponent(cur.target_domain)}&count=${want}`;
     const es = new EventSource(url);
     esRef.current = es;
@@ -158,7 +163,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
       } catch {}
     };
     es.onerror = () => { pushLog("fail", "❌ 연결 오류 — 봇 서버(3374)를 확인해주세요"); es.close(); setRunning(false); };
-  }, [cur, running, unlimited, qty, remainToday, token, pushLog, loadSubs, paused]);
+  }, [cur, running, unlimited, qty, remainToday, token, pushLog, loadSubs, paused, isAdminKey, keyMasked, keyWaiting]);
 
   const stopPublish = useCallback(() => { esRef.current?.close(); setRunning(false); setPaused(true); pushLog("warn", "발송을 멈췄어요 — [이어하기]를 누르면 남은 곳부터 계속돼요"); }, [pushLog]);
 
@@ -169,6 +174,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     const { error } = await supabase.rpc("backlink_set_my_indexnow", { p_token: token, p_key: v });
     if (error) { setKeyMsg("저장 실패: " + error.message); return; }
     setKeyMsg(isAdminKey ? "✅ 내 키로 전환했어요 — 이제 내 키로 색인해요" : "✅ 색인 키 저장 완료"); setKeyInput(""); loadMyKey(); setTimeout(() => setKeyMsg(""), 4000);
+    pushLog("index", "🔑 본인 빙(색인)키를 입력하셨어요 — 이제 내 키로 색인합니다");
   }, [keyInput, token, loadMyKey, isAdminKey]);
 
   // 본인키 삭제(대기) / 관리자키 해제(내가 직접) — 둘 다 scope='own'+키비움(=색인 대기). 관리자는 필요시 공용키 재지정 가능.
@@ -324,10 +330,11 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
                 <b style={{ color: C.accent }}>3.</b> 아래에 붙여넣고 저장
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                <input value={gemInput} onChange={e => setGemInput(e.target.value)} placeholder="발급받은 제미나이 키 붙여넣기" style={{ ...inputStyle, flex: 1, minWidth: 160, fontSize: 13.5 }} />
-                <button onClick={saveGemKey} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>저장</button>
+                <input value={gemInput} onChange={e => setGemInput(e.target.value)} placeholder={gemMasked ? "새 키로 바꾸려면 여기에 붙여넣기(덮어쓰기)" : "발급받은 제미나이 키 붙여넣기"} style={{ ...inputStyle, flex: 1, minWidth: 160, fontSize: 13.5 }} />
+                <button onClick={saveGemKey} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>{gemMasked ? "변경(덮어쓰기)" : "저장"}</button>
                 {gemMasked && <button onClick={clearGemKey} style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${logC.fail.fg}`, background: C.win, color: logC.fail.fg, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>삭제</button>}
               </div>
+              {gemMasked && <div style={{ fontSize: 11.5, color: C.sub, fontWeight: 600, marginBottom: 10, marginTop: -4 }}>🔁 키를 <b>바꾸려면</b> 새 키를 붙여넣고 <b>변경(덮어쓰기)</b>, <b>지우려면</b> <b style={{ color: logC.fail.fg }}>삭제</b>를 누르세요.</div>}
               {gemMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700, marginBottom: 10 }}>{gemMsg}</div>}
               {/* 키워드(선택) */}
               <div style={{ fontSize: 12.5, color: C.ink, fontWeight: 700, marginBottom: 6 }}>🎯 상위노출 키워드 <span style={{ color: C.sub, fontWeight: 600 }}>(선택 · 뜨고 싶은 검색어)</span></div>
