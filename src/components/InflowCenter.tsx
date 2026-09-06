@@ -1424,10 +1424,16 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 800 }}>📜 실시간 로그</span>
               <div style={{ display: "flex", gap: 6 }}>
+                {/* 🪟 창 보기 토글 — 기존 유입 로직 무관(visible만 토글). 켜면 다음 실행부터 봇의 실제 크롬 창이 뜸. */}
+                <button onClick={() => setVisible(v => !v)} title="봇이 실제로 움직이는 크롬 창을 띄워 눈으로 봅니다" style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${visible ? C.accent : C.line2}`, background: visible ? C.accent : C.panel, color: visible ? "#fff" : C.sub, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>🪟 창 보기 {visible ? "ON" : "OFF"}</button>
                 <button onClick={() => setLogZoom(true)} disabled={!logs.length} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>🔍 크게 보기</button>
                 <button onClick={copyLogs} disabled={!logs.length} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line2}`, background: C.panel, color: logs.length ? C.accent : C.sub, fontSize: 12, fontWeight: 800, cursor: logs.length ? "pointer" : "default", fontFamily: "inherit" }}>📋 복사</button>
                 <button onClick={sendLogToAdmin} disabled={!logs.length || sendingLog} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: logs.length ? `linear-gradient(135deg,${C.accent},${C.cyan})` : C.line2, color: "#fff", fontSize: 12, fontWeight: 800, cursor: logs.length && !sendingLog ? "pointer" : "default", fontFamily: "inherit" }}>{sendingLog ? "보내는 중…" : "📨 관리자에게 보내기"}</button>
               </div>
+            </div>
+            {/* 🪟 창 보기 설명 — 무엇인지 한눈에(어르신 배려). 켜짐/꺼짐에 따라 안내 톤 변경. */}
+            <div style={{ fontSize: 11.5, color: C.sub, fontWeight: 600, marginBottom: 8, lineHeight: 1.65, padding: "9px 12px", borderRadius: 9, background: visible ? C.glow : C.panel, border: `1px solid ${visible ? C.accent : C.line2}` }}>
+              🪟 <b style={{ color: C.accent }}>창 보기</b> — 켜면 봇이 <b>실제 크롬 창</b>을 띄워서 <b>검색 → 클릭 → 체류 → 액션</b>하는 움직임을 두 눈으로 직접 봐요. 평소엔 창 없이 조용히(백그라운드) 돌아가고, <b>버튼을 켠 뒤 다음 실행부터</b> 창이 떠요. 확인·테스트용이라 창을 닫아도 유입은 계속되고, 안전상 앱을 껐다 켜면 자동으로 꺼져요. {visible ? <b style={{ color: C.accent }}>지금 ON — 다음 시작부터 창이 떠요.</b> : "지금 OFF — 창 없이 백그라운드로 돌아가요."}
             </div>
             <div ref={logBoxRef} style={{ background: C.logBg, color: C.logInk, borderRadius: 12, padding: "14px 16px", height: 240, overflowY: "auto", fontSize: 13.5, lineHeight: 1.75, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               {logs.length ? logs.map((entry, i) => entry.type === "text"
