@@ -122,8 +122,8 @@ export async function runDiscovery(send: (o: any) => void, recordFn: (r: Discove
       const res: DiscoverResult = { domain: c.domain, kind: "api", verdict, testUrl: r.url, note: r.note };
       await recordFn(res);
       if (r.ok) { free++; send({ type: "log", kind: "post", msg: `✅ [무료] ${c.domain} — 실제 게시됨! ${r.url}` }); }
-      else { dead++; send({ type: "log", kind: "warn", msg: `✖ ${c.domain} — 안 됨(${r.note})` }); }
-    } catch (e: any) { dead++; send({ type: "log", kind: "fail", msg: `✖ ${c.domain} — 오류` }); }
+      else { dead++; send({ type: "log", kind: "skip", msg: `⊝ [제외] ${c.domain} — 안 되는 후보라 그냥 버립니다(우리 시스템엔 영향 없음 · ${r.note})` }); }
+    } catch (e: any) { dead++; send({ type: "log", kind: "skip", msg: `⊝ [제외] ${c.domain} — 조사 중 오류라 건너뜁니다(영향 없음)` }); }
   }
 
   // 2) 계정형 가입폼 판별

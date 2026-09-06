@@ -410,6 +410,38 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── 🔍 발굴 모드(무인증 API형만, 웹/폰 가능): 후보 API에 실제 POST 테스트 → 무료 확정만. 계정형(가입폼)은 봇 필요. ──
+  if (mode === "discover") {
+    const dscSecret = url.searchParams.get("secret") || "";
+    const stream3 = new ReadableStream({
+      async start(controller) {
+        const send = (obj: any) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        if (dscSecret !== "456789") { send({ type: "error", msg: "unauthorized" }); controller.close(); return; }
+        // 무인증 API 후보(브라우저 불필요) — 실제 게시 테스트
+        const cands: { domain: string; run: () => Promise<{ ok: boolean; url?: string; note: string }> }[] = [
+          { domain: "pastebin.pl", run: async () => { try { const r = await fetch("https://pastebin.pl/api", { method: "POST", headers: { "Content-Type": "text/plain" }, body: "테스트 https://example.com" }); const t = (await r.text()).trim(); const u = t.match(/https?:\/\/[^\s"']+/)?.[0] || ""; return (r.ok && u) ? { ok: true, url: u, note: `HTTP ${r.status}` } : { ok: false, note: `HTTP ${r.status}` }; } catch (e) { return { ok: false, note: String((e as any)?.message || e) }; } } },
+          { domain: "0paste.com", run: async () => { try { const r = await fetch("https://0paste.com/pastes", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "paste[body]": "테스트 https://example.com", "paste[language]": "text" }).toString(), redirect: "follow" }); const u = r.url; return (r.ok && u && u !== "https://0paste.com/pastes") ? { ok: true, url: u, note: `HTTP ${r.status}` } : { ok: false, note: `HTTP ${r.status}` }; } catch (e) { return { ok: false, note: String((e as any)?.message || e) }; } } },
+          { domain: "textbin.net", run: async () => { try { const r = await fetch("https://textbin.net/save", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code: "테스트 https://example.com", lang: "text" }).toString(), redirect: "follow" }); const u = r.url; return (r.ok && u && u.includes("textbin")) ? { ok: true, url: u, note: `HTTP ${r.status}` } : { ok: false, note: `HTTP ${r.status}` }; } catch (e) { return { ok: false, note: String((e as any)?.message || e) }; } } },
+          { domain: "dpaste.org", run: async () => { try { const r = await fetch("https://dpaste.org/api/", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ content: "테스트 https://example.com", lexer: "text", format: "url" }).toString() }); const t = (await r.text()).trim(); const u = t.match(/https?:\/\/[^\s"']+/)?.[0] || ""; return (r.ok && u) ? { ok: true, url: u, note: `HTTP ${r.status}` } : { ok: false, note: `HTTP ${r.status}` }; } catch (e) { return { ok: false, note: String((e as any)?.message || e) }; } } },
+          { domain: "paste.mozilla.org", run: async () => ({ ok: false, note: "가입/토큰 필요" }) },
+        ];
+        send({ type: "log", kind: "wait", msg: `🔍 발굴(서버) 시작 — 무인증 API 후보 ${cands.length}개 실제 게시 테스트 (계정형은 PC 봇에서)` });
+        let free = 0, dead = 0;
+        for (const c of cands) {
+          const r = await c.run();
+          const verdict = r.ok ? "free" : "dead";
+          try { await sb.rpc("backlink_discovery_record", { p_token: dscSecret, p_domain: c.domain, p_kind: "api", p_verdict: verdict, p_test_url: r.url || "", p_note: r.note }); } catch { /* skip */ }
+          if (r.ok) { free++; send({ type: "log", kind: "post", msg: `✅ [무료] ${c.domain} — 실제 게시됨! ${r.url}` }); }
+          else { dead++; send({ type: "log", kind: "skip", msg: `⊝ [제외] ${c.domain} — 안 되는 후보라 그냥 버립니다(우리 시스템엔 영향 없음 · ${r.note})` }); }
+        }
+        send({ type: "log", kind: "done", msg: `🎉 발굴 완료 — 무료 ${free}개 발견 (계정형·캡차형은 🖥️PC 방식으로 더 찾을 수 있어요)` });
+        send({ type: "done", free, captcha: 0, paid: 0, dead });
+        controller.close();
+      },
+    });
+    return new Response(stream3, { headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" } });
+  }
+
   // ── ⚙️ 어댑터 생성 모드(웹/폰 가능): 수량만큼 생성 → 분류·등급 → backlink_sources 배치. SSE 에너지바. ──
   if (mode === "generate") {
     const genSecret = url.searchParams.get("secret") || "";

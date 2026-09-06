@@ -27,6 +27,14 @@ const SB_URL = "https://qhhoyxexxlimbjrbwrgq.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoaG95eGV4eGxpbWJqcmJ3cmdxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTMzOTQsImV4cCI6MjA5Mjg4OTM5NH0.pw_qUR0oOxgt82S_DA6GTka3WP0JBu2vmWuKZ9VvTKM";
 const sb = createClient(SB_URL, SB_KEY);
 
+// config(gist 토큰 등) 읽기 — Edge의 getConfig와 동일 폴백.
+//   admin_backlink_get_config는 관리자 "세션 토큰"만 통과. secret("456789")으론 거부됨 → backlink_config_get(secret)으로 폴백.
+async function getConfigBot(token: string, key: string): Promise<string> {
+  try { const { data, error } = await sb.rpc("admin_backlink_get_config", { p_token: token, p_key: key }); if (!error && data) return String(data); } catch { /* 다음 */ }
+  try { const { data, error } = await sb.rpc("backlink_config_get", { p_token: token, p_key: key }); if (!error && data) return String(data); } catch { /* 없음 */ }
+  return "";
+}
+
 app.use(cors({ origin: ["http://localhost:5173", "http://127.0.0.1:5173", "null"] }));
 app.use(express.json({ limit: "50mb" }));
 app.use((req, res, next) => {
@@ -73,9 +81,9 @@ app.get("/generate-stream", async (req, res) => {
   const send = (obj: any) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
   if (secret !== "456789") { send({ type: "error", msg: "unauthorized" }); return res.end(); }
   const runId = crypto.randomUUID();
-  // gist 토큰(우리소유 A급 생성용)
-  let gistToken = "";
-  try { const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: secret, p_key: "github_gist_token" }); if (ght) gistToken = String(ght); } catch { /* 없으면 gist 스킵 */ }
+  // gist 토큰(우리소유 A급 생성용) — ★secret은 세션토큰이 아니므로 admin_backlink_get_config가 거부함.
+  //   Edge와 동일하게 getConfigBot 폴백(admin RPC 실패 시 backlink_config_get(secret))으로 읽는다. (전수적용)
+  let gistToken = await getConfigBot(secret, "github_gist_token");
   try {
     await runGenerate(count, gistToken, (o) => { if (o.type === "done") o.runId = runId; send(o); }, async (g) => {
       try { await sb.rpc("backlink_gen_record", { p_token: secret, p_run_id: runId, p_domain: g.domain, p_scale: g.scale, p_grade: g.grade, p_detail_url: g.detailUrl || "", p_ok: g.ok, p_note: g.note }); } catch { /* 저장 실패 무시 */ }
@@ -140,10 +148,7 @@ app.post("/publish-order", async (req, res) => {
   const doneSet = new Set<string>((doneSrc as string[] | null) || []);
   // 우리소유 소스용 토큰(github_gist_token 등)을 config에서 1회 읽어 어댑터에 주입(클라이언트 노출 없음)
   const secrets: Record<string, string> = {};
-  try {
-    const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "github_gist_token" });
-    if (ght) secrets.github_gist_token = ght as string;
-  } catch { /* 토큰 없으면 gist 어댑터가 스킵 처리 */ }
+  { const ght = await getConfigBot(adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
   const results: any[] = [];
   for (let i = 0; i < domains.length; i++) {
     const dom = domains[i];
@@ -260,10 +265,7 @@ app.get("/admin-publish-stream", async (req, res) => {
     const doneSet = new Set<string>((doneSrc as string[] | null) || []);
     // 우리소유 소스 토큰(gist 등) 주입 — 관리자 흐름은 우리소유 포함 전 어댑터 사용
     const secrets: Record<string, string> = {};
-    try {
-      const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "github_gist_token" });
-      if (ght) secrets.github_gist_token = ght as string;
-    } catch { /* 토큰 없으면 gist 스킵 */ }
+    { const ght = await getConfigBot(adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
     const domains = listAdapterDomains().filter(d => !doneSet.has(d));
     let posted = 0;
     for (let i = 0; i < domains.length && posted < count; i++) {
