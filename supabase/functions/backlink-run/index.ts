@@ -235,6 +235,27 @@ async function submitIndexNow(host: string, key: string, urls: string[]) {
   } catch { return { result: "error", status: 0 }; }
 }
 
+// ── 빙 색인 확인(무료·진짜 검색 기반) — site: 검색 결과에 그 URL이 실제 있으면 색인됨. 구글 캡차와 달리 빙은 관대.
+//   ★유료 API(구글 Custom Search)는 나중. 지금은 빙 무료 검색만으로 신뢰 근거 확보(테리 지시).
+async function isIndexedBing(postUrl: string): Promise<boolean> {
+  try {
+    const clean = postUrl.replace(/^https?:\/\//, "");
+    const q = encodeURIComponent(`site:${clean}`);
+    const res = await fetch(`https://www.bing.com/search?q=${q}&setlang=ko`, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" } });
+    const html = await res.text();
+    if (/There are no results|검색 결과가 없습니다|결과 없음/.test(html)) return false;
+    const algoBlocks = html.match(/class="b_algo"[\s\S]*?(?=class="b_algo"|<\/ol>|id="b_context")/g) || [];
+    if (!algoBlocks.length) return false;
+    const joined = algoBlocks.join(" ");
+    const pathPart = (clean.replace(/\/$/, "").split("/").slice(1).join("/")).trim();
+    const domain = clean.split("/")[0];
+    if (!pathPart) return joined.includes(domain);
+    let dec = pathPart; try { dec = decodeURIComponent(pathPart); } catch { /* keep */ }
+    const enc = encodeURIComponent(pathPart);
+    return joined.includes(pathPart) || joined.includes(enc) || joined.includes(dec);
+  } catch { return false; }
+}
+
 // ── config 조회: 세션토큰(admin_backlink_get_config) 실패하면 시크릿(backlink_config_get)으로 재시도 ──
 //   ★gist 토큰/gemini 키가 "미설정"으로 오탐되던 버그 수정(시크릿 기반 흐름은 세션RPC가 거부함).
 async function getConfig(sb: any, token: string, key: string): Promise<string> {
@@ -360,6 +381,8 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
           const { data: planData } = await sb.rpc("backlink_bot_indexnow_plan", { p_token: adminToken, p_order_id: orderId });
           const plan = (planData && planData[0]) || null;
           if (plan && plan.effective_key && plan.scope !== "off") {
+            // ★색인키가 설정돼 있을 때만 "빙 연결됨" 표시(테리: 그냥 쓰지 말고 설정됐을 때). 회원 화면엔 키·사이트 노출 안 함.
+            send({ type: "log", kind: "index", msg: `🔗 빙(IndexNow) 색인 연결됨 — 게시 즉시 빙에 색인 요청을 보냅니다` });
             const posts: Array<{ id: string; url: string }> = plan.posts || [];
             const jobs = posts.map((p) => p.url).filter(Boolean);
             if (plan.scope === "own" && plan.target_url) jobs.push(plan.target_url);
@@ -367,7 +390,7 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
             for (const u of jobs) { try { const h = new URL(u).host; if (!groups.has(h)) groups.set(h, []); groups.get(h)!.push(u); } catch { /* skip */ } }
             let acc = 0, rej = 0;
             for (const [host, urls] of groups) { const rr = await submitIndexNow(host, plan.effective_key, urls); if (rr.result === "accepted" || rr.result === "pending") acc += urls.length; else rej += urls.length; }
-            send({ type: "log", kind: "done", msg: `색인 요청 완료 · 수락 ${acc} · 거부 ${rej}` });
+            send({ type: "log", kind: "done", msg: `색인 요청 완료 · 빙 수락 ${acc}건 · 거부 ${rej}건 (실제 색인 반영은 빙 확인에서 ✅로 떠요)` });
           } else {
             send({ type: "log", kind: "warn", msg: `색인 키 미설정(색인키 탭에서 지정) — 게시는 완료됨` });
           }
@@ -469,6 +492,38 @@ Deno.serve(async (req) => {
       },
     });
     return new Response(stream2, { headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" } });
+  }
+
+  // ── 🔎 빙 색인 확인 모드(무료·폰가능): 게시된 백링크가 빙에 실제 색인됐는지 확인 → status '색인' 승격 + 시각 기록 ──
+  //   확인 성공분은 감사·대시보드에서 '색인반영'으로 뜨고, 회원은 URL 없이 '색인 반영 N건'만 본다.
+  if (mode === "verify") {
+    const vSecret = url.searchParams.get("secret") || "";
+    const vLimit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit")) || 40));
+    const stream4 = new ReadableStream({
+      async start(controller) {
+        const send = (obj: any) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        if (vSecret !== "456789") { send({ type: "error", msg: "unauthorized" }); controller.close(); return; }
+        try {
+          const { data: q } = await sb.rpc("backlink_index_check_queue", { p_secret: vSecret, p_limit: vLimit });
+          const rows: Array<{ id: string; post_url: string }> = q || [];
+          send({ type: "log", kind: "wait", msg: `🔎 빙 색인 확인 시작 — 대상 ${rows.length}건 (게시됐지만 아직 색인확인 안 된 링크)` });
+          if (!rows.length) { send({ type: "log", kind: "done", msg: `확인할 신규 링크가 없어요 (모두 확인 완료 상태)` }); send({ type: "done", checked: 0, indexed: 0 }); controller.close(); return; }
+          let checked = 0, indexed = 0;
+          for (const r of rows) {
+            const ok = await isIndexedBing(r.post_url);
+            try { await sb.rpc("backlink_index_check_record", { p_secret: vSecret, p_post_id: r.id, p_ok: ok }); } catch { /* 기록 실패 무시 */ }
+            checked++; if (ok) indexed++;
+            send({ type: "log", kind: ok ? "post" : "skip", msg: ok ? `✅ 빙 색인 확인됨 (${indexed}건째)` : `⊝ 아직 빙 색인 전 — 다음에 다시 확인` });
+            send({ type: "progress", done: checked, total: rows.length, ok: indexed, fail: checked - indexed });
+            await new Promise(r => setTimeout(r, 400));   // 빙 과속 차단
+          }
+          send({ type: "log", kind: "done", msg: `🎉 빙 색인 확인 완료 — ${checked}건 확인 · ${indexed}건 색인 반영됨` });
+          send({ type: "done", checked, indexed });
+        } catch (e) { send({ type: "error", msg: (e as any)?.message || String(e) }); }
+        controller.close();
+      },
+    });
+    return new Response(stream4, { headers: { ...CORS, "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" } });
   }
 
   // ── SSE 실행 모드(관리자/회원 수동 실행) ──

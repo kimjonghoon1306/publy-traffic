@@ -295,7 +295,9 @@ app.get("/admin-publish-stream", async (req, res) => {
     send({ type: "log", kind: "index", msg: `🔎 색인(IndexNow) 요청 중…` });
     try {
       const ix = await pushOrderIndex(adminToken, orderId);
-      send({ type: "log", kind: "done", msg: `색인 요청 완료: ${JSON.stringify(ix)}` });
+      // 색인키가 설정돼 실제 전송된 경우만 "빙 연결됨" 표시(테리: 그냥 쓰지 말고 설정됐을 때)
+      if ((ix as any)?.ok) { send({ type: "log", kind: "index", msg: `🔗 빙(IndexNow) 색인 연결됨 — 빙에 색인 요청 전송` }); send({ type: "log", kind: "done", msg: `색인 요청 완료 · 빙 수락 ${(ix as any).accepted || 0}건 (실제 반영은 빙 확인에서 ✅)` }); }
+      else { send({ type: "log", kind: "warn", msg: `색인 키 미설정 — 게시는 완료됨 (색인키 탭에서 지정)` }); }
     } catch (e: any) { send({ type: "log", kind: "warn", msg: `색인 요청 실패: ${e?.message || e}` }); }
     send({ type: "done", posted });
     res.end();
