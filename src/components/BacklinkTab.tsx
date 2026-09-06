@@ -65,6 +65,12 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const [gemOpen, setGemOpen] = useState(false);
   const [kwInput, setKwInput] = useState("");
   const [kwMsg, setKwMsg] = useState("");
+  // 📊 내 백링크 기록(기간설정) — 언제 몇 건 배포·색인됐는지(소스·URL 비노출, 집계만)
+  const [histOpen, setHistOpen] = useState(false);
+  const [histFrom, setHistFrom] = useState("");
+  const [histTo, setHistTo] = useState("");
+  const [histRows, setHistRows] = useState<{ day: string; posted: number; indexed: number }[] | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
 
   const pushLog = useCallback((kind: string, msg: string) => {
     setLogs(l => [...l, { kind, msg, at: new Date().toISOString() }]);
@@ -105,6 +111,18 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     await supabase.rpc("backlink_set_my_gemini", { p_token: token, p_key: "" });
     setGemMasked(null); setGemMsg("제미나이 키를 삭제했어요(기본 글로 게시)"); loadGemKey(); setTimeout(() => setGemMsg(""), 4000);
   }, [token, loadGemKey]);
+  const loadHist = useCallback(async () => {
+    setHistLoading(true);
+    try {
+      const p_from = histFrom ? new Date(histFrom).toISOString() : null;
+      const p_to = histTo ? new Date(new Date(histTo).getTime() + 86400000).toISOString() : null;   // 종료일 포함(+1일)
+      const { data, error } = await supabase.rpc("backlink_my_history", { p_token: token, p_from, p_to });
+      if (error) { setHistRows([]); }
+      else setHistRows((data || []).map((r: any) => ({ day: r.day, posted: Number(r.posted || 0), indexed: Number(r.indexed || 0) })));
+    } catch { setHistRows([]); }
+    finally { setHistLoading(false); }
+  }, [token, histFrom, histTo]);
+
   const saveKeyword = useCallback(async () => {
     const { error } = await supabase.rpc("backlink_set_my_keyword", { p_token: token, p_keyword: kwInput.trim() });
     if (error) { setKwMsg("저장 실패: " + error.message); return; }
@@ -287,6 +305,42 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
           {/* 신뢰 캡션 — '색인 반영'이 빙 실측임을 회원에게(소스·주소는 비공개). */}
           <div style={{ fontSize: 11.5, fontWeight: 700, color: logC.done.fg, background: logC.done.bg, borderRadius: 10, padding: "8px 11px", marginBottom: 14, lineHeight: 1.5 }}>
             🔗 <b>색인 반영</b> = 발행된 백링크가 <b>빙(Bing)에서 실제로 검색·색인된 게 확인된</b> 건수예요. (검색엔진 반영엔 며칠 걸릴 수 있어요)
+          </div>
+          {/* 📊 내 백링크 기록(기간설정) — 언제 몇 건 배포·색인됐는지 쌓여가는 걸 눈으로. 소스·URL은 비노출, 집계만. */}
+          <div style={card({ marginBottom: 14, border: `1px solid ${C.line}` })}>
+            <div onClick={() => { const n = !histOpen; setHistOpen(n); if (n && histRows == null) loadHist(); }} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <b style={{ fontSize: 14, color: C.ink }}>📊 내 백링크 기록 <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 언제 몇 건 배포·색인됐는지(기간설정)</span></b>
+              <span style={{ marginLeft: "auto", color: C.sub, fontSize: 13 }}>{histOpen ? "▲" : "▼"}</span>
+            </div>
+            {histOpen && (() => {
+              const rows = histRows || [];
+              const tot = rows.reduce((a, r) => ({ p: a.p + r.posted, i: a.i + r.indexed }), { p: 0, i: 0 });
+              const maxP = Math.max(1, ...rows.map(r => r.posted));
+              return <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                  <input type="date" value={histFrom} onChange={e => setHistFrom(e.target.value)} style={{ ...inputStyle, fontSize: 12.5, padding: "9px 10px" }} />
+                  <span style={{ color: C.sub }}>~</span>
+                  <input type="date" value={histTo} onChange={e => setHistTo(e.target.value)} style={{ ...inputStyle, fontSize: 12.5, padding: "9px 10px" }} />
+                  <button onClick={loadHist} disabled={histLoading} style={{ padding: "9px 16px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13, cursor: histLoading ? "default" : "pointer", opacity: histLoading ? .6 : 1 }}>{histLoading ? "조회 중…" : "↻ 조회"}</button>
+                  <button onClick={() => { setHistFrom(""); setHistTo(""); loadHist(); }} style={{ padding: "9px 12px", borderRadius: 10, border: `1px solid ${C.line}`, background: C.win, color: C.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>전체</button>
+                </div>
+                <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                  <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: logC.post.bg }}><div style={{ fontSize: 20, fontWeight: 900, color: logC.post.fg }}>{tot.p}</div><div style={{ fontSize: 11, color: logC.post.fg, opacity: .85 }}>기간 내 게시</div></div>
+                  <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: logC.done.bg }}><div style={{ fontSize: 20, fontWeight: 900, color: logC.done.fg }}>{tot.i}</div><div style={{ fontSize: 11, color: logC.done.fg, opacity: .85 }}>기간 내 색인</div></div>
+                  <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: C.panel }}><div style={{ fontSize: 20, fontWeight: 900, color: C.ink }}>{rows.length}</div><div style={{ fontSize: 11, color: C.sub }}>활동한 날</div></div>
+                </div>
+                {histLoading ? <div style={{ textAlign: "center", color: C.sub, fontSize: 12.5, padding: 16 }}>불러오는 중…</div>
+                  : rows.length === 0 ? <div style={{ textAlign: "center", color: C.sub, fontSize: 12.5, padding: 16 }}>이 기간엔 배포 기록이 없어요. 백링크를 돌리면 여기에 날짜별로 쌓여요.</div>
+                  : <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    {rows.map(r => <div key={r.day} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 10, background: C.panel, border: `1px solid ${C.line}` }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, minWidth: 92 }}>{new Date(r.day).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</span>
+                      <div style={{ flex: 1, height: 8, borderRadius: 99, background: C.line, overflow: "hidden", minWidth: 40 }}><div style={{ height: "100%", width: `${Math.round(r.posted / maxP * 100)}%`, background: logC.post.fg, borderRadius: 99 }} /></div>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: logC.post.fg, minWidth: 48, textAlign: "right" }}>게시 {r.posted}</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: logC.done.fg, minWidth: 48, textAlign: "right" }}>색인 {r.indexed}</span>
+                    </div>)}
+                  </div>}
+              </div>;
+            })()}
           </div>
           {/* 수량 지정 + 시작 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: 12, borderRadius: 12, background: C.panel, border: `1px solid ${C.line}` }}>
