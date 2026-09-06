@@ -42,6 +42,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
 
   // 실행(시작하기)
   const [running, setRunning] = useState(false);
+  const [paused, setPaused] = useState(false);   // 멈춘 적 있으면 다음 시작은 '이어하기'(유니크 스킵으로 남은 소스부터)
   const [qty, setQty] = useState<number>(5);                 // 이번에 발송할 수량
   const [logs, setLogs] = useState<LogRow[]>([]);            // 실시간 로그
   const [logZoom, setLogZoom] = useState(false);
@@ -142,8 +143,9 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     if (running) return;
     const want = unlimited ? Math.max(1, qty) : Math.min(qty, remainToday);
     if (!unlimited && remainToday <= 0) { pushLog("warn", "오늘 발송 한도를 다 썼어요 — 자정에 초기화돼요."); return; }
-    setRunning(true); setLogs([]);
-    pushLog("wait", `준비 중… ${cur.target_domain}에 ${want}개 발송을 시작합니다`);
+    setRunning(true); if (!paused) setLogs([]);   // 이어하기면 이전 로그 유지
+    pushLog("wait", paused ? `▶ 이어하기 — ${cur.target_domain}, 남은 곳부터 ${want}개 계속합니다` : `준비 중… ${cur.target_domain}에 ${want}개 발송을 시작합니다`);
+    setPaused(false);
     const url = `${BOT}/member-publish-stream?token=${encodeURIComponent(token)}&orderId=${encodeURIComponent(cur.id)}&targetDomain=${encodeURIComponent(cur.target_domain)}&count=${want}`;
     const es = new EventSource(url);
     esRef.current = es;
@@ -156,9 +158,9 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
       } catch {}
     };
     es.onerror = () => { pushLog("fail", "❌ 연결 오류 — 봇 서버(3374)를 확인해주세요"); es.close(); setRunning(false); };
-  }, [cur, running, unlimited, qty, remainToday, token, pushLog, loadSubs]);
+  }, [cur, running, unlimited, qty, remainToday, token, pushLog, loadSubs, paused]);
 
-  const stopPublish = useCallback(() => { esRef.current?.close(); setRunning(false); pushLog("warn", "발송을 멈췄어요"); }, [pushLog]);
+  const stopPublish = useCallback(() => { esRef.current?.close(); setRunning(false); setPaused(true); pushLog("warn", "발송을 멈췄어요 — [이어하기]를 누르면 남은 곳부터 계속돼요"); }, [pushLog]);
 
   const saveMyKey = useCallback(async () => {
     const v = keyInput.trim();
@@ -289,7 +291,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
             <div style={{ flex: 1 }} />
             {running
               ? <button onClick={stopPublish} style={{ padding: "12px 22px", borderRadius: 10, border: "none", background: "#dc2626", color: "#fff", fontWeight: 900, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>■ 멈추기</button>
-              : <button onClick={startPublish} disabled={!unlimited && remainToday <= 0} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: (!unlimited && remainToday <= 0) ? C.line : `linear-gradient(135deg,${C.accent},#8b5cf6)`, color: "#fff", fontWeight: 900, fontSize: 14, cursor: (!unlimited && remainToday <= 0) ? "default" : "pointer", fontFamily: "inherit" }}>🚀 백링크 시작하기</button>}
+              : <button onClick={startPublish} disabled={!unlimited && remainToday <= 0} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: (!unlimited && remainToday <= 0) ? C.line : `linear-gradient(135deg,${C.accent},#8b5cf6)`, color: "#fff", fontWeight: 900, fontSize: 14, cursor: (!unlimited && remainToday <= 0) ? "default" : "pointer", fontFamily: "inherit" }}>{paused ? "▶ 이어하기" : "🚀 백링크 시작하기"}</button>}
           </div>
         </div>
 

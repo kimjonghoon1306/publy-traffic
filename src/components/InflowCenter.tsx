@@ -261,6 +261,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   type RunTT = "place" | "blog" | "store";
   const [runningTypes, setRunningTypes] = useState<Record<RunTT, boolean>>({ place: false, blog: false, store: false });
   const setRunningFor = (t: RunTT, v: boolean) => setRunningTypes((p) => ({ ...p, [t]: v }));
+  const [pausedTypes, setPausedTypes] = useState<Record<RunTT, boolean>>({ place: false, blog: false, store: false });   // 멈춘 적 있으면 다음 시작=이어하기(남은 횟수부터)
+  const setPausedFor = (t: RunTT, v: boolean) => setPausedTypes((p) => ({ ...p, [t]: v }));
+  const paused = pausedTypes[(targetType as RunTT)] ?? false;
   const anyRunning = runningTypes.place || runningTypes.blog || runningTypes.store;
   const running = runningTypes[(targetType as RunTT)] ?? false;   // 현재 탭 실행 여부(렌더·기존 로직 호환)
   type InflowLogEntry = { type: "text"; text: string } | { type: "shot"; caption: string; dataUrl: string };
@@ -950,7 +953,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     if (!unlimited && used >= limit) { toast(`오늘 유입 한도(${limit}회)를 다 썼어요. 자정에 초기화돼요.`, "error"); return; }
     const n = auto ? (unlimited ? 999 : Math.max(1, limit - used)) : Math.max(1, rounds);
 
-    setRunningFor(runType, true); clearLogsFor(runType); setProgressFor(runType, 0); setSessOkFor(runType, 0);
+    const isResume = pausedTypes[runType];   // 이어하기면 로그·진행률 유지
+    setRunningFor(runType, true); if (!isResume) { clearLogsFor(runType); setProgressFor(runType, 0); setSessOkFor(runType, 0); } setPausedFor(runType, false);
+    if (isResume) pushLogFor(runType, "▶ 이어하기 — 남은 만큼 계속합니다");
     const params = new URLSearchParams({
       targetType, keywords: kwList.join(","), rounds: String(n),
       termMin: String(termMin), termMax: String(termMax),
@@ -1046,7 +1051,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     es.onclose = () => setRunningFor(runType, false);
   };
   startRef.current = start;
-  const stop = () => { const t = (targetType as RunTT); esRefByType.current[t]?.close(); esRefByType.current[t] = null; setRunningFor(t, false); pushLogFor(t, "⏹️ 사용자가 정지했어요"); };  // 현재 보고 있는 탭만 정지(다른 탭은 계속)
+  const stop = () => { const t = (targetType as RunTT); esRefByType.current[t]?.close(); esRefByType.current[t] = null; setRunningFor(t, false); setPausedFor(t, true); pushLogFor(t, "⏸️ 멈췄어요 — [이어하기]를 누르면 남은 만큼 계속돼요"); };  // 현재 보고 있는 탭만 정지(다른 탭은 계속)
 
   const pct = unlimited ? 0 : Math.min(100, (used / Math.max(1, limit)) * 100);
   const weekTotal = history.reduce((s, d) => s + d.count, 0);
@@ -1383,9 +1388,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
 
           {/* 유입 시작 / 정지 */}
           {!running ? (
-            <button onClick={start} style={{ width: "100%", padding: 15, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 20px rgba(109,40,217,.3)" }}>🚀 유입 시작</button>
+            <button onClick={start} style={{ width: "100%", padding: 15, borderRadius: 12, border: "none", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 20px rgba(109,40,217,.3)" }}>{paused ? "▶ 이어하기" : "🚀 유입 시작"}</button>
           ) : (
-            <button onClick={stop} style={{ width: "100%", padding: 15, borderRadius: 12, border: `2px solid ${C.accent}`, background: C.panel2, color: C.accent, fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>⏹️ 정지 ({progress}%)</button>
+            <button onClick={stop} style={{ width: "100%", padding: 15, borderRadius: 12, border: `2px solid ${C.accent}`, background: C.panel2, color: C.accent, fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>⏸️ 멈춤 ({progress}%)</button>
           )}
           {/* 📊 오늘/누적 유입 수치 — 무제한 회원도 보이게(회원이 헷갈리지 않게 큰 숫자로) */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
