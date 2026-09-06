@@ -32,6 +32,7 @@ app.use((req, res, next) => {
   // 🔗 회원 실시간 게시 스트림은 브라우저 EventSource(SSE)라 커스텀 헤더(Authorization: Bearer)를 못 붙인다.
   //   → 이 경로만 Bearer 면제. 쿼리스트링 token(회원 세션)을 핸들러 RPC가 자체 검증(세션 무효면 게시 차단). 봇은 127.0.0.1 로컬바인딩.
   if (req.path === "/member-publish-stream") return next();
+  if (req.path === "/admin-publish-stream") return next();   // 관리자 실행탭도 EventSource(SSE)라 Bearer 못붙임. adminToken은 핸들러 RPC가 자체검증.
   // /health 포함 그 외 전부 인증. ★ naver-bot과 동일 패턴 = 401 응답을 "Unauthorized"(대문자)로 통일해야
   //   앱(main.ts killPort)이 '토큰 다른 옛 우리 봇'으로 인식해 재시작 시 좀비를 정리한다(예전엔 /health 예외+소문자라 좀비가 안 죽어 옛 봇이 계속 3374를 물었음).
   if (req.get("Authorization") === `Bearer ${AUTH_TOKEN}`) return next();
@@ -185,6 +186,72 @@ app.get("/member-publish-stream", async (req, res) => {
     }
     // 색인 푸시(회원 키/관리자지정 정책은 backlink_bot_indexnow_plan이 처리 — 회원 세션 아님이므로 스킵, 스케줄러/관리자 흐름서 처리)
     send({ type: "log", kind: "index", msg: `색인 요청은 잠시 후 자동으로 진행돼요(회원 키 설정 시 더 빨라져요).` });
+    send({ type: "done", posted });
+    res.end();
+  } catch (e: any) {
+    send({ type: "error", msg: e?.message || String(e) });
+    res.end();
+  }
+});
+
+// ── 관리자 게시(관리자 웹 "백링크 실행" 탭) : SSE 실시간 로그 스트림 ──
+//   member-publish-stream과 동일 흐름 + 차이: ①관리자 세션 인증(adminToken) ②실제 게시 URL 노출(관리자는 링크 봄)
+//   ③gist 등 우리소유 소스 토큰 주입 ④게시 직후 색인 자동(IndexNow) 실행까지 스트림으로.
+//   GET /admin-publish-stream?adminToken=..&orderId=..&targetDomain=..&count=N
+app.get("/admin-publish-stream", async (req, res) => {
+  const adminToken = String(req.query.adminToken || "");
+  const orderId = String(req.query.orderId || "");
+  const targetDomain = String(req.query.targetDomain || "");
+  const count = Math.max(1, Math.min(50, Number(req.query.count) || 1));
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  const send = (obj: any) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  if (!adminToken || !orderId || !targetDomain) { send({ type: "error", msg: "adminToken, orderId, targetDomain 필요" }); return res.end(); }
+  const targetUrl = targetDomain.startsWith("http") ? targetDomain : `https://${targetDomain}`;
+
+  try {
+    send({ type: "log", kind: "wait", msg: `🚀 [관리자] 백링크 실행 — ${targetDomain}에 최대 ${count}개` });
+    // 유니크 스킵(이미 성공한 소스 제외)
+    const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
+    const doneSet = new Set<string>((doneSrc as string[] | null) || []);
+    // 우리소유 소스 토큰(gist 등) 주입 — 관리자 흐름은 우리소유 포함 전 어댑터 사용
+    const secrets: Record<string, string> = {};
+    try {
+      const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "github_gist_token" });
+      if (ght) secrets.github_gist_token = ght as string;
+    } catch { /* 토큰 없으면 gist 스킵 */ }
+    const domains = listAdapterDomains().filter(d => !doneSet.has(d));
+    let posted = 0;
+    for (let i = 0; i < domains.length && posted < count; i++) {
+      const dom = domains[i];
+      const c = genContent(targetDomain, i);
+      const input: PublishInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, proxy: null, secrets };
+      const r = await getAdapter(dom)!.publish(input);
+      for (const e of r.events) send({ type: "log", kind: e.kind, msg: `[${dom}] ${e.msg}` });
+      let realOk = r.ok; let verifyNote = "";
+      if (r.ok && r.postUrl) {
+        const v = await verifyBacklink(r.postUrl, targetDomain);
+        realOk = v.ok; verifyNote = v.note;
+        if (v.ok) send({ type: "log", kind: "post", msg: `[${dom}] 🔎 게시 확인 · 링크 ${v.count}개 삽입` });
+        else send({ type: "log", kind: "fail", msg: `[${dom}] ⚠️ 게시 실패(가짜) — ${v.note}` });
+      }
+      const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote };
+      const { data: postId, error } = await sb.rpc("backlink_bot_record_post", {
+        p_token: adminToken, p_order_id: orderId, p_source_domain: dom, p_grade: "A",
+        p_status: realOk ? "posted" : "failed", p_post_url: realOk ? (r.postUrl || null) : null, p_anchor: c.anchor,
+        p_evidence: evidence, p_proxy_used: false,
+      });
+      if (error) { send({ type: "log", kind: "warn", msg: `[${dom}] 기록 실패: ${error.message}` }); }
+      else if (realOk) { posted++; send({ type: "post", kind: "post", source: dom, url: r.postUrl || "", msg: `[${dom}] ✅ 게시 완료 (${posted}/${count})`, postUrl: r.postUrl || "" }); }
+      void postId;
+    }
+    // ★ 색인 자동(IndexNow) — 관리자 실행탭은 항상 색인 자동(테리 지시).
+    send({ type: "log", kind: "index", msg: `🔎 색인(IndexNow) 요청 중…` });
+    try {
+      const ix = await pushOrderIndex(adminToken, orderId);
+      send({ type: "log", kind: "done", msg: `색인 요청 완료: ${JSON.stringify(ix)}` });
+    } catch (e: any) { send({ type: "log", kind: "warn", msg: `색인 요청 실패: ${e?.message || e}` }); }
     send({ type: "done", posted });
     res.end();
   } catch (e: any) {

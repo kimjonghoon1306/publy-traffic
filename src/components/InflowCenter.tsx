@@ -256,14 +256,25 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [accountsInternal, setAccounts] = useState<PublyAccount[]>([]);
   // 🔗 부모(TrafficApp)가 계정을 넘기면 그걸 우선 사용 → 헤더에서 연결하면 팝업에도 즉시 반영(계정 안 뜨는 버그 해결)
   const accounts = externalAccounts ?? accountsInternal;
-  const [running, setRunning] = useState(false);
+  // 🔀 탭(플레이스/블로그/스토어)별 독립 실행 — 봇(3363)은 동시 3개 처리 가능. 상태를 대상별로 분리해 각자 돌린다.
+  //   화면에는 현재 탭 것을 파생값으로 보여준다(running/logs/progress/sessOk). backlink는 blTab로 이미 별개.
+  type RunTT = "place" | "blog" | "store";
+  const [runningTypes, setRunningTypes] = useState<Record<RunTT, boolean>>({ place: false, blog: false, store: false });
+  const setRunningFor = (t: RunTT, v: boolean) => setRunningTypes((p) => ({ ...p, [t]: v }));
+  const anyRunning = runningTypes.place || runningTypes.blog || runningTypes.store;
+  const running = runningTypes[(targetType as RunTT)] ?? false;   // 현재 탭 실행 여부(렌더·기존 로직 호환)
   type InflowLogEntry = { type: "text"; text: string } | { type: "shot"; caption: string; dataUrl: string };
-  const [logs, setLogs] = useState<InflowLogEntry[]>([]);
+  const [logsByType, setLogsByType] = useState<Record<RunTT, InflowLogEntry[]>>({ place: [], blog: [], store: [] });
+  const logs = logsByType[(targetType as RunTT)] ?? [];
   const [logZoom, setLogZoom] = useState(false);   // 🔍 로그 크게 보기(앱 내 모달)
   const [used, setUsed] = useState(0);            // 전체 하루 한도 사용량(한도 계산용)
   const [todayScoped, setTodayScoped] = useState(0); // 현재 대상의 오늘 유입(KPI 표시용, 대상별 분리)
-  const [progress, setProgress] = useState(0);
-  const [sessOk, setSessOk] = useState(0); // 이번 실행 성공 수
+  const [progressByType, setProgressByType] = useState<Record<RunTT, number>>({ place: 0, blog: 0, store: 0 });
+  const progress = progressByType[(targetType as RunTT)] ?? 0;
+  const setProgressFor = (t: RunTT, v: number) => setProgressByType((p) => ({ ...p, [t]: v }));
+  const [sessOkByType, setSessOkByType] = useState<Record<RunTT, number>>({ place: 0, blog: 0, store: 0 }); // 이번 실행 성공 수(탭별)
+  const sessOk = sessOkByType[(targetType as RunTT)] ?? 0;
+  const setSessOkFor = (t: RunTT, v: number) => setSessOkByType((p) => ({ ...p, [t]: v }));
   const [history, setHistory] = useState<{ label: string; count: number }[]>([]);
   // 🎯 오토파일럿
   const [apEnabled, setApEnabled] = useState(false);
@@ -300,7 +311,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [schedTime, setSchedTime] = useState("10:00");
   const [schedRounds, setSchedRounds] = useState(10);
   // 💤 화면·시스템 절전 방지 — 유입 실행중(텀 대기 포함) OR 예약 대기 OR 오토파일럿 가동 중이면 안 꺼지게(부모 keepAwake).
-  useEffect(() => { onBusyChange?.(running || schedEnabled || apEnabled); }, [running, schedEnabled, apEnabled]);
+  useEffect(() => { onBusyChange?.(anyRunning || schedEnabled || apEnabled); }, [anyRunning, schedEnabled, apEnabled]);
   // 🔴 관리자가 승인을 취소하면(허용 대상이 줄면) — 실행 중이면 즉시 정지 + 화면 새로고침(회원앱만)
   const prevFeatsRef = useRef<("place"|"blog"|"store"|"backlink")[] | undefined>(undefined);
   useEffect(() => {
@@ -310,8 +321,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     if (prev !== undefined) {
       const removed = prev.filter((f) => !now.includes(f));
       if (removed.length) {
-        try { esRef.current?.close(); } catch {}
-        esRef.current = null; setRunning(false);
+        (["place", "blog", "store"] as RunTT[]).forEach((t) => { try { esRefByType.current[t]?.close(); } catch {} esRefByType.current[t] = null; });
+        setRunningTypes({ place: false, blog: false, store: false });
         toast("관리자가 일부 승인을 취소했어요. 실행을 멈추고 새로고침합니다.", "info");
         setTimeout(() => { try { window.location.reload(); } catch {} }, 1400);
       }
@@ -328,20 +339,25 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const scheduledRunPendingRef = useRef(false);
   const scheduledRunScopeRef = useRef(""); // 예약 실행 시작 시점의 대상 scope 고정(실행 중 대상 변경 대비)
   const skipPrivateSaveRef = useRef(false);
-  const esRef = useRef<BotEventStream | null>(null);
+  const esRefByType = useRef<Record<RunTT, BotEventStream | null>>({ place: null, blog: null, store: null });
   const startRef = useRef<() => void>(() => {});
   // 🎯 오토파일럿 자동 순위 체크(목표 달성 여부) — 최신 값 참조용 ref
   const autopilotCheckRef = useRef<() => Promise<{ measured: boolean; reached: boolean }>>(async () => ({ measured: false, reached: false }));
   const logBoxRef = useRef<HTMLDivElement | null>(null);
 
-  const appendLog = (entry: InflowLogEntry) => setLogs((current) => {
-    let next = [...current, entry].slice(-300);
+  // 로그는 대상(탭)별 배열에 쌓는다. appendLog=현재 탭, appendLogFor(t)=특정 탭(실행 콜백은 시작 시점 탭 runType에 명시적으로 쌓아 탭 이동해도 안 섞임).
+  const appendLogFor = (t: RunTT, entry: InflowLogEntry) => setLogsByType((cur) => {
+    let next = [...(cur[t] || []), entry].slice(-300);
     const shots = next.reduce((count, item) => count + (item.type === "shot" ? 1 : 0), 0);
     if (shots > 8) { const firstShot = next.findIndex((item) => item.type === "shot"); if (firstShot >= 0) next = next.filter((_, index) => index !== firstShot); }
-    return next;
+    return { ...cur, [t]: next };
   });
+  const clearLogsFor = (t: RunTT) => setLogsByType((cur) => ({ ...cur, [t]: [] }));
+  const appendLog = (entry: InflowLogEntry) => appendLogFor((targetType as RunTT), entry);
   const pushLog = (m: string) => appendLog({ type: "text", text: m });
+  const pushLogFor = (t: RunTT, m: string) => appendLogFor(t, { type: "text", text: m });
   const pushShot = (caption: string, dataUrl: string) => appendLog({ type: "shot", caption, dataUrl });
+  const pushShotFor = (t: RunTT, caption: string, dataUrl: string) => appendLogFor(t, { type: "shot", caption, dataUrl });
   // 🎯 현재 선택된 대상의 데이터 scope(대상별 통계 분리 키). 대상이 인식되면 그 대상 기준으로 조회.
   const currentScope = (() => {
     try {
@@ -792,11 +808,10 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   };
   useEffect(() => { logBoxRef.current?.scrollTo({ top: logBoxRef.current.scrollHeight, behavior: "smooth" }); }, [logs]);
   useEffect(() => () => {
-    esRef.current?.close();
-    esRef.current = null;
+    (["place", "blog", "store"] as RunTT[]).forEach((t) => { esRefByType.current[t]?.close(); esRefByType.current[t] = null; });
   }, []);
   useEffect(() => {
-    if (!running) return;
+    if (!anyRunning) return;
     let lock: any = null;
     let cancelled = false;
     // 🖥️ 화면(모니터)이 꺼지지 않게 Wake Lock 유지. 화면이 잠깐 숨겨졌다 돌아오거나
@@ -806,14 +821,14 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
         if (cancelled || document.visibilityState !== "visible") return;
         lock = await (navigator as any).wakeLock?.request("screen");
         if (cancelled) { await lock?.release(); return; }
-        lock?.addEventListener?.("release", () => { if (!cancelled && running) void acquire(); });
+        lock?.addEventListener?.("release", () => { if (!cancelled && anyRunning) void acquire(); });
       } catch {}
     };
     const onVis = () => { if (document.visibilityState === "visible" && !cancelled) void acquire(); };
     document.addEventListener("visibilitychange", onVis);
     void acquire();
     return () => { cancelled = true; document.removeEventListener("visibilitychange", onVis); void lock?.release?.().catch(() => {}); };
-  }, [running]);
+  }, [anyRunning]);
 
   // 🔁 폼 입력값 저장(탭 이동해도 유지). 무거운 것(로그·계정목록)은 제외.
   useEffect(() => {
@@ -923,7 +938,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   };
 
   const start = () => {
-    if (running) return;
+    const runType = (targetType as RunTT);   // ★ 이 실행을 이 탭에 고정 — 탭을 옮기거나 다른 탭을 시작해도 각자 독립으로 돈다.
+    if (runningTypes[runType]) return;        // 이 탭이 이미 실행 중이면 무시(다른 탭은 상관없이 시작 가능)
     const kwList = keywords.split(/[,\n]/).map((k) => k.trim()).filter(Boolean);
     if (!kwList.length) { toast("검색 키워드를 1개 이상 입력하세요", "error"); return; }
     if (targetType === "place" && !placeUrl.trim()) { toast("플레이스 주소(지도/플레이스 링크)를 입력하세요", "error"); return; }
@@ -934,7 +950,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     if (!unlimited && used >= limit) { toast(`오늘 유입 한도(${limit}회)를 다 썼어요. 자정에 초기화돼요.`, "error"); return; }
     const n = auto ? (unlimited ? 999 : Math.max(1, limit - used)) : Math.max(1, rounds);
 
-    setRunning(true); setLogs([]); setProgress(0); setSessOk(0);
+    setRunningFor(runType, true); clearLogsFor(runType); setProgressFor(runType, 0); setSessOkFor(runType, 0);
     const params = new URLSearchParams({
       targetType, keywords: kwList.join(","), rounds: String(n),
       termMin: String(termMin), termMax: String(termMax),
@@ -1015,22 +1031,22 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       headers: { "Content-Type": "application/json", "X-Publy-Session": getMemberSessionToken(), "X-Publy-Admin-Session": getAdminSessionToken() },
       body: JSON.stringify(Object.fromEntries(params.entries())),
     });
-    esRef.current = es;
+    esRefByType.current[runType] = es;
     es.onmessage = (e: MessageEvent) => {
       let d: any; try { d = JSON.parse(e.data); } catch { return; }
-      if (d.type === "log") pushLog(d.msg);
-      else if (d.type === "shot" && d.dataUrl) pushShot(d.caption || "단계별 화면", d.dataUrl);
-      else if (d.type === "progress") { setProgress(Math.round((d.done / Math.max(1, d.total)) * 100)); }
+      if (d.type === "log") pushLogFor(runType, d.msg);
+      else if (d.type === "shot" && d.dataUrl) pushShotFor(runType, d.caption || "단계별 화면", d.dataUrl);
+      else if (d.type === "progress") { setProgressFor(runType, Math.round((d.done / Math.max(1, d.total)) * 100)); }
       else if (d.type === "quota_info") setUsed(d.used);
-      else if (d.type === "quota_exceeded") { pushLog("🛑 오늘 유입 한도를 다 썼어요"); toast("오늘 유입 한도 초과", "error"); setRunning(false); es.close(); esRef.current = null; }
-      else if (d.type === "inflow_done") { setSessOk(d.success || 0); pushLog(`🏁 완료 — 총 ${d.done}회 방문, 성공 ${d.success}회`); toast(`유입 완료 · 성공 ${d.success}회`, "success"); setRunning(false); es.close(); esRef.current = null; if (scheduledRunPendingRef.current) { scheduledRunPendingRef.current = false; if (userId && Number(d.success) > 0) void markInflowScheduleRan(userId, scheduledRunScopeRef.current || currentScope); } refreshStats(); if (apEnabled && (targetType === "place" || targetType === "blog")) { pushLog("📍 순위 자동 측정 중…"); autopilotCheckRef.current().then(() => { if (userId) getRankHistory(userId, chartDays, currentScope).then(setRankHist).catch(() => {}); }); } }
-      else if (d.type === "error") { scheduledRunPendingRef.current = false; pushLog(`❌ ${d.msg}`); toast(d.msg, "error"); setRunning(false); es.close(); esRef.current = null; }
+      else if (d.type === "quota_exceeded") { pushLogFor(runType, "🛑 오늘 유입 한도를 다 썼어요"); toast("오늘 유입 한도 초과", "error"); setRunningFor(runType, false); es.close(); esRefByType.current[runType] = null; }
+      else if (d.type === "inflow_done") { setSessOkFor(runType, d.success || 0); pushLogFor(runType, `🏁 완료 — 총 ${d.done}회 방문, 성공 ${d.success}회`); toast(`유입 완료 · 성공 ${d.success}회`, "success"); setRunningFor(runType, false); es.close(); esRefByType.current[runType] = null; if (scheduledRunPendingRef.current) { scheduledRunPendingRef.current = false; if (userId && Number(d.success) > 0) void markInflowScheduleRan(userId, scheduledRunScopeRef.current || currentScope); } refreshStats(); if (apEnabled && (runType === "place" || runType === "blog")) { pushLogFor(runType, "📍 순위 자동 측정 중…"); autopilotCheckRef.current().then(() => { if (userId) getRankHistory(userId, chartDays, currentScope).then(setRankHist).catch(() => {}); }); } }
+      else if (d.type === "error") { scheduledRunPendingRef.current = false; pushLogFor(runType, `❌ ${d.msg}`); toast(d.msg, "error"); setRunningFor(runType, false); es.close(); esRefByType.current[runType] = null; }
     };
-    es.onerror = (detail?: string) => { scheduledRunPendingRef.current = false; const why = detail ? ` — ${detail}` : " — 봇 서버(포트 3364)가 켜져 있는지 확인해주세요(앱을 완전히 껐다 켜기)"; pushLog(`❌ 유입 시작 실패${why}`); toast(`유입 시작 실패${detail ? " · " + detail : " · 봇 연결 확인"}`, "error"); setRunning(false); es.close(); esRef.current = null; };
-    es.onclose = () => setRunning(false);
+    es.onerror = (detail?: string) => { scheduledRunPendingRef.current = false; const why = detail ? ` — ${detail}` : " — 봇 서버(포트 3364)가 켜져 있는지 확인해주세요(앱을 완전히 껐다 켜기)"; pushLogFor(runType, `❌ 유입 시작 실패${why}`); toast(`유입 시작 실패${detail ? " · " + detail : " · 봇 연결 확인"}`, "error"); setRunningFor(runType, false); es.close(); esRefByType.current[runType] = null; };
+    es.onclose = () => setRunningFor(runType, false);
   };
   startRef.current = start;
-  const stop = () => { esRef.current?.close(); esRef.current = null; setRunning(false); pushLog("⏹️ 사용자가 정지했어요"); };
+  const stop = () => { const t = (targetType as RunTT); esRefByType.current[t]?.close(); esRefByType.current[t] = null; setRunningFor(t, false); pushLogFor(t, "⏹️ 사용자가 정지했어요"); };  // 현재 보고 있는 탭만 정지(다른 탭은 계속)
 
   const pct = unlimited ? 0 : Math.min(100, (used / Math.max(1, limit)) * 100);
   const weekTotal = history.reduce((s, d) => s + d.count, 0);
@@ -1238,6 +1254,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
           </div>
 
           {/* 대상 탭 — 관리자가 승인한 것만 보임(미승인은 아예 렌더 안 함). 1개만 승인이면 탭 1개만. */}
+          <style>{`@keyframes pulsePink{0%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}70%{box-shadow:0 0 0 5px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}`}</style>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             {([["place", "🗺️ 플레이스"], ["blog", "📝 블로그"], ["store", "🛒 스마트스토어"], ["backlink", "🔗 백링크"]] as [("place" | "blog" | "store" | "backlink"), string][]).filter(([k]) => allowFeat(k)).map(([k, lb]) => {
               // 백링크 탭은 blTab으로 분리(유입 targetType과 별개). 유입탭은 targetType.
@@ -1249,8 +1266,11 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               const tRem = licenseRemainByFeat?.[k];
               const tDday = (tRem != null) ? Math.floor(tRem / 86400) : null;
               const expiring = (tRem != null) && tRem <= 3 * 86400;   // D-3 이하 임박=빨강
-              return <div key={k} onClick={onClick} style={{ flex: 1, padding: "9px 8px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, cursor: "pointer", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 800 }}>{lb}</span>
+              // 🟢 이 유입 탭이 지금 돌고 있는지(동시 실행) — 탭마다 초록 점으로 표시. 백링크는 해당 없음.
+              const tRunning = k !== "backlink" && (runningTypes[k as RunTT] ?? false);
+              return <div key={k} onClick={onClick} style={{ flex: 1, padding: "9px 8px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, cursor: "pointer", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative" }}>
+                {tRunning && <span title="실행 중" style={{ position: "absolute", top: 6, right: 6, width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "pulsePink 1.4s infinite" }} />}
+                <span style={{ fontSize: 13.5, fontWeight: 800 }}>{lb}{tRunning ? " ▶" : ""}</span>
                 {tPlan && <span style={{ display: "inline-flex", gap: 4, alignItems: "center", fontSize: 10, fontWeight: 900 }}>
                   <span style={{ padding: "1px 6px", borderRadius: 99, background: on ? C.accent : C.line2, color: on ? "#fff" : C.sub }}>{GL[tPlan] || tPlan}</span>
                   {tDday != null && <span style={{ padding: "1px 6px", borderRadius: 99, background: expiring ? "rgba(220,38,38,.12)" : "transparent", color: expiring ? "#dc2626" : (on ? C.accent : C.sub), border: `1px solid ${expiring ? "rgba(220,38,38,.35)" : (on ? C.accent : C.line2)}` }}>{(tRem ?? 0) <= 0 ? "만료" : `D-${tDday}`}</span>}
