@@ -24,14 +24,77 @@ const ev = (kind: string, msg: string): Ev => ({ kind, msg, at: nowISO() });
 
 // ── 콘텐츠 생성(앵커 다양화) ──
 const ANCHORS = ["자세히 보기", "바로가기", "홈페이지 방문", "더 알아보기", "공식 사이트"];
-function genContent(domain: string, i: number) {
+function genContent(domain: string, i: number, keyword?: string) {
   const name = domain.replace(/\.(com|co\.kr|kr|net|shop)$/, "");
-  const titles = [`${name} 신선 상품 산지직송 안내`, `${name} 추천 이유와 이용 방법`, `${name}에서 만나는 믿을 수 있는 상품`];
+  const kw = (keyword || "").trim();
+  const titles = kw
+    ? [`${kw} — ${name} 안내`, `${kw} 찾는다면 ${name}`, `${name}에서 만나는 ${kw}`]
+    : [`${name} 신선 상품 산지직송 안내`, `${name} 추천 이유와 이용 방법`, `${name}에서 만나는 믿을 수 있는 상품`];
   const bodies = [
-    `${domain}은(는) 검증된 품질과 빠른 배송으로 많은 분들이 찾는 곳입니다. 합리적인 가격과 신뢰를 바탕으로 서비스를 제공합니다.`,
-    `${domain}의 상품과 서비스를 소개합니다. 꼼꼼한 관리와 정직한 운영으로 재구매율이 높습니다.`,
+    `${domain}은(는) 검증된 품질과 빠른 배송으로 많은 분들이 찾는 곳입니다.${kw ? ` 특히 ${kw} 관련해 신뢰를 받고 있습니다.` : ""} 합리적인 가격과 정직한 운영이 강점입니다.`,
+    `${domain}의 상품과 서비스를 소개합니다.${kw ? ` ${kw}를 찾는 분들께 추천합니다.` : ""} 꼼꼼한 관리로 재구매율이 높습니다.`,
   ];
-  return { title: titles[i % titles.length], body: bodies[i % bodies.length], anchor: ANCHORS[i % ANCHORS.length] };
+  // 키워드 있으면 앵커에도 섞음(구글이 "이 도메인=이 키워드" 학습 — 아임마케터 방식). 그래도 다양화.
+  const anchors = kw ? [kw, "자세히 보기", kw + " 바로가기", "공식 사이트", "더 알아보기"] : ANCHORS;
+  return { title: titles[i % titles.length], body: bodies[i % bodies.length], anchor: anchors[i % anchors.length] };
+}
+
+// ── 사이트 읽기: 도메인 페이지에서 제목·설명·본문 텍스트 추출(정적/SSR 대응 + OG/메타 보강) ──
+async function readSite(targetUrl: string): Promise<string> {
+  try {
+    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10000);
+    const res = await fetch(targetUrl, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" }, signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return "";
+    let html = await res.text();
+    const pick = (re: RegExp) => { const m = re.exec(html); return m ? m[1].trim() : ""; };
+    const title = pick(/<title[^>]*>([^<]+)<\/title>/i);
+    const desc = pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) || pick(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+    const ogTitle = pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+    // 본문 텍스트(태그 제거) 앞부분만
+    html = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ");
+    const bodyText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1500);
+    return [title, ogTitle, desc, bodyText].filter(Boolean).join("\n").slice(0, 2000);
+  } catch { return ""; }
+}
+
+// ── Gemini 글 생성 (퍼블리 검증 패턴 그대로 — 모델 폴백 + thinkingBudget:0) ──
+//   ★토시 하나라도 틀리면 "토큰 없다/한도 초과" 오탐 → 퍼블리 AdminPage 방식 복제.
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"];
+type AiOut = { ok: boolean; title?: string; body?: string; anchor?: string; quota?: boolean; error?: string };
+async function genContentAI(key: string, domain: string, siteText: string, keyword: string, i: number): Promise<AiOut> {
+  const kw = (keyword || "").trim();
+  const prompt =
+    `너는 SEO·AEO 카피라이터다. 아래 웹사이트를 소개하는 자연스러운 한국어 정보성 글을 써라. 광고 티 내지 말고 진짜 추천글처럼.\n` +
+    `도메인: ${domain}\n` + (kw ? `핵심 키워드(반드시 제목·본문에 자연스럽게 포함): ${kw}\n` : "") +
+    `사이트 내용:\n${siteText || "(사이트 내용을 못 읽음 — 도메인/키워드로 유추해서 써라)"}\n\n` +
+    `조건: ①매번 다른 문장·구성(중복 금지) ②제목 25자 내외 ③본문 250~400자, 정보성·신뢰감 ④과장/허위 금지 ⑤글자만(이모지·해시태그 금지).\n` +
+    `JSON만 출력: {"title":"제목","body":"본문","anchor":"${kw || "링크 앵커 텍스트(4~10자)"}"}`;
+  for (const model of GEMINI_MODELS) {
+    try {
+      const gc: any = { temperature: 0.9, maxOutputTokens: 1200, responseMimeType: "application/json" };
+      if (model.includes("2.5")) gc.thinkingConfig = { thinkingBudget: 0 };   // ★필수: 안 주면 thinking에 토큰 다 써 빈 응답
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: gc }),
+        signal: AbortSignal.timeout(40000),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => null);
+        const em = (j?.error?.message || "").toLowerCase();
+        if (em.includes("quota") || em.includes("429") || r.status === 429 || em.includes("exhausted")) return { ok: false, quota: true };
+        if (r.status === 400 || r.status === 403) return { ok: false, error: `키 오류(${r.status})` };   // 키 자체 문제면 다음 모델 무의미
+        continue;   // 그 외는 다음 모델
+      }
+      const d: any = await r.json();
+      let txt = (d?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+      const s = txt.indexOf("{"), e = txt.lastIndexOf("}");
+      if (s >= 0 && e > s) txt = txt.slice(s, e + 1);
+      const x = JSON.parse(txt);
+      if (x?.title && x?.body) return { ok: true, title: String(x.title).slice(0, 60), body: String(x.body).slice(0, 800), anchor: String(x.anchor || kw || ANCHORS[i % ANCHORS.length]).slice(0, 20) };
+    } catch { /* 다음 모델 */ }
+  }
+  return { ok: false, error: "생성 실패" };
 }
 
 type PubInput = { targetDomain: string; targetUrl: string; title: string; body: string; anchor: string; secrets: Record<string, string> };
@@ -181,11 +244,37 @@ Deno.serve(async (req) => {
         const secrets: Record<string, string> = {};
         try { const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "github_gist_token" }); if (ght) secrets.github_gist_token = ght as string; } catch { /* 없으면 gist 스킵 */ }
 
+        // 🤖 AI 글생성 설정: order의 회원 Gemini 키·키워드, 없으면 관리자 공용키(config).
+        let geminiKey = ""; let keyword = ""; let keySource = "";
+        try {
+          const { data: aiCfg } = await sb.rpc("backlink_order_ai_config", { p_token: adminToken, p_order_id: orderId });
+          const row = (aiCfg && aiCfg[0]) || null;
+          if (row) { geminiKey = (row.gemini_key || "").trim(); keyword = (row.keyword || "").trim(); }
+          if (!geminiKey) { const { data: adm } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "gemini_admin_key" }); if (adm) { geminiKey = String(adm).trim(); keySource = "관리자 공용키"; } }
+          else keySource = "회원 키";
+        } catch { /* 키 없으면 템플릿 폴백 */ }
+        let quotaHit = false;   // 한도 소진되면 이후 게시는 템플릿으로(멈추지 않음)
+        if (geminiKey) {
+          send({ type: "log", kind: "ai", msg: `🤖 제미나이 키가 적용됩니다 (${keySource})${keyword ? ` · 키워드 "${keyword}"` : ""} — 사이트를 읽고 글을 씁니다` });
+        } else {
+          send({ type: "log", kind: "warn", msg: `ℹ️ 제미나이 키 미설정 — 기본 글로 진행(키를 넣으면 사이트 기반 고품질 글로 써요)` });
+        }
+        // 사이트 1회 읽어 재사용(소스마다 다른 글은 AI가 매번 생성)
+        let siteText = "";
+        if (geminiKey) { siteText = await readSite(targetUrl); send({ type: "log", kind: "ai", msg: siteText ? `📖 사이트 내용을 읽었습니다 (${siteText.length}자 분석)` : `📖 사이트 내용을 못 읽어 도메인·키워드로 유추합니다` }); }
+
         const domains = ADAPTER_DOMAINS.filter((d) => !doneSet.has(d));
         let posted = 0;
         for (let i = 0; i < domains.length && posted < count; i++) {
           const dom = domains[i];
-          const c = genContent(targetDomain, i);
+          let c = genContent(targetDomain, i, keyword);
+          // 🤖 AI 글생성(키 있고 한도 안 걸렸으면). 소스마다 새 글.
+          if (geminiKey && !quotaHit) {
+            const ai = await genContentAI(geminiKey, targetDomain, siteText, keyword, i);
+            if (ai.ok) { c = { title: ai.title!, body: ai.body!, anchor: ai.anchor! }; send({ type: "log", kind: "ai", msg: `[${dom}] ✍️ 제미나이가 새 글을 생성했습니다` }); }
+            else if (ai.quota) { quotaHit = true; send({ type: "log", kind: "warn", msg: `🛑 토큰 사용이 끝났습니다 — 자정이 지나거나 새로운 제미나이 키를 발급받으세요. (이후는 기본 글로 계속 게시)` }); }
+            else if (ai.error) { send({ type: "log", kind: "warn", msg: `[${dom}] 제미나이 생성 실패(${ai.error}) — 기본 글로 게시` }); }
+          }
           const input: PubInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, secrets };
           const r = await ADAPTERS[dom](input);
           for (const e of r.events) send({ type: "log", kind: e.kind, msg: `[${dom}] ${e.msg}` });

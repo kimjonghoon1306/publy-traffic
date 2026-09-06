@@ -57,6 +57,13 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const [keyOpen, setKeyOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
+  // 🤖 제미나이 키 + 키워드 (사이트 읽고 고품질 글 생성)
+  const [gemMasked, setGemMasked] = useState<string | null>(null);
+  const [gemInput, setGemInput] = useState("");
+  const [gemMsg, setGemMsg] = useState("");
+  const [gemOpen, setGemOpen] = useState(false);
+  const [kwInput, setKwInput] = useState("");
+  const [kwMsg, setKwMsg] = useState("");
 
   const pushLog = useCallback((kind: string, msg: string) => {
     setLogs(l => [...l, { kind, msg, at: new Date().toISOString() }]);
@@ -78,7 +85,32 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     } catch {}
   }, [token]);
 
-  useEffect(() => { loadSubs(); loadMyKey(); const iv = setInterval(loadSubs, 20000); return () => clearInterval(iv); }, [loadSubs, loadMyKey]);
+  // 🤖 제미나이 키 상태 로드
+  const loadGemKey = useCallback(async () => {
+    try {
+      const { data } = await supabase.rpc("backlink_my_gemini", { p_token: token });
+      const r = (data && data[0]) || null;
+      setGemMasked(r?.key_masked || null);
+    } catch {}
+  }, [token]);
+  const saveGemKey = useCallback(async () => {
+    const v = gemInput.trim();
+    if (!v) { setGemMsg("발급받은 제미나이 키를 붙여넣으세요"); setTimeout(() => setGemMsg(""), 3500); return; }
+    const { error } = await supabase.rpc("backlink_set_my_gemini", { p_token: token, p_key: v });
+    if (error) { setGemMsg("저장 실패: " + error.message); return; }
+    setGemMsg("✅ 제미나이 키 저장 완료 — 이제 사이트를 읽고 고품질 글로 백링크해요"); setGemInput(""); loadGemKey(); setTimeout(() => setGemMsg(""), 4000);
+  }, [gemInput, token, loadGemKey]);
+  const clearGemKey = useCallback(async () => {
+    await supabase.rpc("backlink_set_my_gemini", { p_token: token, p_key: "" });
+    setGemMasked(null); setGemMsg("제미나이 키를 삭제했어요(기본 글로 게시)"); loadGemKey(); setTimeout(() => setGemMsg(""), 4000);
+  }, [token, loadGemKey]);
+  const saveKeyword = useCallback(async () => {
+    const { error } = await supabase.rpc("backlink_set_my_keyword", { p_token: token, p_keyword: kwInput.trim() });
+    if (error) { setKwMsg("저장 실패: " + error.message); return; }
+    setKwMsg(kwInput.trim() ? "✅ 키워드 저장 — 제목·본문·앵커에 자연스럽게 반영돼요" : "✅ 키워드를 비웠어요"); setTimeout(() => setKwMsg(""), 4000);
+  }, [kwInput, token]);
+
+  useEffect(() => { loadSubs(); loadMyKey(); loadGemKey(); const iv = setInterval(loadSubs, 20000); return () => clearInterval(iv); }, [loadSubs, loadMyKey, loadGemKey]);
   useEffect(() => { if (logBoxRef.current) logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight; }, [logs]);
   useEffect(() => () => { esRef.current?.close(); }, []);
 
@@ -259,6 +291,48 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
               ? <button onClick={stopPublish} style={{ padding: "12px 22px", borderRadius: 10, border: "none", background: "#dc2626", color: "#fff", fontWeight: 900, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>■ 멈추기</button>
               : <button onClick={startPublish} disabled={!unlimited && remainToday <= 0} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: (!unlimited && remainToday <= 0) ? C.line : `linear-gradient(135deg,${C.accent},#8b5cf6)`, color: "#fff", fontWeight: 900, fontSize: 14, cursor: (!unlimited && remainToday <= 0) ? "default" : "pointer", fontFamily: "inherit" }}>🚀 백링크 시작하기</button>}
           </div>
+        </div>
+
+        {/* ── 🤖 제미나이 키(AI 글생성) ── */}
+        <div style={card({ marginBottom: 12, border: `1px solid ${gemMasked ? "#16a34a55" : C.line}` })}>
+          <div onClick={() => setGemOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
+            <b style={{ fontSize: 14, color: C.ink }}>🤖 제미나이(AI) 키 <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 내 사이트를 읽고 좋은 글로 백링크</span></b>
+            <span style={{ marginLeft: "auto", ...chip(gemMasked ? logC.post.bg : C.panel, gemMasked ? logC.post.fg : C.sub) }}>{gemMasked ? "키 등록됨 🟢" : "키 없음(기본 글)"}</span>
+            <span style={{ color: C.sub, fontSize: 13 }}>{gemOpen ? "▲" : "▼"}</span>
+          </div>
+          {gemOpen && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.8, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: gemMasked ? logC.post.bg : C.panel, border: `1px solid ${C.line}` }}>
+                {gemMasked
+                  ? <><b style={{ color: logC.post.fg }}>🟢 제미나이 키가 등록돼 있어요</b> <span style={{ color: logC.post.fg }}>({gemMasked})</span><br /><span style={{ color: C.sub }}>도메인을 넣으면 AI가 <b>내 사이트를 읽고</b> 소스마다 다른 자연스러운 글을 써서 백링크해요(상위노출·AI 인용에 유리).</span></>
+                  : <><b>💡 왜 필요한가요?</b> 상위노출·AI 인용은 <b style={{ color: C.ink }}>글 내용이 좋아야</b> 돼요. 제미나이 키를 넣으면 AI가 <b>내 사이트를 읽고</b> 진짜 추천글처럼 써줘요. <b>무료</b>로 발급받을 수 있어요.</>}
+              </div>
+              <button onClick={() => { try { window.open("https://aistudio.google.com/apikey", "_blank"); } catch {} }}
+                style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1.5px solid ${C.accent}`, background: C.soft, color: C.accent, fontWeight: 900, fontSize: 13.5, cursor: "pointer", marginBottom: 10 }}>
+                🔷 제미나이 키 무료 발급받기 (Google AI Studio 열기) ↗
+              </button>
+              <div style={{ fontSize: 12, color: C.ink, lineHeight: 2, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: C.panel, border: `1px solid ${C.line}` }}>
+                <b>📋 발급 3단계</b><br />
+                <b style={{ color: C.accent }}>1.</b> 위 버튼으로 <b>Google AI Studio</b> 접속(구글 로그인)<br />
+                <b style={{ color: C.accent }}>2.</b> <b>Create API key</b> → 키 복사<br />
+                <b style={{ color: C.accent }}>3.</b> 아래에 붙여넣고 저장
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                <input value={gemInput} onChange={e => setGemInput(e.target.value)} placeholder="발급받은 제미나이 키 붙여넣기" style={{ ...inputStyle, flex: 1, minWidth: 160, fontSize: 13.5 }} />
+                <button onClick={saveGemKey} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>저장</button>
+                {gemMasked && <button onClick={clearGemKey} style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${logC.fail.fg}`, background: C.win, color: logC.fail.fg, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>삭제</button>}
+              </div>
+              {gemMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700, marginBottom: 10 }}>{gemMsg}</div>}
+              {/* 키워드(선택) */}
+              <div style={{ fontSize: 12.5, color: C.ink, fontWeight: 700, marginBottom: 6 }}>🎯 상위노출 키워드 <span style={{ color: C.sub, fontWeight: 600 }}>(선택 · 뜨고 싶은 검색어)</span></div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input value={kwInput} onChange={e => setKwInput(e.target.value)} placeholder="예: 산지직송 굴비, 강원도 특산물" style={{ ...inputStyle, flex: 1, minWidth: 160, fontSize: 13.5 }} />
+                <button onClick={saveKeyword} style={{ padding: "12px 18px", borderRadius: 10, border: `1.5px solid ${C.accent}`, background: C.soft, color: C.accent, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>저장</button>
+              </div>
+              <div style={{ fontSize: 11, color: C.sub, marginTop: 6 }}>키워드를 넣으면 글 제목·본문·링크 앵커에 자연스럽게 반영돼 구글이 "이 도메인 = 이 키워드"로 학습해요.</div>
+              {kwMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700, marginTop: 8 }}>{kwMsg}</div>}
+            </div>
+          )}
         </div>
 
         {/* ── 색인 키 ── */}
