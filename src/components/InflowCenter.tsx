@@ -1373,7 +1373,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: keywords ? C.ink : C.sub }}>{keywords.split(",")[0]?.trim() || "키워드를 입력하세요"}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
                   <div style={{ fontSize: 22, fontWeight: 900, color: C.accent }}>{rankText} <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>현재</span></div>
-                  <button onClick={runMeasureRank} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>📍 순위 측정</button>
+                  <button onClick={runMeasureRank} disabled={rankLoading} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: rankLoading ? C.panel2 : C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: rankLoading ? "default" : "pointer", fontFamily: "inherit", opacity: rankLoading ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>{rankLoading ? <><span style={{ width: 11, height: 11, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />측정 중…</> : "📍 순위 측정"}</button>
                 </div>
               </>) : (<>
                 <h3 style={mH}><span style={mNum}>4</span> 안내</h3>
