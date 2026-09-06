@@ -69,13 +69,19 @@ app.post("/publish-order", async (req, res) => {
   // ★ 한 회원(주문)=한 소스=한 백링크(유니크, 체크리스트#47): 이미 성공한 소스는 스킵 → 중복 백링크 방지.
   const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
   const doneSet = new Set<string>((doneSrc as string[] | null) || []);
+  // 우리소유 소스용 토큰(github_gist_token 등)을 config에서 1회 읽어 어댑터에 주입(클라이언트 노출 없음)
+  const secrets: Record<string, string> = {};
+  try {
+    const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "github_gist_token" });
+    if (ght) secrets.github_gist_token = ght as string;
+  } catch { /* 토큰 없으면 gist 어댑터가 스킵 처리 */ }
   const results: any[] = [];
   for (let i = 0; i < domains.length; i++) {
     const dom = domains[i];
     if (doneSet.has(dom)) { results.push({ source: dom, ok: false, skipped: "already_posted(유니크)" }); continue; }
     const adapter = getAdapter(dom)!;
     const c = genContent(targetDomain, i);
-    const input: PublishInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, proxy: null };
+    const input: PublishInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, proxy: null, secrets };
     const r = await adapter.publish(input);
     // 게시결과 기록 — evidence에 단계 events(API시작·게시성공) 포함해 저장
     const evidence = { ...r.evidence, events: r.events };

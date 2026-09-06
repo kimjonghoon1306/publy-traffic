@@ -31,6 +31,7 @@ export interface PublishInput {
   body: string;                 // AI 생성 본문(텍스트)
   anchor: string;               // 앵커 텍스트(다양화)
   proxy?: ProxyConf | null;     // 봇형이면 프록시(공용 풀 로테이션), API형이면 null
+  secrets?: Record<string, string>; // 우리소유 소스용 토큰(github_gist_token 등). config에서 서버가 읽어 주입.
 }
 
 export interface ProxyConf {
