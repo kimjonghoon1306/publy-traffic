@@ -471,6 +471,7 @@ function shutdownBots(): Promise<void> {
     killPort(3363, botProcess),
     killPort(3364, neighborBotProcess),
     killPort(3365, instaBotProcess),
+    killPort(3374, backlinkBotProcess),   // 🔗 백링크 봇도 종료 시 정리 — 안 하면 좀비로 3374 물고 남아 재시작해도 옛 봇(오류) 유지됨
   ]).then(() => undefined);
   return shutdownPromise;
 }

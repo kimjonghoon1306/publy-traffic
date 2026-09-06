@@ -134,7 +134,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, licenseRemainByFeat, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; licenseRemainByFeat?: Record<string, number>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, licenseRemainByFeat, onActiveToolChange, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; licenseRemainByFeat?: Record<string, number>; onActiveToolChange?: (tool: "place" | "blog" | "store" | "backlink") => void; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다.
   //   회원앱(memberMode)=엄격: 승인된 것만(승인 없으면 아무것도 안 보임=잠금).
@@ -156,6 +156,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [blTab, setBlTab] = useState(false);  // 🔗 백링크 탭 활성(유입 targetType과 분리 — 유입 로직 안 건드림)
   // 🎫 현재 대상이 미승인이면 승인된 첫 대상으로 자동 전환(미승인 화면에 갇히지 않게)
   useEffect(() => { if (inflowFeats.length && !allowFeat(targetType)) setTargetType(inflowFeats[0]); }, [allowedFeatures, targetType]);
+  // 🎫 현재 선택 탭을 부모(TrafficApp)에 알림 → 하단 대여 그래프가 그 탭 만료 기준으로 바뀜(탭마다 만료 다름).
+  useEffect(() => { onActiveToolChange?.(blTab ? "backlink" : targetType); }, [blTab, targetType, onActiveToolChange]);
   // 🎫 현재 대상의 라이선스 등급 한도.
   //   ★트래픽은 결제 별도 → 회원앱(memberMode)은 퍼블리 등급(user.plan)을 절대 안 탄다.
   //     오직 컨트롤타워 발급(featLic)만으로 한도·무제한 결정(featLic 없으면 0=차단, 어차피 승인없으면 잠금화면).

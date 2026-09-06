@@ -28,16 +28,14 @@ const sb = createClient(SB_URL, SB_KEY);
 app.use(cors({ origin: ["http://localhost:5173", "http://127.0.0.1:5173", "null"] }));
 app.use(express.json({ limit: "50mb" }));
 app.use((req, res, next) => {
-  if (req.path === "/health") return next();
+  if (!AUTH_TOKEN) return next(); // 로컬 개발 폴백(토큰 미설정 시)
   // 🔗 회원 실시간 게시 스트림은 브라우저 EventSource(SSE)라 커스텀 헤더(Authorization: Bearer)를 못 붙인다.
-  //   → Bearer 면제. 대신 쿼리스트링 token(회원 세션)으로 핸들러가 backlink_my_today_remaining RPC에서 세션을 자체 검증한다
-  //     (세션 무효면 게시 자체가 차단됨). 봇은 127.0.0.1 로컬바인딩이라 외부 접근도 불가.
+  //   → 이 경로만 Bearer 면제. 쿼리스트링 token(회원 세션)을 핸들러 RPC가 자체 검증(세션 무효면 게시 차단). 봇은 127.0.0.1 로컬바인딩.
   if (req.path === "/member-publish-stream") return next();
-  if (AUTH_TOKEN) {
-    const h = req.headers.authorization || "";
-    if (h !== `Bearer ${AUTH_TOKEN}`) return res.status(401).json({ error: "unauthorized" });
-  }
-  next();
+  // /health 포함 그 외 전부 인증. ★ naver-bot과 동일 패턴 = 401 응답을 "Unauthorized"(대문자)로 통일해야
+  //   앱(main.ts killPort)이 '토큰 다른 옛 우리 봇'으로 인식해 재시작 시 좀비를 정리한다(예전엔 /health 예외+소문자라 좀비가 안 죽어 옛 봇이 계속 3374를 물었음).
+  if (req.get("Authorization") === `Bearer ${AUTH_TOKEN}`) return next();
+  res.status(401).json({ error: "Unauthorized" });
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true, bot: "backlink-bot", port: PORT, adapters: listAdapterDomains() }));

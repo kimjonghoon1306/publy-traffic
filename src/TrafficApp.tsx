@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { PublyUser, PublyAccount, getAccounts, upsertAccount, deleteTrafficAccount, getTrafficLicenses, TRAFFIC_PLAN_LIMIT, ToolLicense } from "./lib/supabase";
+import { PublyUser, PublyAccount, getAccounts, upsertAccount, deleteTrafficAccount, getTrafficLicenses, TRAFFIC_PLAN_LIMIT, ToolLicense, getMemberSessionToken } from "./lib/supabase";
 import { botFetch } from "./lib/botApi";
 import InflowCenter from "./components/InflowCenter";
+// import OrderHome from "./components/OrderHome";  // M2 홈화면 — 본문 분기 완성+M3와 함께 활성화 예정(현재 보류)
 
 const BOT = "http://127.0.0.1:3363";
 
@@ -38,6 +39,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
   const [lics, setLics] = useState<ToolLicense[]>([]);
   const [licFetchedAt, setLicFetchedAt] = useState(0);
   const [allowedFeatures, setAllowedFeatures] = useState<("place" | "blog" | "store" | "backlink")[]>([]);
+  const [activeTool, setActiveTool] = useState<string>("");   // 🎫 현재 선택한 탭 — 하단 대여 그래프를 이 탭 기준으로(탭마다 만료 다름).
   const [licenseSaver, setLicenseSaver] = useState<string>("");
   const [licenseByFeat, setLicenseByFeat] = useState<Record<string, { limit: number; actions: string[]; plan: string }>>({});
   const licSigRef = useRef<string>("");
@@ -77,21 +79,23 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
     const h = n.getHours(); const ap = h < 12 ? "오전" : "오후"; const h12 = (h % 12) || 12;
     return `${n.getMonth() + 1}월 ${n.getDate()}일 (${days[n.getDay()]}) ${ap} ${h12}:${String(n.getMinutes()).padStart(2, "0")}:${String(n.getSeconds()).padStart(2, "0")}`;
   })();
-  // 가장 먼저 만료되는 활성 라이선스를 하단 바에 표시(그게 실질 대여 기간)
+  // 하단 대여 바 = 현재 선택한 탭(activeTool)의 라이선스 기준 — 탭마다 만료가 다르면 탭 바꿀 때 하단 날짜·시간·만기 그래프도 그 탭 것으로 바뀜.
+  //   활성 탭이 없거나(홈 등) 그 탭 라이선스가 없으면 가장 먼저 만료되는 것으로 폴백.
   const soonest = lics.slice().sort((a, b) => (a.remain_sec ?? 0) - (b.remain_sec ?? 0))[0];
-  const remainSec = soonest ? Math.max(0, (soonest.remain_sec ?? 0) - elapsed) : 0;
+  const barLic = lics.find(l => l.tool === activeTool) || soonest;
+  const remainSec = barLic ? Math.max(0, (barLic.remain_sec ?? 0) - elapsed) : 0;
   const dDay = Math.floor(remainSec / 86400);
   const hh = String(Math.floor((remainSec % 86400) / 3600)).padStart(2, "0");
   const mm = String(Math.floor((remainSec % 3600) / 60)).padStart(2, "0");
   const ss = String(remainSec % 60).padStart(2, "0");
-  const gradePlan = soonest?.plan || "";
+  const gradePlan = barLic?.plan || "";
   const gradeLimit = TRAFFIC_PLAN_LIMIT[gradePlan] ?? 0;
   // 🎫 툴(탭)별 남은 기간(초) — 각 탭 버튼에 등급·D-day를 개별 표시하기 위해(한 회원도 탭마다 등급·만료 다름).
   //   시계조작 방지: 서버 remain_sec - 경과초. licenseByFeat(plan) + 이 remain을 InflowCenter 탭 배지에서 함께 씀.
   const licenseRemainByFeat: Record<string, number> = {};
   lics.forEach(l => { if (l.tool) licenseRemainByFeat[l.tool] = Math.max(0, (l.remain_sec ?? 0) - elapsed); });
   // 최장 대여기간(진행률 링) — 만료일까지의 총 기간을 정확히 알 수 없으니 30일 기준 게이지로 표시
-  const pct = soonest ? Math.min(100, Math.round((remainSec / (30 * 86400)) * 100)) : 0;
+  const pct = barLic ? Math.min(100, Math.round((remainSec / (30 * 86400)) * 100)) : 0;
 
   // ── 💤 절전 방지(유입/예약/오토파일럿 실행 중) ──
   const [inflowBusy, setInflowBusy] = useState(false);
@@ -166,10 +170,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
         </span>
         <span style={{ fontSize: 11.5, fontWeight: 700, color: C.accent, fontVariantNumeric: "tabular-nums", ["WebkitAppRegion" as any]: "no-drag" }}>🕐 {clockStr}</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", ["WebkitAppRegion" as any]: "no-drag" }}>
-          {/* 🎫 내 트래픽 등급 배지 — 대여 있으면 등급, 없으면 미결제(업그레이드 유도) */}
-          {soonest
-            ? <span style={{ fontSize: 10.5, fontWeight: 900, color: C.accent, background: C.soft, border: `1px solid ${C.line2}`, padding: "3px 9px", borderRadius: 99 }}>{GRADE_LABEL[gradePlan] || gradePlan}</span>
-            : <span style={{ fontSize: 10.5, fontWeight: 900, color: "#dc2626", background: "rgba(220,38,38,.1)", border: "1px solid rgba(220,38,38,.35)", padding: "3px 9px", borderRadius: 99 }}>미결제</span>}
+          {/* 🎫 대표 등급 배지 제거(2026-09-06 테리) — 등급은 탭마다 개별 표시되므로 헤더 중복 삭제 */}
           <span style={{ fontSize: 11.5, color: C.sub, fontWeight: 700 }}>{user.name || user.email}</span>
           <button onClick={onThemeToggle} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.line2}`, background: C.win, color: C.ink, cursor: "pointer", fontSize: 13 }}>{dark ? "☀️" : "🌙"}</button>
           <button onClick={() => setShowAcc(true)} style={btn(C.panel, C.accent)}>🔗 계정</button>
@@ -179,7 +180,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
 
       {/* 본문 = 유입 엔진(InflowCenter) */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 18px" }}>
-        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} licenseRemainByFeat={licenseRemainByFeat} onBusyChange={setInflowBusy} externalAccounts={accounts} memberEmail={user.email} memberName={user.name} />
+        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} licenseRemainByFeat={licenseRemainByFeat} onActiveToolChange={setActiveTool} onBusyChange={setInflowBusy} externalAccounts={accounts} memberEmail={user.email} memberName={user.name} />
       </div>
 
       {/* 하단 대여 카운트다운 */}
@@ -190,7 +191,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: C.sub }}>대여 남은 기간</span>
-          {soonest ? (
+          {barLic ? (
             <span style={{ fontSize: 14, fontWeight: 900 }}>
               <span style={{ background: C.accent, color: "#fff", padding: "1px 8px", borderRadius: 99, fontSize: 12 }}>D-{dDay}</span>{" "}
               <span style={{ fontVariantNumeric: "tabular-nums" }}>{hh}:{mm}:{ss}</span>
@@ -200,7 +201,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
         <div style={{ flex: 1, height: 7, borderRadius: 5, background: C.line2, overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${pct}%`, background: `linear-gradient(90deg,${C.accent},${C.accent2})` }} />
         </div>
-        {soonest && <span style={{ fontSize: 10.5, fontWeight: 900, color: C.accent, background: C.soft, border: `1px solid ${C.line2}`, padding: "3px 9px", borderRadius: 99 }}>{GRADE_LABEL[gradePlan] || gradePlan} · {gradeLimit === 0 ? "무제한" : `하루 ${gradeLimit}회`}</span>}
+        {barLic && <span style={{ fontSize: 10.5, fontWeight: 900, color: C.accent, background: C.soft, border: `1px solid ${C.line2}`, padding: "3px 9px", borderRadius: 99 }}>{GRADE_LABEL[gradePlan] || gradePlan} · {gradeLimit === 0 ? "무제한" : `하루 ${gradeLimit}회`}</span>}
       </div>
 
       {/* 🔗 계정 연결 모달 */}
