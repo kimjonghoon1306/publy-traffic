@@ -235,6 +235,14 @@ async function submitIndexNow(host: string, key: string, urls: string[]) {
   } catch { return { result: "error", status: 0 }; }
 }
 
+// ── config 조회: 세션토큰(admin_backlink_get_config) 실패하면 시크릿(backlink_config_get)으로 재시도 ──
+//   ★gist 토큰/gemini 키가 "미설정"으로 오탐되던 버그 수정(시크릿 기반 흐름은 세션RPC가 거부함).
+async function getConfig(sb: any, token: string, key: string): Promise<string> {
+  try { const { data, error } = await sb.rpc("admin_backlink_get_config", { p_token: token, p_key: key }); if (!error && data) return String(data); } catch { /* 다음 */ }
+  try { const { data, error } = await sb.rpc("backlink_config_get", { p_token: token, p_key: key }); if (!error && data) return String(data); } catch { /* 없음 */ }
+  return "";
+}
+
 // ── ⚙️ 어댑터 생성(웹/폰 가능, 순수 fetch) — 우리소유 gist(A) + telegra/graph(B) 수량만큼 생성·배치 ──
 async function genOne(slot: number, gistToken: string): Promise<{ domain: string; scale: string; grade: string; detailUrl?: string; ok: boolean; note: string }> {
   try {
@@ -264,7 +272,7 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
         const doneSet = new Set<string>((doneSrc as string[] | null) || []);
         // gist 토큰
         const secrets: Record<string, string> = {};
-        try { const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "github_gist_token" }); if (ght) secrets.github_gist_token = ght as string; } catch { /* 없으면 gist 스킵 */ }
+        const ght = await getConfig(sb, adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght;
 
         // 🤖 AI 글생성 설정: order의 회원 Gemini 키·키워드, 없으면 관리자 공용키(config).
         let geminiKey = ""; let keyword = ""; let keySource = "";
@@ -273,7 +281,7 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
           const row = (aiCfg && aiCfg[0]) || null;
           if (row) { geminiKey = (row.gemini_key || "").trim(); keyword = (row.keyword || "").trim(); }
           if (kwOverride) keyword = kwOverride;   // 관리자 실행 URL 키워드 우선
-          if (!geminiKey) { const { data: adm } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "gemini_admin_key" }); if (adm) { geminiKey = String(adm).trim(); keySource = "관리자 공용키"; } }
+          if (!geminiKey) { const adm = await getConfig(sb, adminToken, "gemini_admin_key"); if (adm) { geminiKey = adm.trim(); keySource = "관리자 공용키"; } }
           else keySource = "회원 키";
         } catch { /* 키 없으면 템플릿 폴백 */ }
         let quotaHit = false;   // 한도 소진되면 이후 게시는 템플릿으로(멈추지 않음)
@@ -412,7 +420,7 @@ Deno.serve(async (req) => {
         if (genSecret !== "456789") { send({ type: "error", msg: "unauthorized" }); controller.close(); return; }
         const runId = crypto.randomUUID();
         let gistToken = "";
-        try { const { data: ght } = await sb.rpc("admin_backlink_get_config", { p_token: genSecret, p_key: "github_gist_token" }); if (ght) gistToken = String(ght); } catch { /* 없으면 gist 스킵 */ }
+        gistToken = await getConfig(sb, genSecret, "github_gist_token");
         send({ type: "log", kind: "wait", msg: `⚙️ 어댑터 생성 시작 — ${genCount}개 (우리소유·API 섞어 도배 방지)` });
         let ok = 0, fail = 0, owned = 0, api = 0;
         for (let i = 0; i < genCount; i++) {
