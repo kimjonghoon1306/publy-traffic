@@ -235,25 +235,10 @@ async function submitIndexNow(host: string, key: string, urls: string[]) {
   } catch { return { result: "error", status: 0 }; }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
-  const url = new URL(req.url);
-  const adminToken = url.searchParams.get("adminToken") || "";
-  const orderId = url.searchParams.get("orderId") || "";
-  const targetDomain = (url.searchParams.get("targetDomain") || "").trim();
-  const count = Math.max(1, Math.min(50, Number(url.searchParams.get("count")) || 1));
-  const kwOverride = (url.searchParams.get("keyword") || "").trim();   // 관리자 실행: URL 키워드가 있으면 우선
-
-  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const enc = new TextEncoder();
+// ── 핵심 게시 로직(SSE 실행·스케줄러 공유). send 콜백으로 로그 전송(SSE는 스트림, 스케줄러는 무시). posted 반환. ──
+async function runPublish(sb: any, send: (o: any) => void, adminToken: string, orderId: string, targetDomain: string, count: number, kwOverride: string): Promise<number> {
   const targetUrl = targetDomain.startsWith("http") ? targetDomain : `https://${targetDomain}`;
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (obj: any) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
-      try {
-        if (!adminToken || !orderId || !targetDomain) { send({ type: "error", msg: "adminToken, orderId, targetDomain 필요" }); controller.close(); return; }
-        send({ type: "log", kind: "wait", msg: `🚀 [서버 실행] ${targetDomain}에 최대 ${count}개 · 폰/PC 어디서나` });
+  send({ type: "log", kind: "wait", msg: `🚀 [서버 실행] ${targetDomain}에 최대 ${count}개` });
 
         // 유니크 스킵
         const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
@@ -332,7 +317,8 @@ Deno.serve(async (req) => {
             if (v.ok) send({ type: "log", kind: "post", msg: `[${dom}] 🔎 게시 확인 · 링크 ${v.count}개 삽입` });
             else send({ type: "log", kind: "fail", msg: `[${dom}] ⚠️ 게시 실패(가짜) — ${v.note}` });
           }
-          const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote };
+          // ★V(테리): 어떤 글이었는지 영구 저장 — evidence에 제목·본문·앵커. 감사탭에서 나중에 시분초와 함께 다시 봄.
+          const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote, article: { title: c.title, body: c.body, anchor: c.anchor } };
           const { error } = await sb.rpc("backlink_bot_record_post", {
             p_token: adminToken, p_order_id: orderId, p_source_domain: dom, p_grade: "A",
             p_status: realOk ? "posted" : "failed", p_post_url: realOk ? (r.postUrl || null) : null, p_anchor: c.anchor, p_evidence: evidence, p_proxy_used: false,
@@ -360,6 +346,50 @@ Deno.serve(async (req) => {
           }
         } catch (e) { send({ type: "log", kind: "warn", msg: `색인 요청 실패: ${(e as any)?.message}` }); }
 
+  return posted;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  const url = new URL(req.url);
+  const mode = url.searchParams.get("mode") || "";
+  const adminToken = url.searchParams.get("adminToken") || "";
+  const orderId = url.searchParams.get("orderId") || "";
+  const targetDomain = (url.searchParams.get("targetDomain") || "").trim();
+  const count = Math.max(1, Math.min(50, Number(url.searchParams.get("count")) || 1));
+  const kwOverride = (url.searchParams.get("keyword") || "").trim();
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const enc = new TextEncoder();
+
+  // ── 🕒 스케줄러 모드(pg_cron이 호출): 활성 order 전부 순회, 각자 오늘 남은 한도만큼 게시. JSON 응답. ──
+  if (mode === "scheduler") {
+    const schedSecret = url.searchParams.get("secret") || "";
+    if (schedSecret !== "456789") return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
+    const noop = () => {};   // 스케줄러는 로그 스트림 없음(DB에 기록됨)
+    const results: any[] = [];
+    try {
+      const { data: orders } = await sb.rpc("admin_backlink_scheduler_targets", { p_token: schedSecret });
+      for (const o of (orders || [])) {
+        const remain = Number(o.remain_today ?? 0);
+        if (remain <= 0) { results.push({ order: o.id, skipped: "오늘 한도 소진/완료" }); continue; }
+        try {
+          const posted = await runPublish(sb, noop, schedSecret, o.id, o.target_domain, Math.min(remain, 50), o.keyword || "");
+          results.push({ order: o.id, domain: o.target_domain, posted });
+        } catch (e) { results.push({ order: o.id, error: (e as any)?.message || String(e) }); }
+      }
+      return new Response(JSON.stringify({ ok: true, ran: results.length, results }), { headers: { ...CORS, "Content-Type": "application/json" } });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as any)?.message || String(e) }), { status: 500, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+  }
+
+  // ── SSE 실행 모드(관리자/회원 수동 실행) ──
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: any) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      try {
+        if (!adminToken || !orderId || !targetDomain) { send({ type: "error", msg: "adminToken, orderId, targetDomain 필요" }); controller.close(); return; }
+        const posted = await runPublish(sb, send, adminToken, orderId, targetDomain, count, kwOverride);
         send({ type: "done", posted });
         controller.close();
       } catch (e) {

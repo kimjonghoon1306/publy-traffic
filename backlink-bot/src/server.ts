@@ -110,7 +110,7 @@ app.post("/publish-order", async (req, res) => {
     const input: PublishInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, proxy: null, secrets };
     const r = await adapter.publish(input);
     // 게시결과 기록 — evidence에 단계 events(API시작·게시성공) 포함해 저장
-    const evidence = { ...r.evidence, events: r.events };
+    const evidence = { ...r.evidence, events: r.events, article: { title: c.title, body: c.body, anchor: c.anchor } };
     const { data: postId, error } = await sb.rpc("backlink_bot_record_post", {
       p_token: adminToken, p_order_id: orderId, p_source_domain: dom, p_grade: "A",
       p_status: r.ok ? "posted" : "failed", p_post_url: r.postUrl || null, p_anchor: c.anchor,
@@ -175,7 +175,7 @@ app.get("/member-publish-stream", async (req, res) => {
         if (v.ok) send({ type: "log", kind: "post", msg: `[${dom}] 🔎 게시 확인됨 · 링크 ${v.count}개 실제 삽입` });
         else send({ type: "log", kind: "fail", msg: `[${dom}] ⚠️ 게시 실패(가짜) — ${v.note}` });
       }
-      const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote };
+      const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote, article: { title: c.title, body: c.body, anchor: c.anchor } };
       const { data: postId, error } = await sb.rpc("backlink_my_record_post", {
         p_token: token, p_order_id: orderId, p_source_domain: dom, p_grade: "A",
         p_status: realOk ? "posted" : "failed", p_post_url: realOk ? (r.postUrl || null) : null, p_anchor: c.anchor, p_evidence: evidence,
@@ -236,7 +236,7 @@ app.get("/admin-publish-stream", async (req, res) => {
         if (v.ok) send({ type: "log", kind: "post", msg: `[${dom}] 🔎 게시 확인 · 링크 ${v.count}개 삽입` });
         else send({ type: "log", kind: "fail", msg: `[${dom}] ⚠️ 게시 실패(가짜) — ${v.note}` });
       }
-      const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote };
+      const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote, article: { title: c.title, body: c.body, anchor: c.anchor } };
       const { data: postId, error } = await sb.rpc("backlink_bot_record_post", {
         p_token: adminToken, p_order_id: orderId, p_source_domain: dom, p_grade: "A",
         p_status: realOk ? "posted" : "failed", p_post_url: realOk ? (r.postUrl || null) : null, p_anchor: c.anchor,
