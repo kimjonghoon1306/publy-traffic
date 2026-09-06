@@ -278,6 +278,10 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
               </div>
             ))}
           </div>
+          {/* 신뢰 캡션 — '색인 반영'이 빙 실측임을 회원에게(소스·주소는 비공개). */}
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: logC.done.fg, background: logC.done.bg, borderRadius: 10, padding: "8px 11px", marginBottom: 14, lineHeight: 1.5 }}>
+            🔗 <b>색인 반영</b> = 발행된 백링크가 <b>빙(Bing)에서 실제로 검색·색인된 게 확인된</b> 건수예요. (검색엔진 반영엔 며칠 걸릴 수 있어요)
+          </div>
           {/* 수량 지정 + 시작 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: 12, borderRadius: 12, background: C.panel, border: `1px solid ${C.line}` }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>이 도메인에 백링크</span>
