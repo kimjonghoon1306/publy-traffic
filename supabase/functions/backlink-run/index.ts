@@ -278,21 +278,47 @@ Deno.serve(async (req) => {
         } else {
           send({ type: "log", kind: "warn", msg: `ℹ️ 제미나이 키 미설정 — 기본 글로 진행(키를 넣으면 사이트 기반 고품질 글로 써요)` });
         }
-        // 사이트 1회 읽어 재사용(소스마다 다른 글은 AI가 매번 생성)
+        // 사이트 1회 읽어 재사용
         let siteText = "";
         if (geminiKey) { siteText = await readSite(targetUrl); send({ type: "log", kind: "ai", msg: siteText ? `📖 사이트 내용을 읽었습니다 (${siteText.length}자 분석)` : `📖 사이트 내용을 못 읽어 도메인·키워드로 유추합니다` }); }
 
+        // 🔄 토큰 절약: AI 글을 최대 POOL_SIZE(5)개만 생성해 돌려쓴다(100개든 500개든 AI는 5번만 호출).
+        //   ★재사용 시 변형=제목 표현·앵커·문장 순서만. 도메인·상호·소개(사실)는 절대 안 바꿈(틀리면 AI 인용 안 됨).
+        const POOL_SIZE = 5;
+        const pool: { title: string; body: string; anchor: string }[] = [];
+        if (geminiKey && !quotaHit) {
+          const need = Math.min(POOL_SIZE, count);
+          send({ type: "log", kind: "ai", msg: `✍️ 제미나이로 글 ${need}개를 만들어 돌려씁니다(토큰 절약 · 재사용 시 표현만 변형, 사실은 그대로)` });
+          for (let k = 0; k < need; k++) {
+            const ai = await genContentAI(geminiKey, targetDomain, siteText, keyword, k);
+            if (ai.ok) pool.push({ title: ai.title!, body: ai.body!, anchor: ai.anchor! });
+            else if (ai.quota) { quotaHit = true; send({ type: "log", kind: "warn", msg: `🛑 토큰 사용이 끝났습니다 — 자정이 지나거나 새로운 제미나이 키를 발급받으세요. (만든 글 ${pool.length}개로 돌려씁니다)` }); break; }
+            else if (ai.error) { send({ type: "log", kind: "warn", msg: `제미나이 생성 실패(${ai.error})` }); }
+          }
+          if (pool.length) send({ type: "log", kind: "ai", msg: `✅ 글 ${pool.length}개 준비 완료 — 소스마다 돌려쓰며 표현을 변형합니다` });
+        }
+        // 재사용 변형: 사실(본문 문장)은 그대로, 앵커·제목 접미만 로테이션(구글 중복스팸 회피). 도메인/상호 불변.
+        const ANCH_VARIANTS = ["자세히 보기", "바로가기", "홈페이지 방문", "더 알아보기", "공식 사이트", "여기서 확인"];
+        const applyVariant = (base: { title: string; body: string; anchor: string }, reuse: number): { title: string; body: string; anchor: string } => {
+          if (reuse === 0) return base;   // 첫 사용은 원본 그대로
+          const anchor = keyword ? [keyword, keyword + " 바로가기", keyword + " 자세히", "공식 사이트", "홈페이지"][reuse % 5] : ANCH_VARIANTS[reuse % ANCH_VARIANTS.length];
+          const suffixes = ["", " 안내", " 소개", " 정보", " 살펴보기"];
+          const title = base.title + suffixes[reuse % suffixes.length];   // 제목 접미만 변형(상호·키워드 그대로)
+          return { title, body: base.body, anchor };   // ★body(사실)는 절대 안 바꿈
+        };
+
         const domains = ADAPTER_DOMAINS.filter((d) => !doneSet.has(d));
         let posted = 0;
+        const useCount: Record<number, number> = {};   // 각 글이 몇 번째로 재사용되는지
         for (let i = 0; i < domains.length && posted < count; i++) {
           const dom = domains[i];
           let c = genContent(targetDomain, i, keyword);
-          // 🤖 AI 글생성(키 있고 한도 안 걸렸으면). 소스마다 새 글.
-          if (geminiKey && !quotaHit) {
-            const ai = await genContentAI(geminiKey, targetDomain, siteText, keyword, i);
-            if (ai.ok) { c = { title: ai.title!, body: ai.body!, anchor: ai.anchor! }; send({ type: "log", kind: "ai", msg: `[${dom}] ✍️ 제미나이가 새 글을 생성했습니다` }); }
-            else if (ai.quota) { quotaHit = true; send({ type: "log", kind: "warn", msg: `🛑 토큰 사용이 끝났습니다 — 자정이 지나거나 새로운 제미나이 키를 발급받으세요. (이후는 기본 글로 계속 게시)` }); }
-            else if (ai.error) { send({ type: "log", kind: "warn", msg: `[${dom}] 제미나이 생성 실패(${ai.error}) — 기본 글로 게시` }); }
+          if (pool.length) {
+            const idx = i % pool.length;
+            const reuse = (useCount[idx] = (useCount[idx] || 0));
+            c = applyVariant(pool[idx], reuse);
+            useCount[idx] = reuse + 1;
+            send({ type: "log", kind: "ai", msg: `[${dom}] ✍️ 글 ${idx + 1}번${reuse > 0 ? ` (재사용·표현변형 ${reuse})` : ""}` });
           }
           const input: PubInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, secrets };
           // 📄 완성본 글(제목·본문·앵커)을 관리자 화면에 그대로 — 테리가 품질 확인·수정하려면 필수(회원 화면은 이 이벤트 무시).
