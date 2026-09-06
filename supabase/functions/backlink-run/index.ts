@@ -51,10 +51,23 @@ async function readSite(targetUrl: string): Promise<string> {
     const title = pick(/<title[^>]*>([^<]+)<\/title>/i);
     const desc = pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) || pick(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
     const ogTitle = pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
-    // 본문 텍스트(태그 제거) 앞부분만
-    html = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ");
-    const bodyText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1500);
-    return [title, ogTitle, desc, bodyText].filter(Boolean).join("\n").slice(0, 2000);
+    const ogSite = pick(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i);
+    const keywords = pick(/<meta[^>]+name=["']keywords["'][^>]+content=["']([^"']+)["']/i);
+    // 헤딩(h1~h3)·상호 후보 추출 — 회사명/브랜드를 정확히 파악(AI가 이름 지어내는 것 방지)
+    const heads = (html.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi) || []).map(h => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 8).join(" · ");
+    // 본문 텍스트(태그 제거) — 넉넉히
+    html = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<nav[\s\S]*?<\/nav>/gi, " ").replace(/<footer[\s\S]*?<\/footer>/gi, " ");
+    const bodyText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 3000);
+    const parts = [
+      ogSite ? `사이트/상호명: ${ogSite}` : "",
+      title ? `제목: ${title}` : "",
+      ogTitle && ogTitle !== title ? `대표문구: ${ogTitle}` : "",
+      desc ? `소개: ${desc}` : "",
+      keywords ? `키워드: ${keywords}` : "",
+      heads ? `주요 항목: ${heads}` : "",
+      bodyText ? `본문: ${bodyText}` : "",
+    ].filter(Boolean);
+    return parts.join("\n").slice(0, 4000);
   } catch { return ""; }
 }
 
@@ -65,10 +78,14 @@ type AiOut = { ok: boolean; title?: string; body?: string; anchor?: string; quot
 async function genContentAI(key: string, domain: string, siteText: string, keyword: string, i: number): Promise<AiOut> {
   const kw = (keyword || "").trim();
   const prompt =
-    `너는 SEO·AEO 카피라이터다. 아래 웹사이트를 소개하는 자연스러운 한국어 정보성 글을 써라. 광고 티 내지 말고 진짜 추천글처럼.\n` +
+    `너는 12년차 SEO·AEO 카피라이터다. 아래 실제 웹사이트 내용을 바탕으로, 이 사이트를 소개하는 자연스럽고 구체적인 한국어 정보성 글을 써라. 광고 티 내지 말고 진짜 추천글처럼.\n` +
     `도메인: ${domain}\n` + (kw ? `핵심 키워드(반드시 제목·본문에 자연스럽게 포함): ${kw}\n` : "") +
-    `사이트 내용:\n${siteText || "(사이트 내용을 못 읽음 — 도메인/키워드로 유추해서 써라)"}\n\n` +
-    `조건: ①매번 다른 문장·구성(중복 금지) ②제목 25자 내외 ③본문 250~400자, 정보성·신뢰감 ④과장/허위 금지 ⑤글자만(이모지·해시태그 금지).\n` +
+    `━━━ 실제 사이트 내용(이것만 근거로 써라) ━━━\n${siteText || "(사이트 내용을 못 읽음)"}\n━━━━━━━━━━━━━━━━━━━\n\n` +
+    `🔴 매우 중요(반드시 지켜라):\n` +
+    `1. 사이트에 나온 정확한 상호·회사명·브랜드명을 그대로 써라. 이름을 절대 줄이거나 바꾸거나 지어내지 마라(예: '유안에프앤비'를 '원앤비'처럼 바꾸면 안 됨).\n` +
+    `2. 사이트에 없는 상품·서비스·정보를 지어내지 마라. 근거 있는 내용만 구체적으로.\n` +
+    `3. 사이트 내용을 못 읽었으면(위가 비었으면) 억지로 지어내지 말고, 도메인과 키워드만으로 일반적이고 무난하게 써라.\n\n` +
+    `조건: ①매번 다른 문장·구성(중복 금지) ②제목 20~30자, 상호나 키워드 포함 ③본문 300~450자, 구체적·정보성·신뢰감(실제 취급 품목/특징을 사이트에서 뽑아 언급) ④과장/허위 금지 ⑤글자만(이모지·해시태그 금지).\n` +
     `JSON만 출력: {"title":"제목","body":"본문","anchor":"${kw || "링크 앵커 텍스트(4~10자)"}"}`;
   for (const model of GEMINI_MODELS) {
     try {
