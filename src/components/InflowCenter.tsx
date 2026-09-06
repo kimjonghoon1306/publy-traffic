@@ -134,7 +134,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, licenseRemainByFeat, onActiveToolChange, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; licenseRemainByFeat?: Record<string, number>; onActiveToolChange?: (tool: "place" | "blog" | "store" | "backlink") => void; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, licenseRemainByFeat, onActiveToolChange, onManageAccounts, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; licenseRemainByFeat?: Record<string, number>; onActiveToolChange?: (tool: "place" | "blog" | "store" | "backlink") => void; onManageAccounts?: () => void; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다.
   //   회원앱(memberMode)=엄격: 승인된 것만(승인 없으면 아무것도 안 보임=잠금).
@@ -1997,12 +1997,20 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
         </label>
 
         {/* 🔄 다계정 로테이션 — 저장·찜·공감을 여러 계정으로 번갈아(계정 수만큼 증가). 로그인 액션 켤 때만 의미 */}
-        {accounts.length > 0 && (
-          <div style={{ padding: 13, borderRadius: 14, background: "linear-gradient(135deg,rgba(245,158,11,.07),transparent)", border: "2px solid #f59e0b" }}>
-            <div style={{ fontSize: 13.5, fontWeight: 900, color: "#d97706", marginBottom: 3 }}>🔄 저장·찜·공감에 쓸 계정 (다계정 로테이션)</div>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>
-              선택한 계정을 <b>방문마다 번갈아 로그인</b>해서 저장·찜·공감을 눌러요. <b style={{ color: "#d97706" }}>계정 수만큼 저장·찜 수가 올라가요</b>(같은 계정은 1번만 유효). 각 계정은 자기 IP(프록시)로 접속해 안전해요. <span style={{ color: C.sub }}>※ 저장·찜·공감을 안 켜면 계정 없이도 방문 트래픽은 돼요.</span>
+        {/*    ★ 계정 추가·삭제·선택을 이 탭 안에서 바로(백링크 뺀 전 기능 공용). 추가/삭제는 헤더 계정 모달을 연다(기존 로직 재사용). */}
+        <div style={{ padding: 13, borderRadius: 14, background: "linear-gradient(135deg,rgba(245,158,11,.07),transparent)", border: "2px solid #f59e0b" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 900, color: "#d97706" }}>🔄 저장·찜·공감에 쓸 계정 (로그인 필요)</div>
+            {onManageAccounts && <button onClick={onManageAccounts} style={{ marginLeft: "auto", padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.accent}`, background: C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>➕ 계정 추가·관리</button>}
+          </div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>
+            선택한 계정을 <b>방문마다 번갈아 로그인</b>해서 저장·찜·공감을 눌러요. <b style={{ color: "#d97706" }}>계정 수만큼 저장·찜 수가 올라가요</b>(같은 계정은 1번만 유효). 각 계정은 자기 IP(프록시)로 접속해 안전해요. <span style={{ color: C.sub }}>※ 저장·찜·공감을 안 켜면 계정 없이도 방문 트래픽은 돼요.</span>
+          </div>
+          {accounts.length === 0 ? (
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: C.sub, textAlign: "center", padding: "16px 10px", borderRadius: 10, background: C.panel2, border: `1px dashed ${C.line2}`, lineHeight: 1.6 }}>
+              연결된 계정이 없어요. <b style={{ color: "#d97706" }}>저장·찜·공감(로그인 행동)</b>을 쓰려면<br /><b style={{ color: C.accent }}>[➕ 계정 추가·관리]</b>로 네이버 계정을 먼저 연결하세요.
             </div>
+          ) : (<>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
               <button onClick={() => setSelectedAccts(new Set(accounts.map((a) => a.id)))} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.accent}`, background: C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>✅ 전체 설정</button>
               <button onClick={() => setSelectedAccts(new Set())} style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line2}`, background: C.panel, color: C.sub, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>◻️ 전체 해제</button>
@@ -2016,8 +2024,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                 </label>
               ); })}
             </div>
-          </div>
-        )}
+          </>)}
+        </div>
 
         {/* 실행 */}
         {!running ? (
