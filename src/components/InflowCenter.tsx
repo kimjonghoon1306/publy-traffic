@@ -134,7 +134,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, licenseRemainByFeat, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; licenseRemainByFeat?: Record<string, number>; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다.
   //   회원앱(memberMode)=엄격: 승인된 것만(승인 없으면 아무것도 안 보임=잠금).
@@ -1241,7 +1241,19 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               // 백링크 탭은 blTab으로 분리(유입 targetType과 별개). 유입탭은 targetType.
               const on = k === "backlink" ? blTab : (targetType === k && !blTab);
               const onClick = k === "backlink" ? () => setBlTab(true) : () => { setTargetType(k as "place" | "blog" | "store"); setBlTab(false); };
-              return <div key={k} onClick={onClick} style={{ flex: 1, padding: "11px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, fontSize: 13.5, fontWeight: 800, cursor: "pointer", textAlign: "center" }}>{lb}</div>;
+              // 🎫 이 탭(툴)의 등급·남은기간 — 한 회원도 탭마다 등급·만료가 다르다(테리 강조). 각 탭에 개별 표시.
+              const GL: Record<string, string> = { basic: "베이직", pro: "프로", premium: "프리미엄", unlimited: "무제한" };
+              const tPlan = licenseByFeat?.[k]?.plan;
+              const tRem = licenseRemainByFeat?.[k];
+              const tDday = (tRem != null) ? Math.floor(tRem / 86400) : null;
+              const expiring = (tRem != null) && tRem <= 3 * 86400;   // D-3 이하 임박=빨강
+              return <div key={k} onClick={onClick} style={{ flex: 1, padding: "9px 8px", borderRadius: 11, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, color: on ? C.accent : C.sub, cursor: "pointer", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 800 }}>{lb}</span>
+                {tPlan && <span style={{ display: "inline-flex", gap: 4, alignItems: "center", fontSize: 10, fontWeight: 900 }}>
+                  <span style={{ padding: "1px 6px", borderRadius: 99, background: on ? C.accent : C.line2, color: on ? "#fff" : C.sub }}>{GL[tPlan] || tPlan}</span>
+                  {tDday != null && <span style={{ padding: "1px 6px", borderRadius: 99, background: expiring ? "rgba(220,38,38,.12)" : "transparent", color: expiring ? "#dc2626" : (on ? C.accent : C.sub), border: `1px solid ${expiring ? "rgba(220,38,38,.35)" : (on ? C.accent : C.line2)}` }}>{(tRem ?? 0) <= 0 ? "만료" : `D-${tDday}`}</span>}
+                </span>}
+              </div>;
             })}
           </div>
 

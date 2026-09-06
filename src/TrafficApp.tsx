@@ -86,6 +86,10 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
   const ss = String(remainSec % 60).padStart(2, "0");
   const gradePlan = soonest?.plan || "";
   const gradeLimit = TRAFFIC_PLAN_LIMIT[gradePlan] ?? 0;
+  // 🎫 툴(탭)별 남은 기간(초) — 각 탭 버튼에 등급·D-day를 개별 표시하기 위해(한 회원도 탭마다 등급·만료 다름).
+  //   시계조작 방지: 서버 remain_sec - 경과초. licenseByFeat(plan) + 이 remain을 InflowCenter 탭 배지에서 함께 씀.
+  const licenseRemainByFeat: Record<string, number> = {};
+  lics.forEach(l => { if (l.tool) licenseRemainByFeat[l.tool] = Math.max(0, (l.remain_sec ?? 0) - elapsed); });
   // 최장 대여기간(진행률 링) — 만료일까지의 총 기간을 정확히 알 수 없으니 30일 기준 게이지로 표시
   const pct = soonest ? Math.min(100, Math.round((remainSec / (30 * 86400)) * 100)) : 0;
 
@@ -175,7 +179,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
 
       {/* 본문 = 유입 엔진(InflowCenter) */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 18px" }}>
-        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} externalAccounts={accounts} memberEmail={user.email} memberName={user.name} />
+        <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} licenseRemainByFeat={licenseRemainByFeat} onBusyChange={setInflowBusy} externalAccounts={accounts} memberEmail={user.email} memberName={user.name} />
       </div>
 
       {/* 하단 대여 카운트다운 */}

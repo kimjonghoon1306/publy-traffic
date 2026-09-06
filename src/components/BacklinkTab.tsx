@@ -130,15 +130,19 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
 
   const saveMyKey = useCallback(async () => {
     const v = keyInput.trim();
+    // 내 키로 전환/저장은 키가 있어야. 관리자키 상태서 빈 값으로 누르면 안내(해제는 아래 별도 버튼).
+    if (!v) { setKeyMsg(isAdminKey ? "내 키로 바꾸려면 발급받은 키(32자리)를 붙여넣으세요" : "색인 키를 붙여넣으세요"); setTimeout(() => setKeyMsg(""), 3500); return; }
     const { error } = await supabase.rpc("backlink_set_my_indexnow", { p_token: token, p_key: v });
     if (error) { setKeyMsg("저장 실패: " + error.message); return; }
-    setKeyMsg(v ? "✅ 색인 키 저장 완료" : "✅ 키를 비웠어요"); setKeyInput(""); loadMyKey(); setTimeout(() => setKeyMsg(""), 4000);
-  }, [keyInput, token, loadMyKey]);
+    setKeyMsg(isAdminKey ? "✅ 내 키로 전환했어요 — 이제 내 키로 색인해요" : "✅ 색인 키 저장 완료"); setKeyInput(""); loadMyKey(); setTimeout(() => setKeyMsg(""), 4000);
+  }, [keyInput, token, loadMyKey, isAdminKey]);
 
+  // 본인키 삭제(대기) / 관리자키 해제(내가 직접) — 둘 다 scope='own'+키비움(=색인 대기). 관리자는 필요시 공용키 재지정 가능.
   const clearMyKey = useCallback(async () => {
+    const wasAdmin = isAdminKey;
     await supabase.rpc("backlink_set_my_indexnow", { p_token: token, p_key: "" });
-    setKeyMasked(null); setKeyMsg("키를 삭제했어요"); loadMyKey();
-  }, [token, loadMyKey]);
+    setKeyMasked(null); setKeyMsg(wasAdmin ? "관리자키를 해제했어요 — 내 키를 넣거나 대기로 둘 수 있어요" : "키를 삭제했어요"); loadMyKey(); setTimeout(() => setKeyMsg(""), 4000);
+  }, [token, loadMyKey, isAdminKey]);
 
   const copyLogs = useCallback(() => {
     navigator.clipboard.writeText(logs.map(l => `[${l.kind}] ${l.msg}`).join("\n")).then(() => setSentMsg("📋 로그를 복사했어요")).catch(() => {});
@@ -271,7 +275,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
               {isAdminKey ? (
                 <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.8, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: logC.post.bg }}>
                   <b style={{ color: logC.post.fg }}>🟢 관리자가 색인키를 넣어줬어요</b> <span style={{ color: logC.post.fg }}>({keyMasked})</span><br />
-                  <span style={{ color: C.sub }}>아무것도 안 해도 돼요. <b style={{ color: C.ink }}>내 키로 바꾸려면</b> 아래에서 발급받아 넣으세요.</span>
+                  <span style={{ color: C.sub }}>아무것도 안 해도 돼요. <b style={{ color: C.ink }}>내 키를 쓰고 싶으면</b> 아래에 발급받은 키를 붙여넣고 <b style={{ color: C.ink }}>[내 키로 전환]</b> — 관리자키 대신 내 키가 쓰여요. 관리자키만 빼고 직접 관리하려면 <b style={{ color: C.ink }}>[관리자키 해제]</b>.</span>
                 </div>
               ) : keyMasked ? (
                 <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.8, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: logC.post.bg }}>
@@ -294,9 +298,9 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
                 <b style={{ color: C.accent }}>3.</b> 아래에 붙여넣고 저장
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <input value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder={keyMasked && !isAdminKey ? "본인 키로 바꾸려면 붙여넣기" : "발급받은 색인 키 붙여넣기"} style={{ ...inputStyle, flex: 1, minWidth: 160, fontSize: 13.5 }} />
-                <button onClick={saveMyKey} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>내 키 넣기</button>
-                {keyMasked && !isAdminKey && <button onClick={clearMyKey} style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${logC.fail.fg}`, background: C.win, color: logC.fail.fg, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>삭제</button>}
+                <input value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder={isAdminKey ? "내 키로 바꾸려면 여기에 붙여넣기(32자리)" : (keyMasked ? "본인 키로 바꾸려면 붙여넣기" : "발급받은 색인 키 붙여넣기")} style={{ ...inputStyle, flex: 1, minWidth: 160, fontSize: 13.5 }} />
+                <button onClick={saveMyKey} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>{isAdminKey ? "내 키로 전환" : "내 키 넣기"}</button>
+                {keyMasked && <button onClick={clearMyKey} style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${logC.fail.fg}`, background: C.win, color: logC.fail.fg, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>{isAdminKey ? "관리자키 해제" : "삭제"}</button>}
               </div>
               {keyMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700, marginTop: 8 }}>{keyMsg}</div>}
             </div>

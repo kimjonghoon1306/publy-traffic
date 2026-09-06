@@ -29,6 +29,10 @@ app.use(cors({ origin: ["http://localhost:5173", "http://127.0.0.1:5173", "null"
 app.use(express.json({ limit: "50mb" }));
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
+  // 🔗 회원 실시간 게시 스트림은 브라우저 EventSource(SSE)라 커스텀 헤더(Authorization: Bearer)를 못 붙인다.
+  //   → Bearer 면제. 대신 쿼리스트링 token(회원 세션)으로 핸들러가 backlink_my_today_remaining RPC에서 세션을 자체 검증한다
+  //     (세션 무효면 게시 자체가 차단됨). 봇은 127.0.0.1 로컬바인딩이라 외부 접근도 불가.
+  if (req.path === "/member-publish-stream") return next();
   if (AUTH_TOKEN) {
     const h = req.headers.authorization || "";
     if (h !== `Bearer ${AUTH_TOKEN}`) return res.status(401).json({ error: "unauthorized" });
