@@ -58,6 +58,29 @@ function genContent(domain: string, i: number): { title: string; body: string; a
   };
 }
 
+// ── 게시검증: 게시된 URL을 실제로 열어 타겟 도메인 링크가 진짜 삽입됐는지 확인 ──
+//   테리 "한치 오차도 없어야": 어댑터 성공응답만 믿지 않고 실제 페이지를 검증해 가짜성공/누락을 잡는다.
+async function verifyBacklink(postUrl: string, targetDomain: string): Promise<{ ok: boolean; count: number; note: string }> {
+  const bare = targetDomain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    const res = await fetch(postUrl, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" }, signal: ctrl.signal as any });
+    clearTimeout(t);
+    if (!res.ok) return { ok: false, count: 0, note: `게시물 접근 불가(HTTP ${res.status})` };
+    const html = (await res.text()).toLowerCase();
+    // 파킹/차단/빈페이지 방어
+    if (/blacklist|banned|not found|파킹|domain for sale/.test(html) && !html.includes(bare)) {
+      return { ok: false, count: 0, note: "차단/빈 페이지" };
+    }
+    const count = html.split(bare).length - 1;
+    if (count <= 0) return { ok: false, count: 0, note: "링크 미삽입" };
+    return { ok: true, count, note: "확인됨" };
+  } catch (e: any) {
+    return { ok: false, count: 0, note: `검증 실패: ${e?.name === "AbortError" ? "시간초과" : (e?.message || e)}` };
+  }
+}
+
 // ── 주문 게시(파일럿): 어댑터 있는 소스에 실제 게시 → 결과 기록 ──
 //   body: { adminToken, orderId, targetDomain }
 //   ※ 봇=관리자 권한. adminToken(관리자 세션)으로 record_post RPC 호출.
@@ -138,13 +161,24 @@ app.get("/member-publish-stream", async (req, res) => {
       // 어댑터 실행 — events를 실시간 전송(주소 노출 없이 신뢰지표만)
       const r = await getAdapter(dom)!.publish(input);
       for (const e of r.events) send({ type: "log", kind: e.kind, msg: `[${dom}] ${e.msg}` });
-      const evidence = { ...r.evidence, events: r.events };
+      // ★ 게시검증(테리 "한치 오차도 없어야"): 어댑터가 ok여도 실제 URL을 열어 타겟 링크가 진짜 있는지 확인.
+      //   진짜 있으면 성공(카운트), 없으면 가짜성공→실패로 재판정(카운트 안 함). 진짜성공 누락도 방지(실제 검증이 기준).
+      let realOk = r.ok;
+      let verifyNote = "";
+      if (r.ok && r.postUrl) {
+        const v = await verifyBacklink(r.postUrl, targetDomain);
+        realOk = v.ok;
+        verifyNote = v.note;
+        if (v.ok) send({ type: "log", kind: "post", msg: `[${dom}] 🔎 게시 확인됨 · 링크 ${v.count}개 실제 삽입` });
+        else send({ type: "log", kind: "fail", msg: `[${dom}] ⚠️ 게시 실패(가짜) — ${v.note}` });
+      }
+      const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote };
       const { data: postId, error } = await sb.rpc("backlink_my_record_post", {
         p_token: token, p_order_id: orderId, p_source_domain: dom, p_grade: "A",
-        p_status: r.ok ? "posted" : "failed", p_post_url: r.postUrl || null, p_anchor: c.anchor, p_evidence: evidence,
+        p_status: realOk ? "posted" : "failed", p_post_url: realOk ? (r.postUrl || null) : null, p_anchor: c.anchor, p_evidence: evidence,
       });
       if (error) { send({ type: "log", kind: "warn", msg: `[${dom}] 기록 실패: ${error.message}` }); }
-      else if (r.ok) { posted++; send({ type: "log", kind: "post", msg: `[${dom}] ✅ 게시 완료 (${posted}/${want})` }); }
+      else if (realOk) { posted++; send({ type: "log", kind: "post", msg: `[${dom}] ✅ 게시 완료 (${posted}/${want})` }); }
       void postId;
     }
     // 색인 푸시(회원 키/관리자지정 정책은 backlink_bot_indexnow_plan이 처리 — 회원 세션 아님이므로 스킵, 스케줄러/관리자 흐름서 처리)

@@ -7,16 +7,15 @@ import { telegraphAdapter } from "./telegraph";
 import { rentryAdapter } from "./rentry";
 import { dpasteAdapter } from "./dpaste";
 import { pastersAdapter } from "./pasters";
-import { cnetAdapter } from "./cnet";
 import { graphorgAdapter } from "./graphorg";
 import { githubGistAdapter } from "./githubgist";
+// ⚠️ paste.c-net.org 제거(2026-09-06): 반복 게시로 Blacklisted 차단됨 → 가짜성공 방지 위해 registry에서 뺌.
 
 const registry: Record<string, Adapter> = {
   "telegra.ph": telegraphAdapter,
   "rentry.co": rentryAdapter,
   "dpaste.com": dpasteAdapter,
   "paste.rs": pastersAdapter,
-  "paste.c-net.org": cnetAdapter,
   "graph.org": graphorgAdapter,
   "gist.github.com": githubGistAdapter,
 };
