@@ -98,6 +98,65 @@ app.post("/publish-order", async (req, res) => {
   res.json({ ok: true, posted: results.filter(x => x.ok).length, total: results.length, results, indexnow });
 });
 
+// ── 회원 게시(회원 시작버튼) : SSE 실시간 로그 스트림 ──
+//   회원 세션토큰으로 소유·하루한도 검증(admin 시크릿 봇 보관 안 함). 수량지정(count) 만큼 어댑터 게시.
+//   블로그(InflowCenter)처럼 단계별 로그를 실시간(text/event-stream)으로 흘려보낸다.
+//   GET /member-publish-stream?token=회원세션&orderId=..&targetDomain=..&count=N
+app.get("/member-publish-stream", async (req, res) => {
+  const token = String(req.query.token || "");
+  const orderId = String(req.query.orderId || "");
+  const targetDomain = String(req.query.targetDomain || "");
+  const count = Math.max(1, Math.min(50, Number(req.query.count) || 1));
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  const send = (obj: any) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  if (!token || !orderId || !targetDomain) { send({ type: "error", msg: "token, orderId, targetDomain 필요" }); return res.end(); }
+  const targetUrl = targetDomain.startsWith("http") ? targetDomain : `https://${targetDomain}`;
+
+  try {
+    // 남은 하루 한도(회원 RPC) — 초과 요청은 남은 만큼으로 자름
+    const { data: remain, error: remErr } = await sb.rpc("backlink_my_today_remaining", { p_token: token, p_order_id: orderId });
+    if (remErr) { send({ type: "error", msg: remErr.message }); return res.end(); }
+    const left = Number(remain ?? 0);
+    if (left <= 0) { send({ type: "log", kind: "warn", msg: "오늘 발송 한도를 다 썼어요 — 자정에 초기화돼요." }); send({ type: "done", posted: 0 }); return res.end(); }
+    const want = Math.min(count, left);
+    send({ type: "log", kind: "wait", msg: `🚀 백링크 발송 시작 — ${targetDomain}에 ${want}개 (오늘 남은 한도 ${left}개)` });
+
+    // 이미 게시한 소스(유니크 스킵)
+    const { data: doneSrc } = await sb.rpc("backlink_my_posted_sources", { p_token: token, p_order_id: orderId });
+    const doneSet = new Set<string>((doneSrc as string[] | null) || []);
+
+    // 우리소유 소스 토큰 주입(gist 등)은 관리자 config → 회원 흐름에선 미주입(회원은 무인증 소스 우선).
+    const secrets: Record<string, string> = {};
+    const domains = listAdapterDomains().filter(d => !doneSet.has(d));
+    let posted = 0;
+    for (let i = 0; i < domains.length && posted < want; i++) {
+      const dom = domains[i];
+      const c = genContent(targetDomain, i);
+      const input: PublishInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, proxy: null, secrets };
+      // 어댑터 실행 — events를 실시간 전송(주소 노출 없이 신뢰지표만)
+      const r = await getAdapter(dom)!.publish(input);
+      for (const e of r.events) send({ type: "log", kind: e.kind, msg: `[${dom}] ${e.msg}` });
+      const evidence = { ...r.evidence, events: r.events };
+      const { data: postId, error } = await sb.rpc("backlink_my_record_post", {
+        p_token: token, p_order_id: orderId, p_source_domain: dom, p_grade: "A",
+        p_status: r.ok ? "posted" : "failed", p_post_url: r.postUrl || null, p_anchor: c.anchor, p_evidence: evidence,
+      });
+      if (error) { send({ type: "log", kind: "warn", msg: `[${dom}] 기록 실패: ${error.message}` }); }
+      else if (r.ok) { posted++; send({ type: "log", kind: "post", msg: `[${dom}] ✅ 게시 완료 (${posted}/${want})` }); }
+      void postId;
+    }
+    // 색인 푸시(회원 키/관리자지정 정책은 backlink_bot_indexnow_plan이 처리 — 회원 세션 아님이므로 스킵, 스케줄러/관리자 흐름서 처리)
+    send({ type: "log", kind: "index", msg: `색인 요청은 잠시 후 자동으로 진행돼요(회원 키 설정 시 더 빨라져요).` });
+    send({ type: "done", posted });
+    res.end();
+  } catch (e: any) {
+    send({ type: "error", msg: e?.message || String(e) });
+    res.end();
+  }
+});
+
 // ── 색인 푸시(IndexNow): 게시된 URL을 빙·네이버·얀덱스에 색인요청 ──
 //   scope: 'admin'(우리소유 소스에 올린 백링크 = 관리자 공용키) | 'own'(회원 본인키 = 본인 도메인 재크롤) | 'off'
 //   ★ 단계 로그(테리 지시): index(요청)→done(반영)/warn(거부). 주소는 신뢰지표로만 남김(posts.indexnow_*).
