@@ -225,6 +225,7 @@ Deno.serve(async (req) => {
   const orderId = url.searchParams.get("orderId") || "";
   const targetDomain = (url.searchParams.get("targetDomain") || "").trim();
   const count = Math.max(1, Math.min(50, Number(url.searchParams.get("count")) || 1));
+  const kwOverride = (url.searchParams.get("keyword") || "").trim();   // 관리자 실행: URL 키워드가 있으면 우선
 
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const enc = new TextEncoder();
@@ -250,6 +251,7 @@ Deno.serve(async (req) => {
           const { data: aiCfg } = await sb.rpc("backlink_order_ai_config", { p_token: adminToken, p_order_id: orderId });
           const row = (aiCfg && aiCfg[0]) || null;
           if (row) { geminiKey = (row.gemini_key || "").trim(); keyword = (row.keyword || "").trim(); }
+          if (kwOverride) keyword = kwOverride;   // 관리자 실행 URL 키워드 우선
           if (!geminiKey) { const { data: adm } = await sb.rpc("admin_backlink_get_config", { p_token: adminToken, p_key: "gemini_admin_key" }); if (adm) { geminiKey = String(adm).trim(); keySource = "관리자 공용키"; } }
           else keySource = "회원 키";
         } catch { /* 키 없으면 템플릿 폴백 */ }
@@ -276,6 +278,8 @@ Deno.serve(async (req) => {
             else if (ai.error) { send({ type: "log", kind: "warn", msg: `[${dom}] 제미나이 생성 실패(${ai.error}) — 기본 글로 게시` }); }
           }
           const input: PubInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, secrets };
+          // 📄 완성본 글(제목·본문·앵커)을 관리자 화면에 그대로 — 테리가 품질 확인·수정하려면 필수(회원 화면은 이 이벤트 무시).
+          send({ type: "content", source: dom, title: c.title, body: c.body, anchor: c.anchor });
           const r = await ADAPTERS[dom](input);
           for (const e of r.events) send({ type: "log", kind: e.kind, msg: `[${dom}] ${e.msg}` });
           let realOk = r.ok; let verifyNote = "";
