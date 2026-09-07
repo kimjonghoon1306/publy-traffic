@@ -386,6 +386,7 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
 
         const domains = Object.keys(ADAPTERS).filter((d) => !doneSet.has(d));   // 동적(우리 블로그 등록 반영)
         let posted = 0;
+        const tier1Urls: string[] = [];   // 성공한 1차 URL(2차 부스팅 대상)
         const useCount: Record<number, number> = {};   // 각 글이 몇 번째로 재사용되는지
         for (let i = 0; i < domains.length && posted < count; i++) {
           const dom = domains[i];
@@ -416,8 +417,41 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
             p_status: realOk ? "posted" : "failed", p_post_url: realOk ? (r.postUrl || null) : null, p_anchor: c.anchor, p_evidence: evidence, p_proxy_used: false,
           });
           if (error) send({ type: "log", kind: "warn", msg: `[${dom}] 기록 실패: ${error.message}` });
-          else if (realOk) { posted++; send({ type: "post", kind: "post", source: dom, postUrl: r.postUrl || "", msg: `[${dom}] ✅ 게시 완료 (${posted}/${count})` }); }
+          else if (realOk) { posted++; tier1Urls.push(r.postUrl || ""); send({ type: "post", kind: "post", source: dom, postUrl: r.postUrl || "", msg: `[${dom}] ✅ 게시 완료 (${posted}/${count})` }); }
         }
+
+        // ★2026-09-07 티어2 부스팅: 성공한 1차 URL을 weak 소스(telegra·dpaste·paste.rs)로 밀어준다.
+        //   회원 사이트 아니라 1차 URL을 가리킴(parent_url). 스팸OK. 1차당 TIER2_PER개.
+        try {
+          const okUrls = tier1Urls.filter(Boolean);
+          if (okUrls.length) {
+            const TIER2_SOURCES = ["telegra.ph", "dpaste.com", "paste.rs"].filter(d => ADAPTERS[d]);
+            const TIER2_PER = 3;   // 1차 1개당 2차 몇 개(안전: 소량부터. 나중 상향)
+            send({ type: "log", kind: "wait", msg: `🔁 2차 부스팅 시작 — 1차 ${okUrls.length}개를 여러 소스로 밀어줍니다` });
+            let t2ok = 0;
+            for (const p1 of okUrls) {
+              for (let k = 0; k < TIER2_PER; k++) {
+                const src = TIER2_SOURCES[(t2ok) % TIER2_SOURCES.length];
+                if (!src) break;
+                // 2차 글: 1차 URL을 타겟으로(회원 사이트 아님). 앵커는 일반적(브랜드 아님).
+                const t2c = genContent(new URL(p1).host, t2ok, "");
+                const t2input: PubInput = { targetDomain: new URL(p1).host, targetUrl: p1, title: t2c.title, body: t2c.body, anchor: "관련 글 보기", secrets };
+                const rr = await ADAPTERS[src](t2input);
+                if (rr.ok) {
+                  t2ok++;
+                  try {
+                    await sb.rpc("backlink_bot_record_post", {
+                      p_token: adminToken, p_order_id: orderId, p_source_domain: src, p_grade: "B",
+                      p_status: "posted", p_post_url: rr.postUrl || null, p_anchor: "관련 글 보기",
+                      p_evidence: { ...rr.evidence, tier: 2, parent_url: p1 }, p_proxy_used: false,
+                    });
+                  } catch { /* 2차 기록 실패는 무시(1차는 이미 성공) */ }
+                }
+              }
+            }
+            send({ type: "log", kind: "post", msg: `🔁 2차 부스팅 완료 — ${t2ok}개로 1차를 강화했어요(순위·색인 촉진)` });
+          }
+        } catch (e) { send({ type: "log", kind: "warn", msg: `2차 부스팅 일부 실패: ${(e as any)?.message}` }); }
 
         // 색인 자동
         send({ type: "log", kind: "index", msg: `🔎 색인(IndexNow) 요청 중…` });
