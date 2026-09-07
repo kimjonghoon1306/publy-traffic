@@ -416,6 +416,12 @@ Deno.serve(async (req) => {
     const schedSecret = url.searchParams.get("secret") || "";
     if (schedSecret !== "456789") return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
     const noop = () => {};   // 스케줄러는 로그 스트림 없음(DB에 기록됨)
+    // ★2026-09-07 근본수정: 봇 기록 RPC(record_post·posted_sources·indexnow_plan·ai_config·get_config)는 admin
+    //   '세션토큰'(publy_admin_session_get)을 요구한다. scheduler가 평문 secret(456789)로 호출하면 거부되어
+    //   게시돼도 기록이 안 돼 posted:0이 됐다. 여기서 세션토큰을 발급받아 runPublish/봇RPC에 넘긴다.
+    //   (대상 조회 admin_backlink_scheduler_targets 만 평문 secret로 인증하게 설계돼 있어 그대로 schedSecret 사용)
+    let adminToken = schedSecret;
+    try { const { data: tok } = await sb.rpc("publy_admin_login", { p_password: schedSecret }); if (tok) adminToken = String(tok); } catch { /* 실패 시 평문 폴백 */ }
     const results: any[] = [];
     try {
       const { data: orders } = await sb.rpc("admin_backlink_scheduler_targets", { p_token: schedSecret });
@@ -423,7 +429,7 @@ Deno.serve(async (req) => {
         const remain = Number(o.remain_today ?? 0);
         if (remain <= 0) { results.push({ order: o.id, skipped: "오늘 한도 소진/완료" }); continue; }
         try {
-          const posted = await runPublish(sb, noop, schedSecret, o.id, o.target_domain, Math.min(remain, 50), o.keyword || "");
+          const posted = await runPublish(sb, noop, adminToken, o.id, o.target_domain, Math.min(remain, 50), o.keyword || "");
           results.push({ order: o.id, domain: o.target_domain, posted });
         } catch (e) { results.push({ order: o.id, error: (e as any)?.message || String(e) }); }
       }
