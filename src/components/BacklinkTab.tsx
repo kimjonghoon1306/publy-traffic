@@ -42,7 +42,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
 
   // 실행(시작하기)
   const [running, setRunning] = useState(false);
-  const [paused, setPaused] = useState(false);   // 멈춘 적 있으면 다음 시작은 '이어하기'(유니크 스킵으로 남은 소스부터)
+  // ★2026-09-07 테리: '이어하기' 제거 — 그만두면 완전 취소, 다시 시작하면 처음부터(유니크 스킵은 서버가 이미 처리)
   const [qty, setQty] = useState<number>(5);                 // 이번에 발송할 수량
   const [logs, setLogs] = useState<LogRow[]>([]);            // 실시간 로그
   const [logZoom, setLogZoom] = useState(false);
@@ -161,9 +161,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     if (running) return;
     const want = unlimited ? Math.max(1, qty) : Math.min(qty, remainToday);
     if (!unlimited && remainToday <= 0) { pushLog("warn", "오늘 발송 한도를 다 썼어요 — 자정에 초기화돼요."); return; }
-    setRunning(true); if (!paused) setLogs([]);   // 이어하기면 이전 로그 유지
-    pushLog("wait", paused ? `▶ 이어하기 — ${cur.target_domain}, 남은 곳부터 ${want}개 계속합니다` : `준비 중… ${cur.target_domain}에 ${want}개 발송을 시작합니다`);
-    setPaused(false);
+    setRunning(true); setLogs([]);   // 항상 새로 시작(로그 초기화)
+    pushLog("wait", `준비 중… ${cur.target_domain}에 ${want}개 발송을 시작합니다`);
     // 🔑 색인키 출처를 로그에 명확히(테리: 본인키/관리자키 구분 이쁘게). 소스·주소는 비노출, 키 출처만.
     if (isAdminKey) pushLog("index", "🔑 관리자 빙(색인)키가 입력되어 있어요 — 관리자 키로 색인합니다");
     else if (keyMasked) pushLog("index", "🔑 본인 빙(색인)키를 입력하셨어요 — 내 키로 색인합니다");
@@ -181,9 +180,9 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
       } catch {}
     };
     es.onerror = () => { pushLog("fail", "❌ 연결 오류 — 봇 서버(3374)를 확인해주세요"); es.close(); setRunning(false); };
-  }, [cur, running, unlimited, qty, remainToday, token, pushLog, loadSubs, paused, isAdminKey, keyMasked, keyWaiting]);
+  }, [cur, running, unlimited, qty, remainToday, token, pushLog, loadSubs, isAdminKey, keyMasked, keyWaiting]);
 
-  const stopPublish = useCallback(() => { esRef.current?.close(); setRunning(false); setPaused(true); pushLog("warn", "발송을 멈췄어요 — [이어하기]를 누르면 남은 곳부터 계속돼요"); }, [pushLog]);
+  const stopPublish = useCallback(() => { esRef.current?.close(); setRunning(false); pushLog("warn", "⏹ 그만뒀어요 — 설정을 바꾼 뒤 다시 시작하면 처음부터 진행돼요"); }, [pushLog]);
 
   const saveMyKey = useCallback(async () => {
     const v = keyInput.trim();
@@ -354,8 +353,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
             {!unlimited && <button onClick={() => setQty(remainToday)} disabled={running || remainToday <= 0} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${C.line}`, background: C.win, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>남은 만큼 ({remainToday})</button>}
             <div style={{ flex: 1 }} />
             {running
-              ? <button onClick={stopPublish} style={{ padding: "12px 22px", borderRadius: 10, border: "none", background: "#dc2626", color: "#fff", fontWeight: 900, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>■ 멈추기</button>
-              : <button onClick={startPublish} disabled={!unlimited && remainToday <= 0} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: (!unlimited && remainToday <= 0) ? C.line : `linear-gradient(135deg,${C.accent},#8b5cf6)`, color: "#fff", fontWeight: 900, fontSize: 14, cursor: (!unlimited && remainToday <= 0) ? "default" : "pointer", fontFamily: "inherit" }}>{paused ? "▶ 이어하기" : "🚀 백링크 시작하기"}</button>}
+              ? <button onClick={stopPublish} style={{ padding: "12px 22px", borderRadius: 10, border: "none", background: "#dc2626", color: "#fff", fontWeight: 900, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>⏹ 그만두기</button>
+              : <button onClick={startPublish} disabled={!unlimited && remainToday <= 0} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: (!unlimited && remainToday <= 0) ? C.line : `linear-gradient(135deg,${C.accent},#8b5cf6)`, color: "#fff", fontWeight: 900, fontSize: 14, cursor: (!unlimited && remainToday <= 0) ? "default" : "pointer", fontFamily: "inherit" }}>🚀 백링크 시작하기</button>}
           </div>
         </div>
 
