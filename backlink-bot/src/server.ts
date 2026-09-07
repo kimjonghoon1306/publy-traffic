@@ -222,6 +222,7 @@ app.get("/member-publish-stream", async (req, res) => {
       return res.end();
     }
     let posted = 0;
+    const tier1Urls: string[] = [];   // 성공한 1차 URL(2차 부스팅 대상)
     for (let i = 0; i < domains.length && posted < want; i++) {
       const dom = domains[i];
       const c = genContent(targetDomain, i);
@@ -246,9 +247,38 @@ app.get("/member-publish-stream", async (req, res) => {
         p_status: realOk ? "posted" : "failed", p_post_url: realOk ? (r.postUrl || null) : null, p_anchor: c.anchor, p_evidence: evidence,
       });
       if (error) { send({ type: "log", kind: "warn", msg: `[${dom}] 기록 실패: ${error.message}` }); }
-      else if (realOk) { posted++; send({ type: "log", kind: "post", msg: `[${dom}] ✅ 게시 완료 (${posted}/${want})` }); }
+      else if (realOk) { posted++; if (r.postUrl) tier1Urls.push(r.postUrl); send({ type: "log", kind: "post", msg: `[${dom}] ✅ 게시 완료 (${posted}/${want})` }); }
       void postId;
     }
+    // ★2026-09-07 티어2 부스팅(회원 실시간 발송): 성공한 1차 URL을 weak 소스로 밀어줌(회원 사이트 아니라 1차 URL 가리킴).
+    try {
+      const okUrls = tier1Urls.filter(Boolean);
+      if (okUrls.length) {
+        const TIER2_SOURCES = ["telegra.ph", "dpaste.com", "paste.rs"].filter(d => getAdapter(d));
+        const TIER2_PER = 3;
+        send({ type: "log", kind: "wait", msg: `🔁 2차 부스팅 시작 — 올린 글 ${okUrls.length}개를 여러 곳에서 밀어줍니다` });
+        let t2ok = 0;
+        for (const p1 of okUrls) {
+          for (let k = 0; k < TIER2_PER; k++) {
+            const src = TIER2_SOURCES[t2ok % (TIER2_SOURCES.length || 1)];
+            if (!src) break;
+            let host = p1; try { host = new URL(p1).host; } catch { /* keep */ }
+            const t2c = genContent(host, t2ok);
+            const t2input: PublishInput = { targetDomain: host, targetUrl: p1, title: t2c.title, body: t2c.body, anchor: "관련 글 보기", proxy: null, secrets };
+            const rr = await getAdapter(src)!.publish(t2input);
+            if (rr.ok) {
+              t2ok++;
+              await sb.rpc("backlink_my_record_post", {
+                p_token: token, p_order_id: orderId, p_source_domain: src, p_grade: "B",
+                p_status: "posted", p_post_url: rr.postUrl || null, p_anchor: "관련 글 보기",
+                p_evidence: { ...rr.evidence, tier: 2, parent_url: p1 },
+              });
+            }
+          }
+        }
+        send({ type: "log", kind: "post", msg: `🔁 2차 부스팅 완료 — ${t2ok}개로 밀어줬어요(순위·색인에 도움)` });
+      }
+    } catch (e: any) { send({ type: "log", kind: "warn", msg: `2차 부스팅 일부 실패: ${e?.message || e}` }); }
     // 색인 푸시(회원 키/관리자지정 정책은 backlink_bot_indexnow_plan이 처리 — 회원 세션 아님이므로 스킵, 스케줄러/관리자 흐름서 처리)
     send({ type: "log", kind: "index", msg: `색인 요청은 잠시 후 자동으로 진행돼요(회원 키 설정 시 더 빨라져요).` });
     send({ type: "done", posted });
