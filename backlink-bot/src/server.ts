@@ -201,9 +201,17 @@ app.get("/member-publish-stream", async (req, res) => {
     const { data: doneSrc } = await sb.rpc("backlink_my_posted_sources", { p_token: token, p_order_id: orderId });
     const doneSet = new Set<string>((doneSrc as string[] | null) || []);
 
-    // 우리소유 소스 토큰 주입(gist 등)은 관리자 config → 회원 흐름에선 미주입(회원은 무인증 소스 우선).
+    // 우리소유 소스(gist 등)는 관리자 config 토큰이 필요 → 회원 흐름(admin 권한 없음)에선 제외한다.
+    //   회원 수동발송은 무인증 소스만. gist 등 우리소유 물량은 서버 스케줄러(backlink-run mode=scheduler)가 담당.
+    //   ★2026-09-07 테리: 예전엔 gist가 목록에 남아 회원에게 "우리소유 소스 토큰 미설정" 에러가 노출됐다 → 제외로 해결.
     const secrets: Record<string, string> = {};
-    const domains = listAdapterDomains().filter(d => !doneSet.has(d));
+    const OWNED = new Set<string>(["gist.github.com"]);   // 우리소유(토큰필요) — 회원 흐름 제외
+    const domains = listAdapterDomains().filter(d => !doneSet.has(d) && !OWNED.has(d));
+    if (domains.length === 0) {
+      send({ type: "log", kind: "wait", msg: "오늘 올릴 수 있는 새 소스를 모두 사용했어요 — 나머지는 시스템이 자동으로 채워드려요." });
+      send({ type: "done", posted: 0 });
+      return res.end();
+    }
     let posted = 0;
     for (let i = 0; i < domains.length && posted < want; i++) {
       const dom = domains[i];
