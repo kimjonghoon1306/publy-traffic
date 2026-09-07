@@ -64,6 +64,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const [ghInput, setGhInput] = useState("");
   const [ghMsg, setGhMsg] = useState("");
   const [ghOpen, setGhOpen] = useState(false);
+  // 🎛️ 컨트롤타워 탭 (2026-09-07: 카드 세로나열 → 탭 분리로 시원하게)
+  const [ctTab, setCtTab] = useState<"run" | "report" | "keys" | "domains">("run");
   // 🤖 제미나이 키 + 키워드 (사이트 읽고 고품질 글 생성)
   const [gemMasked, setGemMasked] = useState<string | null>(null);
   const [gemInput, setGemInput] = useState("");
@@ -272,8 +274,42 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
 
   if (loading) return <div style={{ textAlign: "center", color: C.sub, padding: 40 }}>불러오는 중…</div>;
 
+  // 🎛️ 컨트롤타워 탭 네비 (모바일 퍼스트: 가로 스크롤 칩)
+  const CT_TABS: { k: typeof ctTab; label: string }[] = [
+    { k: "run", label: "🚀 발송" },
+    { k: "report", label: "📊 성과" },
+    { k: "keys", label: "🔑 키 설정" },
+    { k: "domains", label: "🌐 도메인" },
+  ];
+  const tabBtn = (active: boolean): React.CSSProperties => ({
+    flex: "1 1 auto", minWidth: 76, padding: "11px 10px", borderRadius: 10, border: "none",
+    background: active ? C.accent : C.panel, color: active ? "#fff" : C.sub,
+    fontSize: 13.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+  });
+
   return (
     <div>
+      {/* ── 🎛️ 상단: 대상 도메인 요약 (항상 보임) ── */}
+      {cur && (
+        <div style={card({ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" })}>
+          <span style={{ width: 4, height: 18, borderRadius: 2, background: C.accent }} />
+          <b style={{ fontSize: 15, color: C.ink }}>{cur.target_domain}</b>
+          <span style={chip(C.soft, C.accent)}>{PLAN_LABEL[cur.plan] || cur.plan}{unlimited ? " · 무제한" : ` · 하루 ${cur.daily_limit}`}</span>
+          {running && <span style={chip(logC.post.bg, logC.post.fg)}>발송 중…</span>}
+          <div style={{ marginLeft: "auto", display: "flex", gap: 12, fontSize: 12, fontWeight: 700, color: C.sub }}>
+            <span>누적 <b style={{ color: logC.post.fg }}>{cur.total_posted}</b></span>
+            <span>색인 <b style={{ color: logC.done.fg }}>{cur.indexed}</b></span>
+          </div>
+        </div>
+      )}
+
+      {/* ── 🎛️ 탭 네비 ── */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto" }}>
+        {CT_TABS.map(t => <button key={t.k} onClick={() => setCtTab(t.k)} style={tabBtn(ctTab === t.k)}>{t.label}</button>)}
+      </div>
+
+      {/* ── 🌐 도메인 탭 ── */}
+      <div style={{ display: ctTab === "domains" ? "block" : "none" }}>
       {/* ── 내 도메인(계정) 관리 ── */}
       <div style={card({ marginBottom: 12 })}>
         <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 4, display: "flex", alignItems: "center", gap: 8, color: C.ink }}>
@@ -305,8 +341,11 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
         {domainMsg && <div style={{ fontSize: 12.5, color: logC.post.fg, fontWeight: 700, marginTop: 8 }}>{domainMsg}</div>}
         {subs.length === 0 && <div style={{ fontSize: 12.5, color: C.sub, marginTop: 8, lineHeight: 1.6 }}>순위를 올리고 싶은 사이트 주소를 넣으면, 여러 곳에 자동으로 백링크를 걸어 <b style={{ color: C.accent }}>구글·AI 검색 노출</b>을 키워요.</div>}
       </div>
+      </div>{/* /🌐 도메인 탭 */}
 
       {cur && (<>
+        {/* ── 🚀 발송 탭 (현황+시작하기 + 로그) ── */}
+        <div style={{ display: ctTab === "run" ? "block" : "none" }}>
         {/* ── 현황 + 시작하기 ── */}
         <div style={card({ marginBottom: 12 })}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
@@ -336,42 +375,6 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
           <div style={{ fontSize: 11.5, fontWeight: 700, color: logC.done.fg, background: logC.done.bg, borderRadius: 10, padding: "8px 11px", marginBottom: 14, lineHeight: 1.5 }}>
             🔗 <b>색인 반영</b> = 발행된 백링크가 <b>빙(Bing)에서 실제로 검색·색인된 게 확인된</b> 건수예요. (검색엔진 반영엔 며칠 걸릴 수 있어요)
           </div>
-          {/* 📊 내 백링크 기록(기간설정) — 언제 몇 건 배포·색인됐는지 쌓여가는 걸 눈으로. 소스·URL은 비노출, 집계만. */}
-          <div style={card({ marginBottom: 14, border: `1px solid ${C.line}` })}>
-            <div onClick={() => { const n = !histOpen; setHistOpen(n); if (n && histRows == null) loadHist(); }} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-              <b style={{ fontSize: 14, color: C.ink }}>📊 내 백링크 기록 <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 언제 몇 건 배포·색인됐는지(기간설정)</span></b>
-              <span style={{ marginLeft: "auto", color: C.sub, fontSize: 13 }}>{histOpen ? "▲" : "▼"}</span>
-            </div>
-            {histOpen && (() => {
-              const rows = histRows || [];
-              const tot = rows.reduce((a, r) => ({ p: a.p + r.posted, i: a.i + r.indexed }), { p: 0, i: 0 });
-              const maxP = Math.max(1, ...rows.map(r => r.posted));
-              return <div style={{ marginTop: 12 }}>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-                  <input type="date" value={histFrom} onChange={e => setHistFrom(e.target.value)} style={{ ...inputStyle, fontSize: 12.5, padding: "9px 10px" }} />
-                  <span style={{ color: C.sub }}>~</span>
-                  <input type="date" value={histTo} onChange={e => setHistTo(e.target.value)} style={{ ...inputStyle, fontSize: 12.5, padding: "9px 10px" }} />
-                  <button onClick={loadHist} disabled={histLoading} style={{ padding: "9px 16px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13, cursor: histLoading ? "default" : "pointer", opacity: histLoading ? .6 : 1 }}>{histLoading ? "조회 중…" : "↻ 조회"}</button>
-                  <button onClick={() => { setHistFrom(""); setHistTo(""); loadHist(); }} style={{ padding: "9px 12px", borderRadius: 10, border: `1px solid ${C.line}`, background: C.win, color: C.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>전체</button>
-                </div>
-                <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-                  <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: logC.post.bg }}><div style={{ fontSize: 20, fontWeight: 900, color: logC.post.fg }}>{tot.p}</div><div style={{ fontSize: 11, color: logC.post.fg, opacity: .85 }}>기간 내 게시</div></div>
-                  <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: logC.done.bg }}><div style={{ fontSize: 20, fontWeight: 900, color: logC.done.fg }}>{tot.i}</div><div style={{ fontSize: 11, color: logC.done.fg, opacity: .85 }}>기간 내 색인</div></div>
-                  <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: C.panel }}><div style={{ fontSize: 20, fontWeight: 900, color: C.ink }}>{rows.length}</div><div style={{ fontSize: 11, color: C.sub }}>활동한 날</div></div>
-                </div>
-                {histLoading ? <div style={{ textAlign: "center", color: C.sub, fontSize: 12.5, padding: 16 }}>불러오는 중…</div>
-                  : rows.length === 0 ? <div style={{ textAlign: "center", color: C.sub, fontSize: 12.5, padding: 16 }}>이 기간엔 배포 기록이 없어요. 백링크를 돌리면 여기에 날짜별로 쌓여요.</div>
-                  : <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                    {rows.map(r => <div key={r.day} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 10, background: C.panel, border: `1px solid ${C.line}` }}>
-                      <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, minWidth: 92 }}>{new Date(r.day).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</span>
-                      <div style={{ flex: 1, height: 8, borderRadius: 99, background: C.line, overflow: "hidden", minWidth: 40 }}><div style={{ height: "100%", width: `${Math.round(r.posted / maxP * 100)}%`, background: logC.post.fg, borderRadius: 99 }} /></div>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: logC.post.fg, minWidth: 48, textAlign: "right" }}>게시 {r.posted}</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: logC.done.fg, minWidth: 48, textAlign: "right" }}>색인 {r.indexed}</span>
-                    </div>)}
-                  </div>}
-              </div>;
-            })()}
-          </div>
           {/* 수량 지정 + 시작 */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: 12, borderRadius: 12, background: C.panel, border: `1px solid ${C.line}` }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>이 도메인에 백링크</span>
@@ -388,7 +391,10 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
               : <button onClick={startPublish} disabled={!unlimited && remainToday <= 0} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: (!unlimited && remainToday <= 0) ? C.line : `linear-gradient(135deg,${C.accent},#8b5cf6)`, color: "#fff", fontWeight: 900, fontSize: 14, cursor: (!unlimited && remainToday <= 0) ? "default" : "pointer", fontFamily: "inherit" }}>🚀 백링크 시작하기</button>}
           </div>
         </div>
+        </div>{/* /🚀 발송 탭(현황+시작) */}
 
+        {/* ── 🔑 키 설정 탭 (제미나이·GitHub·색인) ── */}
+        <div style={{ display: ctTab === "keys" ? "block" : "none" }}>
         {/* ── 🤖 제미나이 키(AI 글생성) ── */}
         <div style={card({ marginBottom: 12, border: `1px solid ${gemMasked ? "#16a34a55" : C.line}` })}>
           <div onClick={() => setGemOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
@@ -514,7 +520,49 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
             </div>
           )}
         </div>
+        </div>{/* /🔑 키 설정 탭 */}
 
+        {/* ── 📊 성과 탭 (기간별 기록) ── */}
+        <div style={{ display: ctTab === "report" ? "block" : "none" }}>
+        <div style={card({ marginBottom: 12 })}>
+          <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 4, display: "flex", alignItems: "center", gap: 8, color: C.ink }}>
+            <span style={{ width: 4, height: 15, borderRadius: 2, background: C.accent }} />📊 내 백링크 기록
+            <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 언제 몇 건 배포·색인됐는지(기간설정)</span>
+          </div>
+          {(() => {
+            const rows = histRows || [];
+            const tot = rows.reduce((a, r) => ({ p: a.p + r.posted, i: a.i + r.indexed }), { p: 0, i: 0 });
+            const maxP = Math.max(1, ...rows.map(r => r.posted));
+            return <div style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                <input type="date" value={histFrom} onChange={e => setHistFrom(e.target.value)} style={{ ...inputStyle, fontSize: 12.5, padding: "9px 10px" }} />
+                <span style={{ color: C.sub }}>~</span>
+                <input type="date" value={histTo} onChange={e => setHistTo(e.target.value)} style={{ ...inputStyle, fontSize: 12.5, padding: "9px 10px" }} />
+                <button onClick={loadHist} disabled={histLoading} style={{ padding: "9px 16px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13, cursor: histLoading ? "default" : "pointer", opacity: histLoading ? .6 : 1 }}>{histLoading ? "조회 중…" : "↻ 조회"}</button>
+                <button onClick={() => { setHistFrom(""); setHistTo(""); loadHist(); }} style={{ padding: "9px 12px", borderRadius: 10, border: `1px solid ${C.line}`, background: C.win, color: C.sub, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>전체</button>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: logC.post.bg }}><div style={{ fontSize: 20, fontWeight: 900, color: logC.post.fg }}>{tot.p}</div><div style={{ fontSize: 11, color: logC.post.fg, opacity: .85 }}>기간 내 게시</div></div>
+                <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: logC.done.bg }}><div style={{ fontSize: 20, fontWeight: 900, color: logC.done.fg }}>{tot.i}</div><div style={{ fontSize: 11, color: logC.done.fg, opacity: .85 }}>기간 내 색인</div></div>
+                <div style={{ flex: 1, textAlign: "center", padding: 11, borderRadius: 11, background: C.panel }}><div style={{ fontSize: 20, fontWeight: 900, color: C.ink }}>{rows.length}</div><div style={{ fontSize: 11, color: C.sub }}>활동한 날</div></div>
+              </div>
+              {histLoading ? <div style={{ textAlign: "center", color: C.sub, fontSize: 12.5, padding: 16 }}>불러오는 중…</div>
+                : rows.length === 0 ? <div style={{ textAlign: "center", color: C.sub, fontSize: 12.5, padding: 16 }}>이 기간엔 배포 기록이 없어요. 백링크를 돌리면 여기에 날짜별로 쌓여요.</div>
+                : <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {rows.map(r => <div key={r.day} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 10, background: C.panel, border: `1px solid ${C.line}` }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, minWidth: 92 }}>{new Date(r.day).toLocaleDateString("ko-KR", { year: "2-digit", month: "2-digit", day: "2-digit" })}</span>
+                    <div style={{ flex: 1, height: 8, borderRadius: 99, background: C.line, overflow: "hidden", minWidth: 40 }}><div style={{ height: "100%", width: `${Math.round(r.posted / maxP * 100)}%`, background: logC.post.fg, borderRadius: 99 }} /></div>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: logC.post.fg, minWidth: 48, textAlign: "right" }}>게시 {r.posted}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: logC.done.fg, minWidth: 48, textAlign: "right" }}>색인 {r.indexed}</span>
+                  </div>)}
+                </div>}
+            </div>;
+          })()}
+        </div>
+        </div>{/* /📊 성과 탭 */}
+
+        {/* ── 🚀 발송 탭(이어서): 실시간 로그 ── */}
+        <div style={{ display: ctTab === "run" ? "block" : "none" }}>
         {/* ── 실시간 로그 + 3버튼 ── */}
         <div style={card()}>
           <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, color: C.ink, flexWrap: "wrap" }}>
@@ -529,6 +577,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
           {sentMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700, marginBottom: 8 }}>{sentMsg}</div>}
           {logView(false)}
         </div>
+        </div>{/* /🚀 발송 탭(로그) */}
       </>)}
 
       {/* 🔍 로그 크게 보기 모달 */}
