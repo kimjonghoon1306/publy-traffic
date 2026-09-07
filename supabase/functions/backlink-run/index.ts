@@ -197,6 +197,28 @@ async function githubGist(input: PubInput): Promise<PubResult> {
   } catch (e) { events.push(ev("fail", "네트워크 오류: " + (e as any)?.message)); return { ok: false, evidence: { step: "exception" }, events, error: String(e) }; }
 }
 
+// ★2026-09-07 우리소유 블로그(tarryguide·tarryblog 등) 어댑터: POST {apiUrl} + X-API-Key(owned_blog_api_key).
+function ownedBlog(domain: string, apiUrl: string) {
+  return async (input: PubInput): Promise<PubResult> => {
+    const events = [ev("apistart", `${domain} 소스에 연결하는 중…`)];
+    try {
+      const apiKey = input.secrets?.owned_blog_api_key || "";
+      if (!apiKey) { events.push(ev("fail", "우리소유 블로그 발행 키 미설정")); return { ok: false, evidence: { step: "no_key" }, events, error: "no_key" }; }
+      events.push(ev("botstart", "소스 인증 완료 · 게시 자리 준비됨"));
+      events.push(ev("ai", "소개 글과 자연스러운 백링크 앵커를 배치하는 중…"));
+      const esc = (s: string) => (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const html = `<p>${esc(input.body)}</p><p>▶ <a href="${input.targetUrl}" rel="dofollow">${esc(input.anchor)}</a></p><p>참고: <a href="${input.targetUrl}">${esc(input.targetUrl)}</a></p>`;
+      const res = await fetch(apiUrl, { method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": apiKey }, body: JSON.stringify({ title: input.title, content: html, category: "정보", status: "published" }) });
+      const json: any = await res.json().catch(() => ({}));
+      const slug = json?.slug || json?.id || "";
+      const url = json?.url || json?.link || (slug ? `https://${domain}/posts/${slug}` : undefined);
+      if (!res.ok || !url) { events.push(ev("fail", "게시 실패: HTTP " + res.status)); return { ok: false, evidence: { http_code: res.status, msg: json?.error || json?.message }, events, error: "owned" }; }
+      events.push(ev("post", `${domain} 게시 완료 · dofollow · 우리소유 A급 소스`));
+      return { ok: true, postUrl: url, evidence: { http_code: res.status, source: domain, posted_at: nowISO(), dofollow: true, owned: true }, events };
+    } catch (e) { events.push(ev("fail", "네트워크 오류: " + (e as any)?.message)); return { ok: false, evidence: { step: "exception" }, events, error: String(e) }; }
+  };
+}
+
 const ADAPTERS: Record<string, (i: PubInput) => Promise<PubResult>> = {
   "telegra.ph": (i) => telegraphLike("https://api.telegra.ph", "telegra.ph", i),
   "graph.org": (i) => telegraphLike("https://api.graph.org", "graph.org", i),
@@ -205,6 +227,15 @@ const ADAPTERS: Record<string, (i: PubInput) => Promise<PubResult>> = {
   "paste.rs": pasters,
   "gist.github.com": githubGist,
 };
+// 우리소유 블로그를 DB에서 읽어 ADAPTERS에 동적 등록(스케줄러 실행 전 1회).
+async function registerOwnedBlogs(sb: any, token: string): Promise<void> {
+  try {
+    const { data } = await sb.rpc("backlink_bot_owned_domains", { p_token: token });
+    for (const d of (data || [])) {
+      if (d?.domain && d?.api_url && !ADAPTERS[d.domain]) ADAPTERS[d.domain] = ownedBlog(d.domain, d.api_url);
+    }
+  } catch { /* skip */ }
+}
 const ADAPTER_DOMAINS = Object.keys(ADAPTERS);
 
 // ── 게시검증(실 URL 열어 타겟 링크 삽입 확인) ──
@@ -304,6 +335,9 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
         } catch { /* 폴백: 관리자 공용키 */ }
         if (!secrets.github_gist_token) { const ght = await getConfig(sb, adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
         send({ type: "log", kind: "index", msg: `🔑 GitHub 키 활성화 — ${ghKeySource}로 게시합니다` });
+        // ★2026-09-07 우리소유 블로그(tarryguide·tarryblog) 등록 + 발행키 주입.
+        await registerOwnedBlogs(sb, adminToken);
+        { const obk = await getConfig(sb, adminToken, "owned_blog_api_key"); if (obk) secrets.owned_blog_api_key = obk; }
 
         // 🤖 AI 글생성 설정: order의 회원 Gemini 키·키워드, 없으면 관리자 공용키(config).
         let geminiKey = ""; let keyword = ""; let keySource = "";
@@ -350,7 +384,7 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
           return { title, body: base.body, anchor };   // ★body(사실)는 절대 안 바꿈
         };
 
-        const domains = ADAPTER_DOMAINS.filter((d) => !doneSet.has(d));
+        const domains = Object.keys(ADAPTERS).filter((d) => !doneSet.has(d));   // 동적(우리 블로그 등록 반영)
         let posted = 0;
         const useCount: Record<number, number> = {};   // 각 글이 몇 번째로 재사용되는지
         for (let i = 0; i < domains.length && posted < count; i++) {

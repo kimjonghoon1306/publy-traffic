@@ -10,7 +10,7 @@ if (typeof (globalThis as any).WebSocket === "undefined") {
   (globalThis as any).WebSocket = WebSocket;
 }
 import { createClient } from "@supabase/supabase-js";
-import { getAdapter, listAdapterDomains } from "./adapters";
+import { getAdapter, listAdapterDomains, registerOwnedBlog, isMemberExcluded } from "./adapters";
 import { runDiscovery } from "./discover";
 import { runGenerate } from "./generate";
 import { PublishInput } from "./adapters/types";
@@ -154,6 +154,8 @@ app.post("/publish-order", async (req, res) => {
     if (row && row.effective_key) secrets.github_gist_token = row.effective_key as string;
   } catch { /* 폴백 */ }
   if (!secrets.github_gist_token) { const ght = await getConfigBot(adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
+  // ★2026-09-07 우리소유 블로그(tarryguide·tarryblog) 발행 키 주입(config owned_blog_api_key).
+  { const obk = await getConfigBot(adminToken, "owned_blog_api_key"); if (obk) secrets.owned_blog_api_key = obk; }
   const results: any[] = [];
   for (let i = 0; i < domains.length; i++) {
     const dom = domains[i];
@@ -210,8 +212,10 @@ app.get("/member-publish-stream", async (req, res) => {
     //   회원 수동발송은 무인증 소스만. gist 등 우리소유 물량은 서버 스케줄러(backlink-run mode=scheduler)가 담당.
     //   ★2026-09-07 테리: 예전엔 gist가 목록에 남아 회원에게 "우리소유 소스 토큰 미설정" 에러가 노출됐다 → 제외로 해결.
     const secrets: Record<string, string> = {};
-    const OWNED = new Set<string>(["gist.github.com"]);   // 우리소유(토큰필요) — 회원 흐름 제외
-    const domains = listAdapterDomains().filter(d => !doneSet.has(d) && !OWNED.has(d));
+    // gist(개인키)만 회원 직접발송 제외. 우리 블로그(tarryguide 등)는 서버 공용키 주입이라 회원도 사용 → 소스 늘어 "0개" 완화.
+    //   config는 회원 세션토큰으론 못 읽음 → 봇 시크릿(456789)로 읽어 주입(키는 서버에만, 회원앱 비노출).
+    { const obk = await getConfigBot("456789", "owned_blog_api_key"); if (obk) secrets.owned_blog_api_key = obk; }
+    const domains = listAdapterDomains().filter(d => !doneSet.has(d) && !isMemberExcluded(d));
     if (domains.length === 0) {
       send({ type: "log", kind: "wait", msg: "오늘 올릴 수 있는 새 소스를 모두 사용했어요 — 나머지는 시스템이 자동으로 채워드려요." });
       send({ type: "done", posted: 0 });
@@ -276,9 +280,10 @@ app.get("/admin-publish-stream", async (req, res) => {
     // 유니크 스킵(이미 성공한 소스 제외)
     const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
     const doneSet = new Set<string>((doneSrc as string[] | null) || []);
-    // 우리소유 소스 토큰(gist 등) 주입 — 관리자 흐름은 우리소유 포함 전 어댑터 사용
+    // 우리소유 소스 토큰(gist·우리블로그) 주입 — 관리자 흐름은 우리소유 포함 전 어댑터 사용
     const secrets: Record<string, string> = {};
     { const ght = await getConfigBot(adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
+    { const obk = await getConfigBot(adminToken, "owned_blog_api_key"); if (obk) secrets.owned_blog_api_key = obk; }
     const domains = listAdapterDomains().filter(d => !doneSet.has(d));
     let posted = 0;
     for (let i = 0; i < domains.length && posted < count; i++) {
@@ -403,6 +408,20 @@ app.post("/check-index", async (req, res) => {
   res.json({ ok: true, checked, indexed, engine });
 });
 
-app.listen(PORT, "127.0.0.1", () => {
+// ★2026-09-07 우리소유 블로그(tarryguide·tarryblog 등)를 DB에서 읽어 어댑터 registry에 등록.
+//   관리자가 도메인 추가하면 반영되게 시작 시 + 5분마다 갱신.
+async function loadOwnedDomains(): Promise<void> {
+  try {
+    const { data } = await sb.rpc("backlink_bot_owned_domains", { p_token: "456789" });
+    for (const d of (data || [])) {
+      if (d?.domain && d?.api_url) registerOwnedBlog(d.domain as string, d.api_url as string);
+    }
+    console.log(`[backlink-bot] 우리소유 블로그 ${(data || []).length}개 등록: ${(data || []).map((x: any) => x.domain).join(", ")}`);
+  } catch (e: any) { console.log(`[backlink-bot] 우리소유 도메인 로드 실패: ${e?.message || e}`); }
+}
+
+app.listen(PORT, "127.0.0.1", async () => {
+  await loadOwnedDomains();
+  setInterval(loadOwnedDomains, 5 * 60 * 1000);   // 5분마다 갱신
   console.log(`[backlink-bot] listening on 127.0.0.1:${PORT} (auth=${AUTH_TOKEN ? "on" : "off"}) adapters=${listAdapterDomains().join(",")}`);
 });
