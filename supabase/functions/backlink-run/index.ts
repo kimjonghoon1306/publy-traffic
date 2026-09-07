@@ -291,9 +291,19 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
         // 유니크 스킵
         const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
         const doneSet = new Set<string>((doneSrc as string[] | null) || []);
-        // gist 토큰
+        // gist 토큰 — ★2026-09-07: 회원 본인키 우선(빙키 방식). 본인키(scope=own) 있으면 그걸로, 없으면 관리자 공용키.
         const secrets: Record<string, string> = {};
-        const ght = await getConfig(sb, adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght;
+        let ghKeySource = "관리자 공용키";
+        try {
+          const { data: gk } = await sb.rpc("backlink_bot_github_key", { p_token: adminToken, p_order_id: orderId });
+          const row = (gk && gk[0]) || null;
+          if (row && row.effective_key) {
+            secrets.github_gist_token = row.effective_key;
+            ghKeySource = row.scope === "own" ? "회원 본인 GitHub 키" : "관리자 공용키";
+          }
+        } catch { /* 폴백: 관리자 공용키 */ }
+        if (!secrets.github_gist_token) { const ght = await getConfig(sb, adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
+        send({ type: "log", kind: "index", msg: `🔑 GitHub 키 활성화 — ${ghKeySource}로 게시합니다` });
 
         // 🤖 AI 글생성 설정: order의 회원 Gemini 키·키워드, 없으면 관리자 공용키(config).
         let geminiKey = ""; let keyword = ""; let keySource = "";

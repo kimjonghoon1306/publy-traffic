@@ -146,9 +146,14 @@ app.post("/publish-order", async (req, res) => {
   // ★ 한 회원(주문)=한 소스=한 백링크(유니크, 체크리스트#47): 이미 성공한 소스는 스킵 → 중복 백링크 방지.
   const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
   const doneSet = new Set<string>((doneSrc as string[] | null) || []);
-  // 우리소유 소스용 토큰(github_gist_token 등)을 config에서 1회 읽어 어댑터에 주입(클라이언트 노출 없음)
+  // 우리소유 소스용 토큰(github) — ★2026-09-07: 회원 본인키 우선(빙키 방식), 없으면 관리자 공용키.
   const secrets: Record<string, string> = {};
-  { const ght = await getConfigBot(adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
+  try {
+    const { data: gk } = await sb.rpc("backlink_bot_github_key", { p_token: adminToken, p_order_id: orderId });
+    const row = (gk && gk[0]) || null;
+    if (row && row.effective_key) secrets.github_gist_token = row.effective_key as string;
+  } catch { /* 폴백 */ }
+  if (!secrets.github_gist_token) { const ght = await getConfigBot(adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
   const results: any[] = [];
   for (let i = 0; i < domains.length; i++) {
     const dom = domains[i];

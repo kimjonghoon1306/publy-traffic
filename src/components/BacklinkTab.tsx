@@ -58,6 +58,12 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const [keyOpen, setKeyOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
+  // 🔑 GitHub 키 (본인키/관리자 공용키) — 빙키와 동일 개념. 본인키 넣으면 내 GitHub 계정에 게시(관리자키 대신).
+  const [ghScope, setGhScope] = useState<string>("admin");   // admin=공용키 / own=본인키
+  const [ghHasKey, setGhHasKey] = useState(false);
+  const [ghInput, setGhInput] = useState("");
+  const [ghMsg, setGhMsg] = useState("");
+  const [ghOpen, setGhOpen] = useState(false);
   // 🤖 제미나이 키 + 키워드 (사이트 읽고 고품질 글 생성)
   const [gemMasked, setGemMasked] = useState<string | null>(null);
   const [gemInput, setGemInput] = useState("");
@@ -91,6 +97,29 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
       setKeyMasked(r?.key_masked || null); setIsAdminKey(!!r?.is_admin_key); setKeyWaiting(!!r?.waiting);
     } catch {}
   }, [token]);
+
+  // 🔑 GitHub 키 상태 로드(있는지/scope만, 원문 비노출)
+  const loadMyGithub = useCallback(async () => {
+    try {
+      const { data } = await supabase.rpc("backlink_my_github", { p_token: token });
+      const r = (data && data[0]) || null;
+      setGhScope(r?.scope || "admin"); setGhHasKey(!!r?.has_key);
+    } catch {}
+  }, [token]);
+
+  // 🔑 GitHub 본인키 저장/삭제 (넣으면 own, 비우면 관리자 공용키)
+  const saveMyGithub = useCallback(async () => {
+    const v = ghInput.trim();
+    if (!v) { setGhMsg("GitHub 토큰(ghp_로 시작)을 붙여넣으세요"); setTimeout(() => setGhMsg(""), 3500); return; }
+    const { error } = await supabase.rpc("backlink_set_my_github", { p_token: token, p_key: v });
+    if (error) { setGhMsg("저장 실패: " + error.message); return; }
+    setGhMsg("✅ 내 GitHub 키로 전환했어요 — 이제 내 계정에 게시해요"); setGhInput(""); loadMyGithub(); setTimeout(() => setGhMsg(""), 4000);
+  }, [ghInput, token, loadMyGithub]);
+
+  const clearMyGithub = useCallback(async () => {
+    await supabase.rpc("backlink_set_my_github", { p_token: token, p_key: "" });
+    setGhMsg("관리자 공용 키로 돌아갔어요"); loadMyGithub(); setTimeout(() => setGhMsg(""), 3500);
+  }, [token, loadMyGithub]);
 
   // 🤖 제미나이 키 상태 로드
   const loadGemKey = useCallback(async () => {
@@ -129,7 +158,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     setKwMsg(kwInput.trim() ? "✅ 키워드 저장 — 제목·본문·앵커에 자연스럽게 반영돼요" : "✅ 키워드를 비웠어요"); setTimeout(() => setKwMsg(""), 4000);
   }, [kwInput, token]);
 
-  useEffect(() => { loadSubs(); loadMyKey(); loadGemKey(); const iv = setInterval(loadSubs, 20000); return () => clearInterval(iv); }, [loadSubs, loadMyKey, loadGemKey]);
+  useEffect(() => { loadSubs(); loadMyKey(); loadGemKey(); loadMyGithub(); const iv = setInterval(loadSubs, 20000); return () => clearInterval(iv); }, [loadSubs, loadMyKey, loadGemKey, loadMyGithub]);
   useEffect(() => { if (logBoxRef.current) logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight; }, [logs]);
   useEffect(() => () => { esRef.current?.close(); }, []);
 
@@ -397,6 +426,43 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
               </div>
               <div style={{ fontSize: 11, color: C.sub, marginTop: 6 }}>키워드를 넣으면 글 제목·본문·링크 앵커에 자연스럽게 반영돼 구글이 "이 도메인 = 이 키워드"로 학습해요.</div>
               {kwMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700, marginTop: 8 }}>{kwMsg}</div>}
+            </div>
+          )}
+        </div>
+
+        {/* ── 🔑 GitHub 키 (본인키 / 관리자 공용키) ── */}
+        <div style={card({ marginBottom: 12, border: `1px solid ${ghScope === "own" && ghHasKey ? "#16a34a55" : C.line}` })}>
+          <div onClick={() => setGhOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
+            <b style={{ fontSize: 14, color: C.ink }}>🔑 GitHub 키 <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 내 계정에 백링크 게시(더 자연스러움)</span></b>
+            <span style={{ marginLeft: "auto", ...chip(ghScope === "own" && ghHasKey ? logC.post.bg : C.panel, ghScope === "own" && ghHasKey ? logC.post.fg : C.sub) }}>
+              {ghScope === "own" && ghHasKey ? "내 키 등록됨 🟢" : "관리자 공용 키 사용 중"}
+            </span>
+            <span style={{ color: C.sub, fontSize: 13 }}>{ghOpen ? "▲" : "▼"}</span>
+          </div>
+          {ghOpen && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.8, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: ghScope === "own" && ghHasKey ? logC.post.bg : C.panel, border: `1px solid ${C.line}` }}>
+                {ghScope === "own" && ghHasKey
+                  ? <><b style={{ color: logC.post.fg }}>🟢 내 GitHub 키로 게시 중</b><br /><span style={{ color: C.sub }}>백링크가 <b>내 GitHub 계정</b>에 올라가요. 계정마다 링크가 달라 구글이 더 자연스럽게 봐요.</span></>
+                  : <><b>💡 지금은 관리자 공용 키로 게시돼요.</b> 내 GitHub 키를 넣으면 <b>내 계정</b>에 올라가서 더 자연스럽고, 게시 한도도 내 것으로 늘어나요. <b>무료</b>예요(선택).</>}
+              </div>
+              <button onClick={() => { try { window.open("https://github.com/settings/tokens", "_blank"); } catch {} }}
+                style={{ width: "100%", padding: "12px", borderRadius: 10, border: `1.5px solid ${C.accent}`, background: C.soft, color: C.accent, fontWeight: 900, fontSize: 13.5, cursor: "pointer", marginBottom: 10 }}>
+                🔷 GitHub 키 발급받기 (설정 → 토큰 열기) ↗
+              </button>
+              <div style={{ fontSize: 12, color: C.ink, lineHeight: 2, marginBottom: 10, padding: "11px 13px", borderRadius: 10, background: C.panel, border: `1px solid ${C.line}` }}>
+                <b>📋 발급 방법</b><br />
+                <b style={{ color: C.accent }}>1.</b> GitHub 로그인 → 위 버튼(설정→토큰)<br />
+                <b style={{ color: C.accent }}>2.</b> <b>Generate new token (classic)</b><br />
+                <b style={{ color: C.accent }}>3.</b> 권한은 <b>gist</b>만 체크, 만료 <b>No expiration</b><br />
+                <b style={{ color: C.accent }}>4.</b> 생성된 <b>ghp_…</b> 키 복사 → 아래 붙여넣기
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                <input value={ghInput} onChange={e => setGhInput(e.target.value)} placeholder={ghScope === "own" && ghHasKey ? "새 키로 바꾸려면 붙여넣기(덮어쓰기)" : "발급받은 ghp_… 키 붙여넣기"} style={{ ...inputStyle, flex: 1, minWidth: 160, fontSize: 13.5 }} />
+                <button onClick={saveMyGithub} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: C.accent, color: "#fff", fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>{ghScope === "own" && ghHasKey ? "변경" : "저장"}</button>
+                {ghScope === "own" && ghHasKey && <button onClick={clearMyGithub} style={{ padding: "12px 16px", borderRadius: 10, border: `1px solid ${logC.fail.fg}`, background: C.win, color: logC.fail.fg, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}>공용키로</button>}
+              </div>
+              {ghMsg && <div style={{ fontSize: 12, color: logC.post.fg, fontWeight: 700 }}>{ghMsg}</div>}
             </div>
           )}
         </div>
