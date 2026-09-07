@@ -10,7 +10,7 @@ const TOOLS: { key: ToolKey; label: string; desc: string; actions: [string, stri
   { key: "place", label: "🗺️ 플레이스", desc: "네이버 지도·플레이스를 검색 유입으로 상위 노출시켜요.", actions: [["dir", "길찾기", false], ["call", "전화", false], ["book", "예약", false], ["talk", "톡톡", false], ["share", "공유", false], ["save", "저장", true], ["review", "리뷰", true]] },
   { key: "blog", label: "📝 블로그", desc: "블로그 글을 검색 유입·공감·이웃으로 노출을 키워요.", actions: [["share", "공유", false], ["funnel", "다른글읽기", false], ["like", "공감", true], ["neighbor", "이웃추가", true]] },
   { key: "store", label: "🛒 스마트스토어", desc: "쇼핑 검색 유입·찜·장바구니로 상품 순위를 올려요.", actions: [["option", "옵션보기", false], ["share", "공유", false], ["wish", "찜", true], ["cart", "장바구니", true]] },
-  { key: "backlink", label: "🔗 백링크", desc: "여러 사이트에 백링크를 자동 게시해 구글·AI 노출을 키워요. (행동 선택 없음 · 승인 후 백링크 탭에서 도메인 입력)", actions: [] },
+  // ★2026-09-07 테리 지시: 주문하기 화면에서 백링크만 제외(다른 기능·백링크 탭 자체·승인로직은 그대로 유지). TOOLS에서 backlink 카드만 뺌.
 ];
 const PLANS: [string, string][] = [["basic", "베이직"], ["pro", "프로"], ["premium", "프리미엄"], ["unlimited", "무제한"]];
 const PERIODS: [number, string][] = [[7, "7일"], [30, "30일"], [90, "90일"], [365, "1년"]];
