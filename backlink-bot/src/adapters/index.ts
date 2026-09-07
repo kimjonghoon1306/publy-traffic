@@ -28,8 +28,20 @@ export function hasAdapter(domain: string): boolean {
   return domain in registry;
 }
 
+// ★2026-09-07 상위노출 우선: strong(dofollow+본문링크) 소스를 먼저 소진하고 weak를 뒤에.
+//   회원 하루 한도가 적으면 strong만으로 채워져 순위 효과가 실제로 나게 한다(개수보다 질).
 export function listAdapterDomains(): string[] {
-  return Object.keys(registry);
+  const keys = Object.keys(registry);
+  return keys.sort((a, b) => {
+    const ta = registry[a].seoTier === "strong" ? 0 : 1;
+    const tb = registry[b].seoTier === "strong" ? 0 : 1;
+    return ta - tb;
+  });
+}
+
+// 상위노출용(strong)만 — 스케줄러/우선 게시에서 사용
+export function listStrongAdapterDomains(): string[] {
+  return Object.keys(registry).filter((k) => registry[k].seoTier === "strong");
 }
 
 export * from "./types";

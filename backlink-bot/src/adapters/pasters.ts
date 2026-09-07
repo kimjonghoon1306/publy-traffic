@@ -9,6 +9,7 @@ export const pastersAdapter: Adapter = {
   key: "paste.rs",
   method: "api",
   needsProxy: false,
+  seoTier: "weak",   // 실측 2026-09-07: plain text 사이트라 링크가 클릭 <a>로 안 만들어짐(텍스트만)
   async publish(input: PublishInput): Promise<PublishResult> {
     const events = [ev("apistart", "paste.rs 소스에 연결하는 중…")];
     try {

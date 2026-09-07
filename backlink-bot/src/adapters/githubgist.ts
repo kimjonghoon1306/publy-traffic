@@ -10,6 +10,7 @@ export const githubGistAdapter: Adapter = {
   key: "gist.github.com",
   method: "api",
   needsProxy: false,
+  seoTier: "strong",   // 실측 2026-09-07: 본문 <a> 링크 + dofollow
   async publish(input: PublishInput): Promise<PublishResult> {
     const events = [ev("apistart", "gist.github.com 소스에 연결하는 중…")];
     try {

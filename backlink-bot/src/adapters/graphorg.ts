@@ -21,6 +21,7 @@ export const graphorgAdapter: Adapter = {
   key: "graph.org",
   method: "api",
   needsProxy: false,
+  seoTier: "strong",   // 실측 2026-09-07: 본문 <a> 링크 + dofollow
   async publish(input: PublishInput): Promise<PublishResult> {
     const events = [ev("apistart", "graph.org 소스에 연결하는 중…")];
     try {

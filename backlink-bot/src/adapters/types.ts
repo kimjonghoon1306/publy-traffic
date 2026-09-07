@@ -53,6 +53,11 @@ export interface Adapter {
   key: string;                  // 소스 도메인 키 (telegra.ph 등)
   method: "api" | "bot";
   needsProxy: boolean;
+  // ★2026-09-07 실측 기반 상위노출 효과 등급(테리와 함께 실제 게시물 열어 dofollow·본문링크 확인):
+  //   "strong" = 본문에 진짜 <a> 링크 + dofollow (구글이 인정, 순위 효과) → rentry·gist·graph
+  //   "weak"   = nofollow (구글 무시) 또는 링크가 클릭 <a>로 안 만들어짐(코드/텍스트 사이트) → telegra·dpaste·paste.rs
+  //   상위노출용은 strong 먼저 소진. weak는 개수/다양성 보조용.
+  seoTier: "strong" | "weak";
   publish(input: PublishInput): Promise<PublishResult>;
 }
 

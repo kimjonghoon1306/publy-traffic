@@ -9,6 +9,7 @@ export const cnetAdapter: Adapter = {
   key: "paste.c-net.org",
   method: "api",
   needsProxy: false,
+  seoTier: "weak",   // registry 미등록(Blacklisted). 타입 충족용.
   async publish(input: PublishInput): Promise<PublishResult> {
     const events = [ev("apistart", "paste.c-net.org 소스에 연결하는 중…")];
     try {

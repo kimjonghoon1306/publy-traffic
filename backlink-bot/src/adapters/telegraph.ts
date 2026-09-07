@@ -21,6 +21,7 @@ export const telegraphAdapter: Adapter = {
   key: "telegra.ph",
   method: "api",
   needsProxy: false,
+  seoTier: "weak",   // 실측 2026-09-07: 본문 <a> 있으나 rel=nofollow → 구글 순위 무시
   async publish(input: PublishInput): Promise<PublishResult> {
     const events = [ev("apistart", "telegra.ph 소스에 연결하는 중…")];
     try {

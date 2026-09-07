@@ -9,6 +9,7 @@ export const dpasteAdapter: Adapter = {
   key: "dpaste.com",
   method: "api",
   needsProxy: false,
+  seoTier: "weak",   // 실측 2026-09-07: 코드 하이라이터라 링크가 클릭 <a>로 안 만들어짐(텍스트만)
   async publish(input: PublishInput): Promise<PublishResult> {
     const events = [ev("apistart", "dpaste.com 소스에 연결하는 중…")];
     try {
