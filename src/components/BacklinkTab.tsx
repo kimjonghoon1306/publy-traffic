@@ -66,6 +66,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const [ghOpen, setGhOpen] = useState(false);
   // 🎛️ 컨트롤타워 탭 (2026-09-07: 카드 세로나열 → 탭 분리로 시원하게)
   const [ctTab, setCtTab] = useState<"run" | "report" | "keys" | "domains">("run");
+  // 🖥️📱 뷰 토글 — PC에서 모바일 미리보기(모바일폭으로 좁힘). 기본 auto(반응형).
+  const [viewMode, setViewMode] = useState<"auto" | "mobile">("auto");
   // 🤖 제미나이 키 + 키워드 (사이트 읽고 고품질 글 생성)
   const [gemMasked, setGemMasked] = useState<string | null>(null);
   const [gemInput, setGemInput] = useState("");
@@ -165,6 +167,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   useEffect(() => { loadSubs(); loadMyKey(); loadGemKey(); loadMyGithub(); const iv = setInterval(loadSubs, 20000); return () => clearInterval(iv); }, [loadSubs, loadMyKey, loadGemKey, loadMyGithub]);
   useEffect(() => { if (logBoxRef.current) logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight; }, [logs]);
   useEffect(() => () => { esRef.current?.close(); }, []);
+  // 📊 성과 탭 처음 열면 자동으로 기록 로드(빈 화면 방지)
+  useEffect(() => { if (ctTab === "report" && histRows == null) loadHist(); }, [ctTab, histRows, loadHist]);
 
   const cur = subs.find(s => s.id === sel);
   const unlimited = (cur?.plan === "unlimited") || (cur?.daily_limit === 0);
@@ -288,7 +292,13 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   });
 
   return (
-    <div>
+    <div style={{ maxWidth: viewMode === "mobile" ? 460 : "none", margin: viewMode === "mobile" ? "0 auto" : undefined, transition: "max-width .2s" }}>
+      {/* ── 🖥️📱 뷰 토글 (PC에서 모바일 미리보기) ── */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8, gap: 6 }}>
+        <button onClick={() => setViewMode(v => v === "auto" ? "mobile" : "auto")} title="PC에서 모바일 화면으로 미리보기" style={{ padding: "6px 12px", borderRadius: 8, border: `1.5px solid ${C.line}`, background: C.panel, color: C.sub, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>
+          {viewMode === "mobile" ? "📱 모바일 보기" : "🖥️ 넓게 보기"}
+        </button>
+      </div>
       {/* ── 🎛️ 상단: 대상 도메인 요약 (항상 보임) ── */}
       {cur && (
         <div style={card({ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" })}>
