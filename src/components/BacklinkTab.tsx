@@ -101,7 +101,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   // 🔑 GitHub 키 상태 로드(있는지/scope만, 원문 비노출)
   const loadMyGithub = useCallback(async () => {
     try {
-      const { data } = await supabase.rpc("backlink_my_github", { p_token: token });
+      const { data, error } = await supabase.rpc("backlink_my_github", { p_token: token });
+      if (error) return;   // 조회 실패 시 기존 상태 유지(관리자키로 위장 금지)
       const r = (data && data[0]) || null;
       setGhScope(r?.scope || "admin"); setGhHasKey(!!r?.has_key);
     } catch {}
@@ -117,7 +118,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   }, [ghInput, token, loadMyGithub]);
 
   const clearMyGithub = useCallback(async () => {
-    await supabase.rpc("backlink_set_my_github", { p_token: token, p_key: "" });
+    const { error } = await supabase.rpc("backlink_set_my_github", { p_token: token, p_key: "" });
+    if (error) { setGhMsg("실패: " + error.message); setTimeout(() => setGhMsg(""), 3500); return; }
     setGhMsg("관리자 공용 키로 돌아갔어요"); loadMyGithub(); setTimeout(() => setGhMsg(""), 3500);
   }, [token, loadMyGithub]);
 
@@ -434,8 +436,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
         <div style={card({ marginBottom: 12, border: `1px solid ${ghScope === "own" && ghHasKey ? "#16a34a55" : C.line}` })}>
           <div onClick={() => setGhOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
             <b style={{ fontSize: 14, color: C.ink }}>🔑 GitHub 키 <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 내 계정에 백링크 게시(더 자연스러움)</span></b>
-            <span style={{ marginLeft: "auto", ...chip(ghScope === "own" && ghHasKey ? logC.post.bg : C.panel, ghScope === "own" && ghHasKey ? logC.post.fg : C.sub) }}>
-              {ghScope === "own" && ghHasKey ? "내 키 등록됨 🟢" : "관리자 공용 키 사용 중"}
+            <span style={{ marginLeft: "auto", ...chip(ghScope === "own" && ghHasKey ? logC.post.bg : (ghScope === "own" && !ghHasKey ? logC.warn.bg : C.panel), ghScope === "own" && ghHasKey ? logC.post.fg : (ghScope === "own" && !ghHasKey ? logC.warn.fg : C.sub)) }}>
+              {ghScope === "own" && ghHasKey ? "내 키 등록됨 🟢" : (ghScope === "own" && !ghHasKey ? "본인키 대기 🟡" : "관리자 공용 키 사용 중")}
             </span>
             <span style={{ color: C.sub, fontSize: 13 }}>{ghOpen ? "▲" : "▼"}</span>
           </div>
