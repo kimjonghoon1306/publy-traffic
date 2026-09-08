@@ -1,4 +1,5 @@
 import { chromium, BrowserContext } from "playwright";
+import { isStoreLanding, isStoreResult } from "./inflow-store";
 import fs from "fs";
 import https from "https";
 import http from "http";
@@ -5359,26 +5360,46 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
   const needle = target.type === "place" ? String(target.placeId) : target.type === "blog" ? String(target.blogId) : String((target as any).productId || (target as any).storeId || "");
   const isNidLogin = (u: string) => /nid\.naver\.com/.test(u || "");
   const enterVia = async (link: any, s: number) => {
-    log(`  🎯 검색결과에서 대상 발견(약 ${s + 1}스크롤 지점) → 클릭 진입`);
+    log(`  🎯 검색결과에서 대상 발견 → 클릭 진입 (약 ${s + 1}스크롤 지점)`);
     const ctx = page.context();
     const before = ctx.pages().length;
+    let clicked = false;
     await Promise.all([
       page.waitForNavigation({ timeout: 15000 }).catch(() => {}),
-      link.click({ timeout: 8000 }).catch(() => {}),
+      link.click({ timeout: 8000 }).then(() => { clicked = true; }).catch(() => {}),
     ]);
+    if (target.type === "store" && !clicked) {
+      log("  ⚠️ 스토어 검색결과 클릭 실패 — 방문 무효");
+      return null;
+    }
     await page.waitForTimeout(inflowRndInt(1200, 2400));
     const pages = ctx.pages();
     const landed = pages.length > before ? pages[pages.length - 1] : page;
+    let storeArrivalReady = false;
+    if (target.type === "store") {
+      // 새 탭의 about:blank 및 추적 리다이렉트가 끝난 뒤 실제 스토어 도착을 확인.
+      await landed.waitForURL((url: URL) => isStoreLanding(url.href, target) || isNidLogin(url.href),
+        { timeout: 15000, waitUntil: "domcontentloaded" })
+        .then(() => { storeArrivalReady = true; }).catch(() => {});
+    }
     // 🔐 네이버가 봇 의심으로 로그인창(nid.naver.com)으로 튕기면: 절대 로그인하지 않고 조용히 빠져나온다(이 방문 무효 → 다음 방문에서 다른 IP로 재시도).
     if (isNidLogin(landed.url())) {
       log("  🔐 네이버가 로그인창으로 유도 — 봇은 로그인하지 않고 이 진입을 취소합니다(다음 방문에서 새 IP로 재시도).");
       if (landed !== page) { await landed.close().catch(() => {}); } else { await page.goBack({ timeout: 8000 }).catch(() => {}); }
       return null;
     }
+    if (target.type === "store") {
+      if (!storeArrivalReady || !isStoreLanding(landed.url(), target)) {
+        log("  ⚠️ 대상 스토어 도착 미확인 — 방문 무효");
+        if (landed !== page) await landed.close().catch(() => {});
+        return null;
+      }
+      log(`  🛒 대상 스토어 진입 확인 — ${/\/products\//.test(new URL(landed.url()).pathname) ? "상품 상세" : "스토어 홈(유효 체류)"}`);
+    }
     return landed;
   };
   // 🧑 실사용자 패턴 — 바로 첫 결과를 누르지 않고 검색결과를 먼저 훑어본다(비교 탐색 후 선택)
-  try {
+  if (target.type !== "store") try {
     log("  🧑 검색결과 훑어보는 중…(바로 안 누르고 비교)");
     for (let i = 0; i < inflowRndInt(2, 4); i++) {
       await page.mouse.wheel(0, inflowRndInt(500, 1100)).catch(() => {});
@@ -5402,41 +5423,8 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
     await page.goto(shopUrl, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
     await page.waitForTimeout(inflowRndInt(1400, 2800));
 
-    // 🧑‍🤝‍🧑 비교 탐색(가장 강한 랭킹 신호) — 내 상품만 딱 누르지 않고, 경쟁 상품 1~2개를 먼저 구경한 뒤
-    //    내 상품으로 돌아와 오래 본다. "여러 개 비교하다 이걸 골랐다"는 진짜 구매 손님 패턴.
-    try {
-      const myNeedle = String((target as any).productId || (target as any).storeId || "");
-      const compareN = inflowRndInt(1, 2);
-      for (let c = 0; c < compareN; c++) {
-        // 검색결과에서 '내 상품이 아닌' 다른 상품 링크 하나 고름
-        const other = await page.evaluateHandle((mine: string) => {
-          const as = Array.from(document.querySelectorAll('a[href*="/products/"], a[href*="cr.shopping.naver.com"], a[href*="smartstore.naver.com"], a[href*="msearch.shopping.naver.com"]')) as HTMLAnchorElement[];
-          const cands = as.filter(a => a.href && /\/products\/|smartstore\.naver\.com\/|shopping\.naver\.com/.test(a.href) && (!mine || !a.href.includes(mine)));
-          if (!cands.length) return null;
-          return cands[Math.floor(Math.random() * Math.min(cands.length, 8))] || null;   // 상단 결과 중 랜덤
-        }, myNeedle).catch(() => null);
-        const oel = other && other.asElement ? other.asElement() : null;
-        if (!oel) break;
-        const ctx = page.context();
-        const before = ctx.pages().length;
-        log(`  🧑‍🤝‍🧑 경쟁 상품 먼저 비교 구경 (${c + 1}/${compareN})`);
-        await Promise.all([
-          page.waitForTimeout(inflowRndInt(1200, 2400)),
-          oel.click({ timeout: 6000 }).catch(() => {}),
-        ]);
-        const pgs = ctx.pages();
-        const cp = pgs.length > before ? pgs[pgs.length - 1] : page;
-        // 🔐 경쟁상품이 광고/추적 링크라 로그인창으로 튕겼으면: 스크롤하지 말고 즉시 정리하고 넘어간다.
-        if (isNidLogin(cp.url())) {
-          if (cp !== page) { await cp.close().catch(() => {}); } else { await page.goBack({ timeout: 8000 }).catch(() => {}); await page.waitForTimeout(inflowRndInt(800, 1600)); }
-          continue;
-        }
-        // 경쟁 상품 잠깐 둘러보고(스크롤) 닫거나 뒤로
-        for (let s = 0; s < inflowRndInt(2, 4); s++) { await cp.mouse.wheel(0, inflowRndInt(500, 1200)).catch(() => {}); await cp.waitForTimeout(inflowRndInt(900, 2000)); }
-        if (cp !== page) { await cp.close().catch(() => {}); } else { await page.goBack({ timeout: 12000 }).catch(() => {}); await page.waitForTimeout(inflowRndInt(1000, 2000)); }
-      }
-      log(`  🔙 비교 끝 — 이제 우리 상품을 찾아 자세히 봅니다`);
-    } catch { /* 비교 탐색 실패는 무시하고 바로 내 상품 탐색 */ }
+    // 경쟁 광고/추적 링크는 로그인으로 유도할 수 있어 클릭하지 않고 대상을 먼저 찾는다.
+    log("  🛒 경쟁상품 클릭 생략 — 우리 스토어 검색결과를 먼저 찾습니다");
   }
   for (let s = 0; s < 8; s++) {
     if (target.type === "place") {
@@ -5449,20 +5437,12 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
       const el = placeLink && placeLink.asElement ? placeLink.asElement() : null;
       if (el) return await enterVia(el, s);
     } else if (target.type === "store") {
-      // 🛒 상품ID 또는 스토어명이 들어간 상품 링크를 검색결과에서 찾아 클릭.
-      //   ★2026-09-09(테리, 실측): 네이버쇼핑 결과 링크는 cr.shopping/msearch 리다이렉트로 감싸져 실제 스토어 주소가
-      //   url= 파라미터에 %2F로 '인코딩'돼 있다(예: nid.naver.com/...url=https%3A%2F%2Fsmartstore.naver.com%2F01074323888...).
-      //   그래서 raw href만 보면 못 찾는다 → href를 디코드한 뒤 스토어 slug/상품ID를 매칭한다.
-      const sid = String((target as any).storeId || "");
-      const link = await page.evaluateHandle((args: { pid: string; sid: string }) => {
-        const dec = (h: string) => { try { return decodeURIComponent(h); } catch { return h; } };
-        const as = Array.from(document.querySelectorAll("a")) as HTMLAnchorElement[];
-        return as.find(a => {
-          const h = dec(a.href || "");
-          return (args.pid && h.includes(args.pid))
-              || (args.sid && (h.includes("smartstore.naver.com/" + args.sid) || h.includes("/" + args.sid + "/") || h.includes("/" + args.sid + "?") || h.endsWith("/" + args.sid)));
-        }) || null;
-      }, { pid: String((target as any).productId || ""), sid }).catch(() => null);
+      // retUrl을 파싱해 대상을 확인하되 실제 클릭은 검색결과의 원래 링크로 한다.
+      const hrefs: string[] = await page.$$eval("a", (as: HTMLAnchorElement[]) => as.map(a => a.href)).catch(() => []);
+      const href = hrefs.find(h => isStoreResult(h, target));
+      const link = href ? await page.evaluateHandle((h: string) =>
+        Array.from(document.querySelectorAll("a")).find(a => a.href === h) || null,
+      href).catch(() => null) : null;
       const el = link && link.asElement ? link.asElement() : null;
       if (el) return await enterVia(el, s);
     } else {
@@ -5537,13 +5517,16 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
 async function inflowDwellRead(page: any, log: (m: string) => void, shouldStop?: () => boolean, baseSec = 60, customSec = 0, targetType: "place" | "blog" | "store" = "blog"): Promise<void> {
   const sec = decideDwellSec(baseSec, customSec, targetType);
   if (targetType === "blog" && sec >= 60) log(`  ⏱️ 블로그는 60초 이상 머물러야 상위노출에 도움돼요 — 약 ${sec}초 정독합니다`);
-  const dwellVerb = targetType === "place" ? "📖 플레이스 둘러보는 중…" : targetType === "store" ? "📖 상품 상세 보는 중…" : "📖 글 읽는 중…";
+  const dwellVerb = targetType === "place" ? "📖 플레이스 둘러보는 중…" : targetType === "store" ? "📖 스토어·상품 둘러보는 중…" : "📖 글 읽는 중…";
   log(`  ${dwellVerb} (약 ${sec}초 체류${customSec > 0 ? " · 직접지정" : ""})`);
   const steps = Math.max(6, Math.round(sec / inflowRnd(2, 4)));
   const per = (sec * 1000) / steps;
   // 🧑 실사용자 패턴 — 균등 스크롤이 아니라 완급(빨리 훑다 관심구간 정독)+가끔 위로 재확인
   for (let s = 0; s < steps; s++) {
     if (shouldStop?.()) break;
+    if (targetType === "store" && /nid\.naver\.com|nidlogin/i.test(page.url())) {
+      throw new Error("스토어 체류 중 로그인창으로 이동 — 방문 무효");
+    }
     const r = Math.random();
     if (r < 0.2) {
       // 관심 구간 — 천천히 정독(작게 스크롤 + 길게 멈춤)
@@ -5664,7 +5647,9 @@ async function inflowActions(page: any, target: InflowTarget, actions: InflowAct
     }
     // 🛒 스마트스토어 — 옵션·이미지 탐색(로그인 불필요, 관심 신호) + 찜·장바구니(로그인 필요)
     if (target.type === "store") {
-      if (rollStrong(actions.optionView)) {
+      const onProduct = /\/products\/\d+/.test(new URL(page.url()).pathname);
+      if (actions.optionView && !onProduct) log("  🛒 스토어 홈 체류 — 상품 상세 옵션 탐색 생략");
+      if (onProduct && rollStrong(actions.optionView)) {
         // 🧑 구매 고민하는 손님처럼 상세를 진짜로 둘러본다 — ①상세정보·리뷰·상품정보 탭을 차례로 눌러 각 탭을 읽고
         //    ②옵션(색상·용량)을 2~3개 눌러보고 ③상세 이미지를 끝까지 스크롤. 체류·관심 신호를 자연스럽게 쌓는다.
         const tabs = ["상세정보", "리뷰", "상품정보", "Q&A"];
@@ -6135,7 +6120,12 @@ export async function searchInflow(params: {
         if (params.shouldStop?.()) { log("⏹️ 정지 요청 — 풀퍼널 전 중단"); break; }
         if (params.fullFunnel) await inflowFullFunnel(entered, curTarget, log, params.shouldStop);
         if (params.shouldStop?.()) { log("⏹️ 정지 요청 — 방문 종료"); break; }
+        // 풀퍼널은 같은 스토어의 다른 상품으로 이동할 수 있다.
+        if (curTarget.type === "store" && !isStoreLanding(entered.url(), { ...curTarget, productId: undefined })) {
+          throw new Error("체류·액션 후 대상 스토어 이탈 — 성공 집계 제외");
+        }
         await shot(entered, "✅ 체류·액션 완료");
+        log("  ⏱️ 체류·액션 완료");
         success++; done++; failStreak = 0;
         await Promise.resolve(params.onSuccess?.(curTarget)).catch(() => {}); // 성공한 그 대상(curTarget)으로 통계 기록
         log(`  ✅ 유입 완료 (${kw}) — 누적 성공 ${success}회`);
