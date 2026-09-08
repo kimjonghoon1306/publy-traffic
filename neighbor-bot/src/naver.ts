@@ -5337,11 +5337,13 @@ async function inflowDiagnose(page: any, target: InflowTarget, log: (m: string) 
   try {
     const body = await page.evaluate(() => (document.body?.innerText || "").slice(0, 500)).catch(() => "");
     const url = (() => { try { return page.url(); } catch { return ""; } })();
-    if (/접속이 일시적으로 제한|shopping_stop|비정상적인 접근|abusing/i.test(body)) {
+    if (/접속이 일시적으로 제한|서비스 접속이 불가|shopping_stop|비정상적인 접근|abusing/i.test(body)) {
       log("  🚫 [진단] 네이버 접속 제한(rate-limit) — 짧은 시간에 너무 몰렸어요. 자동으로 길게 쉬고 텀을 늘립니다.");
       return true;
-    } else if (/로그인|nidlogin|아이디 또는 전화번호/i.test(body) && /nid\.naver\.com|login/i.test(url)) {
-      log("  🔑 [진단] 로그인 필요 — 계정을 선택하거나 로그인 세션이 필요해요(저장·찜 등 액션).");
+    } else if (/nid\.naver\.com|nidlogin/i.test(url)) {
+      // ★2026-09-08(테리): 로그인 페이지로 튕김 = 봇 의심/rate-limit. 봇은 절대 로그인 안 하고, 감속(백오프)으로 처리.
+      log("  🚫 [진단] 로그인 페이지로 튕겼어요(봇 의심/접속제한) — 로그인은 하지 않고, 자동으로 쉬었다 텀을 늘립니다.");
+      return true;
     } else if (/일시적인 오류|잠시 후 다시|서비스 점검/i.test(body)) {
       log("  🌐 [진단] 네이버 일시 오류/점검 — 잠시 후 재시도하세요.");
     } else {
@@ -5449,6 +5451,17 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
     log(`  🛒 검색결과에 상품이 안 보여 상품 페이지로 직접 진입 → ${url}`);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(inflowRndInt(1200, 2400));
+    // ★2026-09-08(테리): 직접 진입 시 네이버가 로그인(nid.naver.com)이나 "접속 불가"(rate-limit)로 튕기는 경우가 있다.
+    //   봇은 절대 로그인하지 않는다(회원 실계정 보호). 로그인/차단 감지되면 이 방문은 무효 처리(null 반환) → 호출부가
+    //   자동 감속(백오프)하고 다음 방문으로. 로그인 페이지에 머무르지 않게 즉시 빠져나온다.
+    try {
+      const curUrl = String(page.url() || "");
+      const body = await page.evaluate(() => (document.body?.innerText || "").slice(0, 300)).catch(() => "");
+      if (/nid\.naver\.com|nidlogin/i.test(curUrl) || /접속이 일시적으로 제한|서비스 접속이 불가|비정상적인 접근|로그인/i.test(body)) {
+        log(`  🚫 상품 직접 진입이 로그인/접속제한으로 막혔어요 — 이 방문은 건너뛰고 잠시 쉬어요(로그인은 하지 않아요)`);
+        return null;   // 방문 무효 → 호출부에서 실패 처리 + 백오프
+      }
+    } catch { /* 판단 실패 시 그냥 진행 */ }
     return page;
   }
   // 🏢 플레이스 폴백(B) — 검색결과에서 못 찾으면(또는 지도로만 뜨면) 플레이스 상세로 직접 진입
