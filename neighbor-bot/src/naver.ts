@@ -5379,11 +5379,18 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
     await page.mouse.wheel(0, -inflowRndInt(600, 1400)).catch(() => {}); // 위로 다시 올려 재확인
     await page.waitForTimeout(inflowRndInt(500, 1200));
   } catch { /* 비교 탐색 실패는 무시하고 바로 대상 탐색 */ }
-  // 🛒 스마트스토어는 '쇼핑 검색'에서 찾아야 한다 → 일반 검색창을 쇼핑검색으로 전환
+  // 🛒 스마트스토어 상품은 '쇼핑 결과'에서 찾는다.
+  //   ★2026-09-08(테리, 실측): 예전엔 search.shopping.naver.com(쇼핑 버티컬)으로 이동했는데 네이버가 봇차단(HTTP 418)으로
+  //   튕겨 한국 residential IP로도 첫 방문부터 rate-limit·"상품 못 찾음"이 났다(플레이스·블로그는 되는데 스토어만 안 되던 진짜 원인).
+  //   반면 플레이스/블로그가 쓰는 '통합검색'은 200 정상이고 그 안 '쇼핑 탭'에 스마트스토어 상품 링크가 다 뜬다
+  //   → 스토어도 통합검색 쇼핑탭(m: tab.m_shop.all / pc: tab.nx_shop.all)으로 진입해 차단을 피한다.
   if (target.type === "store") {
     const kw = (() => { try { return decodeURIComponent(new URL(page.url()).searchParams.get("query") || ""); } catch { return ""; } })();
-    const shopUrl = `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(kw)}`;
-    log(`  🛒 쇼핑 검색으로 상품 찾는 중… "${kw}"`);
+    const isMobile = /\/\/m\.search\.naver\.com/.test(page.url());
+    const shopUrl = isMobile
+      ? `https://m.search.naver.com/search.naver?ssc=tab.m_shop.all&query=${encodeURIComponent(kw)}`
+      : `https://search.naver.com/search.naver?ssc=tab.nx_shop.all&query=${encodeURIComponent(kw)}`;
+    log(`  🛒 쇼핑 결과에서 상품 찾는 중… "${kw}"`);
     await page.goto(shopUrl, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
     await page.waitForTimeout(inflowRndInt(1400, 2800));
 
@@ -5395,8 +5402,8 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
       for (let c = 0; c < compareN; c++) {
         // 검색결과에서 '내 상품이 아닌' 다른 상품 링크 하나 고름
         const other = await page.evaluateHandle((mine: string) => {
-          const as = Array.from(document.querySelectorAll('a[href*="/products/"], a[href*="cr.shopping.naver.com"]')) as HTMLAnchorElement[];
-          const cands = as.filter(a => a.href && (!mine || !a.href.includes(mine)));
+          const as = Array.from(document.querySelectorAll('a[href*="/products/"], a[href*="cr.shopping.naver.com"], a[href*="smartstore.naver.com"], a[href*="msearch.shopping.naver.com"]')) as HTMLAnchorElement[];
+          const cands = as.filter(a => a.href && /\/products\/|smartstore\.naver\.com\/|shopping\.naver\.com/.test(a.href) && (!mine || !a.href.includes(mine)));
           if (!cands.length) return null;
           return cands[Math.floor(Math.random() * Math.min(cands.length, 8))] || null;   // 상단 결과 중 랜덤
         }, myNeedle).catch(() => null);
