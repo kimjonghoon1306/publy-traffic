@@ -1154,6 +1154,7 @@ app.post("/api/inflow", async (req, res) => {
   const licAllow = (k: string) => isVerifiedAdmin || !licActionSet || licActionSet.has(k);
   sseSetup(res);
   let releaseAccount = () => {};
+  let inflowJid = "";   // finally에서 정리하려고 try 밖에 선언(중단 신호맵 키)
   try {
     // 🔒 트래픽 권한은 tool_licenses(위 getTrafficLicenseForTool)가 유일 소스오브트루스다.
     //    퍼블리의 옛 inflow_enabled 게이트(ensureActiveMember(...,"inflow"))는 트래픽 회원을 오차단하므로 쓰지 않는다.
@@ -1233,8 +1234,14 @@ app.post("/api/inflow", async (req, res) => {
       sseSend(res, { type: "quota_info", used: quota.used, limit: quota.limit, remaining: quota.limit - quota.used });
     }
 
-    let stopped = false;
-    res.on("close", () => { stopped = true; });
+    // ★2026-09-08 유입 중단 확실하게(테리: 중단 눌러도 계속 실행됨): res.on("close") 단일 신호에만 의존하면
+    //   Electron+keep-alive에서 fetch abort가 서버에 전파 안 돼 안 멈추는 경우가 있다. → jobId+stopMap으로
+    //   명시적 중단(/api/inflow-stop)까지 받는다. 프론트가 body.jobId를 보내면 그걸로, 없으면 자체 생성.
+    inflowJid = String((req.body as any).jobId || "") || `inflow_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    stopMap.set(inflowJid, false);   // 공용 stopMap 사용 → 기존 /api/stop/:jobId 엔드포인트로도 즉시 중단됨
+    sseSend(res, { type: "job", jobId: inflowJid });   // 프론트가 이 jobId로 명시적 중단 요청
+    const stopFlag = () => stopMap.get(inflowJid) === true;
+    res.on("close", () => { stopMap.set(inflowJid, true); });   // 연결 끊김도 중단 신호(유지)
 
     // ✍️ 리뷰 자동작성은 관리자 락(기본 잠금) — 권한 없으면 안내 후 리뷰만 건너뜀
     const reviewOk = doReview === "true" ? await inflowReviewAllowed(userId, authToken) : false;
@@ -1265,7 +1272,7 @@ app.post("/api/inflow", async (req, res) => {
       onLog: (msg) => sseSend(res, { type: "log", msg }),
       onProgress: (done, total) => sseSend(res, { type: "progress", done, total }),
       onShot: (caption, dataUrl) => sseSend(res, { type: "shot", caption, dataUrl }),   // 📸 화면 캡처 전송
-      shouldStop: () => stopped,
+      shouldStop: stopFlag,
       onQuota: async () => {
         // 한도 체크·차감만(통계는 성공 시점 onSuccess에서 기록 → 시도만 하고 실패한 방문이 유입수 부풀리지 않게)
         if (!userId) return true;
@@ -1283,6 +1290,7 @@ app.post("/api/inflow", async (req, res) => {
     sseSend(res, { type: "error", msg: e.message });
   } finally {
     releaseAccount();
+    if (inflowJid) stopMap.delete(inflowJid);   // 작업 끝났으면 중단 플래그 정리(메모리 누수 방지)
   }
   res.end();
 });

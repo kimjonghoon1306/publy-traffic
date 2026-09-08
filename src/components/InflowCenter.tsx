@@ -970,6 +970,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       dataSaver,
     });
     if (userId) params.set("userId", userId);
+    // ★2026-09-08 중단 확실하게: 프론트가 jobId를 만들어 보내고, 중단 시 이 id로 봇에 명시적 stop 요청(res.on close 전파 실패 대비)
+    const inflowJobId = `inflow_${runType}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    params.set("jobId", inflowJobId);
     // 🔄 다계정 로테이션 — 선택된 계정들을 저장·찜·공감에 번갈아. 첫 계정을 기본 accountId로.
     const acctList = accounts.filter((a) => selectedAccts.has(a.id)).map((a) => a.id);
     if (acctList.length) { params.set("accountIds", JSON.stringify(acctList)); params.set("accountId", acctList[0]); }
@@ -1034,6 +1037,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       headers: { "Content-Type": "application/json", "X-Publy-Session": getMemberSessionToken(), "X-Publy-Admin-Session": getAdminSessionToken() },
       body: JSON.stringify(Object.fromEntries(params.entries())),
     });
+    es.jobId = inflowJobId;   // 명시적 중단(/api/stop)용
     esRefByType.current[runType] = es;
     es.onmessage = (e: MessageEvent) => {
       let d: any; try { d = JSON.parse(e.data); } catch { return; }
@@ -1049,7 +1053,18 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     es.onclose = () => setRunningFor(runType, false);
   };
   startRef.current = start;
-  const stop = () => { const t = (targetType as RunTT); esRefByType.current[t]?.close(); esRefByType.current[t] = null; setRunningFor(t, false); pushLogFor(t, "⏹ 그만뒀어요 — 설정을 바꾼 뒤 다시 시작하면 새 설정으로 처음부터 진행돼요"); };  // 그만두면 완전 취소(이어하기 없음). 현재 보고 있는 탭만 정지
+  // 그만두면 완전 취소(이어하기 없음). 현재 보고 있는 탭만 정지.
+  // ★2026-09-08 중단 확실하게: SSE abort만으론 봇에 전파 안 될 수 있어(계속 실행 버그) → 봇에 명시적 stop 요청도 보낸다.
+  const stop = () => {
+    const t = (targetType as RunTT);
+    const es = esRefByType.current[t];
+    const jid = es?.jobId || "";
+    es?.close();                              // ① SSE(fetch) 중단
+    esRefByType.current[t] = null;
+    setRunningFor(t, false);
+    if (jid) botFetch(`${BOT}/api/stop/${encodeURIComponent(jid)}`, { method: "POST" }).catch(() => {});  // ② 봇에 명시적 중단(확실)
+    pushLogFor(t, "⏹ 그만뒀어요 — 봇에 중단 신호를 보냈어요. 진행 중인 방문 하나를 마치면 완전히 멈춰요(설정을 바꿔 다시 시작하면 처음부터).");
+  };
 
   const pct = unlimited ? 0 : Math.min(100, (used / Math.max(1, limit)) * 100);
   const weekTotal = history.reduce((s, d) => s + d.count, 0);

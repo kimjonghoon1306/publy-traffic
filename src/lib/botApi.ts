@@ -22,6 +22,7 @@ export class BotEventStream {
   onerror: ((detail?: string) => void) | null = null;   // 실패 이유(HTTP 401/403 + 봇 메시지)를 전달 → UI가 정확히 안내
   onclose: (() => void) | null = null;   // 스트림이 어떤 식으로든 끝나면 호출(버튼 잠금 해제용)
   lastError = "";                        // 마지막 실패 상세(디버깅용)
+  jobId = "";                            // 봇이 알려준 작업 ID(명시적 중단 /api/stop/:jobId 에 사용)
   private controller = new AbortController();
 
   constructor(url: string, init?: RequestInit) {
