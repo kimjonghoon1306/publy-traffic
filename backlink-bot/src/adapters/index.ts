@@ -40,6 +40,20 @@ export function isMemberExcluded(domain: string): boolean {
 export function listOwnedDomains(): string[] {
   return Array.from(ownedBlogSet);
 }
+// 우리소유 '블로그'(gist 제외). 발행키(owned_blog_api_key) 없으면 게시 불가 → 키 없을 때 소스목록에서 제외.
+export function isOwnedBlog(domain: string): boolean {
+  return ownedBlogSet.has(domain);
+}
+// ★2026-09-08 라운드로빈 발송용 소스 목록 빌더 — "소스당 1회" 모델 폐기.
+//   백링크 물량 모델(하루 여러개, 같은 소스에 새 URL 반복)에 맞춰 사용 가능한 소스만 strong 먼저 정렬해 돌린다.
+//   opts.forMember=회원 직접발송(gist 제외), opts.hasOwnedKey=owned_blog_api_key 보유(없으면 우리블로그 제외).
+export function buildSourceList(opts: { forMember?: boolean; hasOwnedKey?: boolean }): string[] {
+  return listAdapterDomains().filter((d) => {
+    if (opts.forMember && isMemberExcluded(d)) return false;   // 회원=gist 제외(개인 GitHub 토큰 필요)
+    if (isOwnedBlog(d) && !opts.hasOwnedKey) return false;     // 우리블로그=발행키 없으면 제외
+    return true;
+  });
+}
 
 export function getAdapter(domain: string): Adapter | null {
   return registry[domain] || null;

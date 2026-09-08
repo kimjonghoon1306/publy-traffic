@@ -319,9 +319,6 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
   const targetUrl = targetDomain.startsWith("http") ? targetDomain : `https://${targetDomain}`;
   send({ type: "log", kind: "wait", msg: `🚀 [서버 실행] ${targetDomain}에 최대 ${count}개` });
 
-        // 유니크 스킵
-        const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
-        const doneSet = new Set<string>((doneSrc as string[] | null) || []);
         // gist 토큰 — ★2026-09-07: 회원 본인키 우선(빙키 방식). 본인키(scope=own) 있으면 그걸로, 없으면 관리자 공용키.
         const secrets: Record<string, string> = {};
         let ghKeySource = "관리자 공용키";
@@ -384,15 +381,30 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
           return { title, body: base.body, anchor };   // ★body(사실)는 절대 안 바꿈
         };
 
-        const domains = Object.keys(ADAPTERS).filter((d) => !doneSet.has(d));   // 동적(우리 블로그 등록 반영)
+        // ★2026-09-08 근본수정: "소스당 1회"(doneSet 스킵) 폐기 → 라운드로빈으로 count개를 채운다.
+        //   백링크는 같은 소스에 새 URL로 여러 개 올리는 게 정상 → 소스가 소진돼도 0개가 안 나게 소스를 돌려 쓴다.
+        //   strong(rentry·gist·graph) 먼저 정렬. 우리블로그는 발행키 있을 때만. 실패 소스는 이번 실행에서 제외.
+        const STRONG = new Set(["rentry.co", "gist.github.com", "graph.org"]);
+        const hasOwnedKey = !!secrets.owned_blog_api_key;
+        const ownedBlogs = new Set(Object.keys(ADAPTERS).filter((d) => !ADAPTER_DOMAINS.includes(d)));
+        const sources = Object.keys(ADAPTERS)
+          .filter((d) => hasOwnedKey || !ownedBlogs.has(d))
+          .sort((a, b) => (STRONG.has(a) ? 0 : 1) - (STRONG.has(b) ? 0 : 1));
         let posted = 0;
         const tier1Urls: string[] = [];   // 성공한 1차 URL(2차 부스팅 대상)
         const useCount: Record<number, number> = {};   // 각 글이 몇 번째로 재사용되는지
-        for (let i = 0; i < domains.length && posted < count; i++) {
-          const dom = domains[i];
-          let c = genContent(targetDomain, i, keyword);
+        const dead = new Set<string>();   // 이번 실행에서 실패하는 소스(로테이션 제외)
+        let n = 0, guard = 0;
+        const maxTries = count * 3 + sources.length;
+        while (posted < count && guard < maxTries) {
+          guard++;
+          const live = sources.filter((d) => !dead.has(d));
+          if (live.length === 0) break;
+          const dom = live[n % live.length];
+          n++;
+          let c = genContent(targetDomain, n, keyword);
           if (pool.length) {
-            const idx = i % pool.length;
+            const idx = n % pool.length;
             const reuse = (useCount[idx] = (useCount[idx] || 0));
             c = applyVariant(pool[idx], reuse);
             useCount[idx] = reuse + 1;
@@ -403,7 +415,8 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
           send({ type: "content", source: dom, title: c.title, body: c.body, anchor: c.anchor });
           const r = await ADAPTERS[dom](input);
           for (const e of r.events) send({ type: "log", kind: e.kind, msg: `[${dom}] ${e.msg}` });
-          let realOk = r.ok; let verifyNote = "";
+          if (!r.ok) { dead.add(dom); continue; }   // 어댑터 실패 소스는 제외(재시도 낭비·failed 레코드 방지)
+          let realOk: boolean = r.ok; let verifyNote = "";
           if (r.ok && r.postUrl) {
             const v = await verifyBacklink(r.postUrl, targetDomain);
             realOk = v.ok; verifyNote = v.note;

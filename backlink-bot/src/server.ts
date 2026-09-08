@@ -10,7 +10,7 @@ if (typeof (globalThis as any).WebSocket === "undefined") {
   (globalThis as any).WebSocket = WebSocket;
 }
 import { createClient } from "@supabase/supabase-js";
-import { getAdapter, listAdapterDomains, registerOwnedBlog, isMemberExcluded } from "./adapters";
+import { getAdapter, listAdapterDomains, registerOwnedBlog, buildSourceList } from "./adapters";
 import { runDiscovery } from "./discover";
 import { runGenerate } from "./generate";
 import { PublishInput } from "./adapters/types";
@@ -93,21 +93,33 @@ app.get("/generate-stream", async (req, res) => {
 });
 
 // ── AI 콘텐츠 생성(파일럿: 템플릿 다양화. 추후 블로그오토프로 Gemini 연동) ──
-const ANCHORS = ["자세히 보기", "바로가기", "홈페이지 방문", "더 알아보기", "공식 사이트"];
+const ANCHORS = ["자세히 보기", "바로가기", "홈페이지 방문", "더 알아보기", "공식 사이트", "여기서 확인", "상세 정보"];
+// ★2026-09-08 라운드로빈 물량 발행으로 같은 도메인에 여러 글이 나감 → 변형 풀을 넓히고 소소한 표현차를 섞어
+//   바이트 동일 페이지(구글 중복 스팸 위험)를 피한다. (진짜 해결=AI글, 블로그오토프로 연동은 별도 과제.)
 function genContent(domain: string, i: number): { title: string; body: string; anchor: string } {
   const name = domain.replace(/\.(com|co\.kr|kr|net|shop)$/, "");
   const titles = [
     `${name} 신선 상품 산지직송 안내`,
     `${name} 추천 이유와 이용 방법`,
     `${name}에서 만나는 믿을 수 있는 상품`,
+    `${name} 이용 후기와 구매 가이드`,
+    `${name} 정직한 운영, 꼼꼼한 품질관리`,
+    `${name} 자주 찾는 이유 정리`,
+    `${name} 합리적인 가격의 비결`,
   ];
   const bodies = [
     `${domain}은(는) 검증된 품질과 빠른 배송으로 많은 분들이 찾는 곳입니다. 합리적인 가격과 신뢰를 바탕으로 서비스를 제공합니다.`,
     `${domain}의 상품과 서비스를 소개합니다. 꼼꼼한 관리와 정직한 운영으로 재구매율이 높습니다.`,
+    `${domain}은(는) 산지에서 바로 받는 신선함과 세심한 포장으로 좋은 평가를 받고 있습니다. 처음 이용하는 분도 믿고 주문할 수 있습니다.`,
+    `${domain}에서는 품질 좋은 상품을 합리적인 가격에 만나볼 수 있습니다. 빠른 배송과 친절한 상담으로 만족도가 높습니다.`,
+    `${domain}을(를) 이용해 본 분들은 신선도와 가격, 그리고 정직한 운영을 공통적으로 꼽습니다. 자세한 내용은 공식 사이트에서 확인하세요.`,
   ];
+  const intros = ["", "요즘 관심이 높은 ", "믿을 만한 곳을 찾는다면 ", "많은 분들이 추천하는 "];
+  const t = titles[i % titles.length];
+  const b = intros[i % intros.length] + bodies[i % bodies.length];
   return {
-    title: titles[i % titles.length],
-    body: bodies[i % bodies.length],
+    title: t,
+    body: b,
     anchor: ANCHORS[i % ANCHORS.length],
   };
 }
@@ -142,10 +154,6 @@ app.post("/publish-order", async (req, res) => {
   const { adminToken, orderId, targetDomain } = req.body || {};
   if (!adminToken || !orderId || !targetDomain) return res.status(400).json({ error: "adminToken, orderId, targetDomain 필요" });
   const targetUrl = targetDomain.startsWith("http") ? targetDomain : `https://${targetDomain}`;
-  const domains = listAdapterDomains(); // 검증된 어댑터 소스(telegra.ph·rentry.co)
-  // ★ 한 회원(주문)=한 소스=한 백링크(유니크, 체크리스트#47): 이미 성공한 소스는 스킵 → 중복 백링크 방지.
-  const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
-  const doneSet = new Set<string>((doneSrc as string[] | null) || []);
   // 우리소유 소스용 토큰(github) — ★2026-09-07: 회원 본인키 우선(빙키 방식), 없으면 관리자 공용키.
   const secrets: Record<string, string> = {};
   try {
@@ -156,10 +164,11 @@ app.post("/publish-order", async (req, res) => {
   if (!secrets.github_gist_token) { const ght = await getConfigBot(adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
   // ★2026-09-07 우리소유 블로그(tarryguide·tarryblog) 발행 키 주입(config owned_blog_api_key).
   { const obk = await getConfigBot(adminToken, "owned_blog_api_key"); if (obk) secrets.owned_blog_api_key = obk; }
+  // ★2026-09-08 "소스당 1회" 폐기: 키 있는 소스만(우리블로그=키없으면 제외), 한 바퀴 게시(파일럿·레거시 엔드포인트).
+  const domains = buildSourceList({ hasOwnedKey: !!secrets.owned_blog_api_key });
   const results: any[] = [];
   for (let i = 0; i < domains.length; i++) {
     const dom = domains[i];
-    if (doneSet.has(dom)) { results.push({ source: dom, ok: false, skipped: "already_posted(유니크)" }); continue; }
     const adapter = getAdapter(dom)!;
     const c = genContent(targetDomain, i);
     const input: PublishInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, proxy: null, secrets };
@@ -204,35 +213,40 @@ app.get("/member-publish-stream", async (req, res) => {
     const want = Math.min(count, left);
     send({ type: "log", kind: "wait", msg: `🚀 백링크 발송 시작 — ${targetDomain}에 ${want}개 (오늘 남은 한도 ${left}개)` });
 
-    // 이미 게시한 소스(유니크 스킵)
-    const { data: doneSrc } = await sb.rpc("backlink_my_posted_sources", { p_token: token, p_order_id: orderId });
-    const doneSet = new Set<string>((doneSrc as string[] | null) || []);
-
-    // 우리소유 소스(gist 등)는 관리자 config 토큰이 필요 → 회원 흐름(admin 권한 없음)에선 제외한다.
-    //   회원 수동발송은 무인증 소스만. gist 등 우리소유 물량은 서버 스케줄러(backlink-run mode=scheduler)가 담당.
-    //   ★2026-09-07 테리: 예전엔 gist가 목록에 남아 회원에게 "우리소유 소스 토큰 미설정" 에러가 노출됐다 → 제외로 해결.
+    // ★2026-09-08 근본수정: "소스당 1회" 모델 폐기 → 라운드로빈 물량 발행.
+    //   백링크는 같은 소스에 매번 새 URL로 여러 개 올리는 게 정상(1차 하루 10~20개). 예전엔 이미 올린 소스를 스킵해서
+    //   소스가 소진되면 무제한 회원도 0개가 됐다 → doneSet 스킵 제거하고 want개를 채울 때까지 소스를 돌려 쓴다.
     const secrets: Record<string, string> = {};
-    // gist(개인키)만 회원 직접발송 제외. 우리 블로그(tarryguide 등)는 서버 공용키 주입이라 회원도 사용 → 소스 늘어 "0개" 완화.
+    // gist(개인키)만 회원 직접발송 제외. 우리 블로그(tarryguide 등)는 서버 공용키가 있을 때만 사용.
     //   config는 회원 세션토큰으론 못 읽음 → 봇 시크릿(456789)로 읽어 주입(키는 서버에만, 회원앱 비노출).
     { const obk = await getConfigBot("456789", "owned_blog_api_key"); if (obk) secrets.owned_blog_api_key = obk; }
-    const domains = listAdapterDomains().filter(d => !doneSet.has(d) && !isMemberExcluded(d));
-    if (domains.length === 0) {
-      send({ type: "log", kind: "wait", msg: "오늘 올릴 수 있는 새 소스를 모두 사용했어요 — 나머지는 시스템이 자동으로 채워드려요." });
+    const sources = buildSourceList({ forMember: true, hasOwnedKey: !!secrets.owned_blog_api_key });
+    if (sources.length === 0) {
+      send({ type: "log", kind: "wait", msg: "지금 올릴 수 있는 소스가 없어요 — 시스템이 자동으로 채워드려요." });
       send({ type: "done", posted: 0 });
       return res.end();
     }
     let posted = 0;
     const tier1Urls: string[] = [];   // 성공한 1차 URL(2차 부스팅 대상)
-    for (let i = 0; i < domains.length && posted < want; i++) {
-      const dom = domains[i];
-      const c = genContent(targetDomain, i);
+    const dead = new Set<string>();   // 이번 실행에서 계속 실패하는 소스(로테이션에서 제외)
+    let n = 0;                        // 라운드로빈 인덱스(글 변형에도 사용)
+    let guard = 0;                    // 무한루프 방지(want의 3배 + 소스수 만큼만 시도)
+    const maxTries = want * 3 + sources.length;
+    while (posted < want && guard < maxTries) {
+      guard++;
+      const live = sources.filter(d => !dead.has(d));
+      if (live.length === 0) break;   // 살아있는 소스가 없으면 종료
+      const dom = live[n % live.length];
+      n++;
+      const c = genContent(targetDomain, n);
       const input: PublishInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, proxy: null, secrets };
       // 어댑터 실행 — events를 실시간 전송(주소 노출 없이 신뢰지표만)
       const r = await getAdapter(dom)!.publish(input);
       for (const e of r.events) send({ type: "log", kind: e.kind, msg: `[${dom}] ${e.msg}` });
+      if (!r.ok) { dead.add(dom); continue; }   // 어댑터가 실패한 소스는 이번 실행에서 제외(재시도 낭비 방지, failed 레코드도 안 남김)
       // ★ 게시검증(테리 "한치 오차도 없어야"): 어댑터가 ok여도 실제 URL을 열어 타겟 링크가 진짜 있는지 확인.
       //   진짜 있으면 성공(카운트), 없으면 가짜성공→실패로 재판정(카운트 안 함). 진짜성공 누락도 방지(실제 검증이 기준).
-      let realOk = r.ok;
+      let realOk: boolean = r.ok;
       let verifyNote = "";
       if (r.ok && r.postUrl) {
         const v = await verifyBacklink(r.postUrl, targetDomain);
@@ -307,22 +321,30 @@ app.get("/admin-publish-stream", async (req, res) => {
 
   try {
     send({ type: "log", kind: "wait", msg: `🚀 [관리자] 백링크 실행 — ${targetDomain}에 최대 ${count}개` });
-    // 유니크 스킵(이미 성공한 소스 제외)
-    const { data: doneSrc } = await sb.rpc("backlink_bot_posted_sources", { p_token: adminToken, p_order_id: orderId });
-    const doneSet = new Set<string>((doneSrc as string[] | null) || []);
     // 우리소유 소스 토큰(gist·우리블로그) 주입 — 관리자 흐름은 우리소유 포함 전 어댑터 사용
     const secrets: Record<string, string> = {};
     { const ght = await getConfigBot(adminToken, "github_gist_token"); if (ght) secrets.github_gist_token = ght; }
     { const obk = await getConfigBot(adminToken, "owned_blog_api_key"); if (obk) secrets.owned_blog_api_key = obk; }
-    const domains = listAdapterDomains().filter(d => !doneSet.has(d));
+    // ★2026-09-08 근본수정: "소스당 1회" 폐기 → 라운드로빈으로 count개를 채운다(회원 흐름과 동일 모델).
+    //   gist는 토큰 있으면 포함, 우리블로그는 키 있을 때만 포함. 실패 소스는 이번 실행에서 제외.
+    const sources = buildSourceList({ hasOwnedKey: !!secrets.owned_blog_api_key });
+    if (sources.length === 0) { send({ type: "log", kind: "warn", msg: "사용 가능한 소스가 없습니다(키 확인)." }); send({ type: "done", posted: 0 }); return res.end(); }
     let posted = 0;
-    for (let i = 0; i < domains.length && posted < count; i++) {
-      const dom = domains[i];
-      const c = genContent(targetDomain, i);
+    const dead = new Set<string>();
+    let n = 0, guard = 0;
+    const maxTries = count * 3 + sources.length;
+    while (posted < count && guard < maxTries) {
+      guard++;
+      const live = sources.filter(d => !dead.has(d));
+      if (live.length === 0) break;
+      const dom = live[n % live.length];
+      n++;
+      const c = genContent(targetDomain, n);
       const input: PublishInput = { targetDomain, targetUrl, title: c.title, body: c.body, anchor: c.anchor, proxy: null, secrets };
       const r = await getAdapter(dom)!.publish(input);
       for (const e of r.events) send({ type: "log", kind: e.kind, msg: `[${dom}] ${e.msg}` });
-      let realOk = r.ok; let verifyNote = "";
+      if (!r.ok) { dead.add(dom); continue; }
+      let realOk: boolean = r.ok; let verifyNote = "";
       if (r.ok && r.postUrl) {
         const v = await verifyBacklink(r.postUrl, targetDomain);
         realOk = v.ok; verifyNote = v.note;
