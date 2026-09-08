@@ -5445,24 +5445,12 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
     await page.mouse.wheel(0, inflowRndInt(700, 1300));
     await page.waitForTimeout(inflowRndInt(700, 1600));
   }
-  // 🛒 스토어 폴백 — 검색결과서 못 찾으면 상품 URL로 직접 진입(방문·체류는 유효)
+  // 🛒 스토어 — 검색결과서 못 찾으면 그냥 건너뛴다(직접 URL 진입 금지).
+  //   ★2026-09-08(테리): 상품 직접 진입은 네이버가 로그인(nid.naver.com)/"접속 불가"로 튕겨 rate-limit을 악화시켰다.
+  //   검색결과에 상품이 없다 = 그 키워드에서 노출 순위 밖일 뿐 → 직접 진입으로 무리하지 말고 이 방문만 건너뛰고 다음 키워드로.
   if (target.type === "store") {
-    const url = (target as any).storeUrl;
-    log(`  🛒 검색결과에 상품이 안 보여 상품 페이지로 직접 진입 → ${url}`);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
-    await page.waitForTimeout(inflowRndInt(1200, 2400));
-    // ★2026-09-08(테리): 직접 진입 시 네이버가 로그인(nid.naver.com)이나 "접속 불가"(rate-limit)로 튕기는 경우가 있다.
-    //   봇은 절대 로그인하지 않는다(회원 실계정 보호). 로그인/차단 감지되면 이 방문은 무효 처리(null 반환) → 호출부가
-    //   자동 감속(백오프)하고 다음 방문으로. 로그인 페이지에 머무르지 않게 즉시 빠져나온다.
-    try {
-      const curUrl = String(page.url() || "");
-      const body = await page.evaluate(() => (document.body?.innerText || "").slice(0, 300)).catch(() => "");
-      if (/nid\.naver\.com|nidlogin/i.test(curUrl) || /접속이 일시적으로 제한|서비스 접속이 불가|비정상적인 접근|로그인/i.test(body)) {
-        log(`  🚫 상품 직접 진입이 로그인/접속제한으로 막혔어요 — 이 방문은 건너뛰고 잠시 쉬어요(로그인은 하지 않아요)`);
-        return null;   // 방문 무효 → 호출부에서 실패 처리 + 백오프
-      }
-    } catch { /* 판단 실패 시 그냥 진행 */ }
-    return page;
+    log(`  🛒 검색결과에서 상품을 못 찾았어요(그 키워드 노출 밖) — 무리하지 않고 이 방문은 건너뛰어요`);
+    return null;   // 방문 무효 → 호출부가 다음 방문으로(로그인/직접진입 안 함)
   }
   // 🏢 플레이스 폴백(B) — 검색결과에서 못 찾으면(또는 지도로만 뜨면) 플레이스 상세로 직접 진입
   if (target.type === "place") {
@@ -6029,6 +6017,12 @@ export async function searchInflow(params: {
   const typeLabel = (t: InflowTarget) => t.type === "place" ? "플레이스" : t.type === "store" ? "스마트스토어" : "블로그";
   log(`🚀 검색유입 시작 — 대상 ${typeLabel(target)}, 키워드 ${keywords.length}개, 총 ${rounds}회 방문, 텀 ${tmin}~${tmax}초`);
   await buildRelated();   // 🔎 연관 검색어 미리 확보(가끔 롱테일로 진입해 검색어 다양화)
+  // ★2026-09-08(테리): 시작하자마자 급하게 두들기면 첫 방문부터 rate-limit. 워밍업으로 20~40초 쉬고 시작 + 초반 3회는 텀을 넉넉히.
+  {
+    const warmup = inflowRndInt(20, 40);
+    log(`  🌱 자연스러운 시작을 위해 ${warmup}초 준비 후 첫 방문을 시작해요(급출발 방지)`);
+    if (!await inflowInterruptibleWait(warmup * 1000, params.shouldStop)) { log("⏹️ 정지 요청 — 준비 중단"); return { done: 0, success: 0 }; }
+  }
 
   for (let i = 0; i < rounds; i++) {
     if (params.shouldStop?.()) { log("⏹️ 정지 요청 — 중단"); break; }
@@ -6140,8 +6134,10 @@ export async function searchInflow(params: {
     //   ★접속 제한을 겪었으면 blockBackoff 배율만큼 텀을 늘려 무리 안 함. 성공이 쌓이면 서서히 원복.
     if (success > 0 && success % 5 === 0 && blockBackoff > 0) blockBackoff -= 1;   // 연속 정상 5회마다 감속 1단계 완화
     if (i < rounds - 1 && !params.shouldStop?.()) {
-      const wait = Math.round(inflowRnd(tmin, tmax) * (1 + blockBackoff));
-      log(`  ⏳ 다음 방문까지 ${wait}초 대기…${blockBackoff > 0 ? ` (자동 감속 ${1 + blockBackoff}배)` : ""}`);
+      // ★초반 3회는 텀을 1.5배로 넉넉히(급출발 방지) — 네이버가 초반 급증을 봇으로 의심하는 걸 피한다.
+      const earlyBoost = i < 3 ? 1.5 : 1;
+      const wait = Math.round(inflowRnd(tmin, tmax) * (1 + blockBackoff) * earlyBoost);
+      log(`  ⏳ 다음 방문까지 ${wait}초 대기…${blockBackoff > 0 ? ` (자동 감속 ${1 + blockBackoff}배)` : i < 3 ? " (초반 여유)" : ""}`);
       if (!await inflowInterruptibleWait(wait * 1000, params.shouldStop)) { log("⏹️ 정지 요청 — 대기 중단"); break; }
     }
   }
