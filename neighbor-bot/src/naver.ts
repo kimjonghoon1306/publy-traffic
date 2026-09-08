@@ -5322,9 +5322,12 @@ const inflowInterruptibleWait = async (ms: number, shouldStop?: () => boolean): 
 
 // 체류시간(초) 결정 — 강도별 정해진 시간(빠르게20/보통60/꼼꼼히180)에서 방문마다 ±오차.
 //   customSec>0이면 강도 대신 사용자가 직접 지정한 시간을 쓴다(3분 이상도 자유). 오차로 봇 티를 줄인다.
-function decideDwellSec(baseSec: number, customSec: number): number {
+//   ★2026-09-08(서치근거): 블로그 상위노출은 "체류 60초 이상"이 최소 조건 → 60초 미만 체류는 오히려 역효과(이탈로 인식).
+//     블로그는 최소 60초, 플레이스도 정보(사진·메뉴·가격) 확인하려면 최소 40초를 하한으로 보장한다.
+function decideDwellSec(baseSec: number, customSec: number, targetType: "place" | "blog" | "store" = "blog"): number {
   const target = customSec > 0 ? customSec : baseSec;
-  return Math.max(3, Math.round(target * inflowRnd(0.8, 1.2))); // ±20% 랜덤 오차
+  const floor = targetType === "blog" ? 60 : targetType === "place" ? 40 : 3;   // 블로그 60초·플레이스 40초 최소 보장
+  return Math.max(floor, Math.round(target * inflowRnd(0.8, 1.2))); // ±20% 랜덤 오차
 }
 
 // 🩺 실패 원인 정밀 진단 — 페이지 상태를 읽어 "왜 안 됐는지" 정확히 로그로.
@@ -5503,7 +5506,8 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
 // 진입한 페이지에서 글 전체를 읽는 것처럼 체류(끝까지 스크롤).
 //   baseSec=강도별 기준시간(빠르게20/보통60/꼼꼼히180), customSec>0이면 직접지정 시간을 우선 사용.
 async function inflowDwellRead(page: any, log: (m: string) => void, shouldStop?: () => boolean, baseSec = 60, customSec = 0, targetType: "place" | "blog" | "store" = "blog"): Promise<void> {
-  const sec = decideDwellSec(baseSec, customSec);
+  const sec = decideDwellSec(baseSec, customSec, targetType);
+  if (targetType === "blog" && sec >= 60) log(`  ⏱️ 블로그는 60초 이상 머물러야 상위노출에 도움돼요 — 약 ${sec}초 정독합니다`);
   const dwellVerb = targetType === "place" ? "📖 플레이스 둘러보는 중…" : targetType === "store" ? "📖 상품 상세 보는 중…" : "📖 글 읽는 중…";
   log(`  ${dwellVerb} (약 ${sec}초 체류${customSec > 0 ? " · 직접지정" : ""})`);
   const steps = Math.max(6, Math.round(sec / inflowRnd(2, 4)));
@@ -5569,6 +5573,32 @@ async function inflowActions(page: any, target: InflowTarget, actions: InflowAct
   const rollStrong = (on?: boolean) => !!on && (rate >= 1 || Math.random() < Math.max(rate, 0.85));
   try {
     if (target.type === "place") {
+      // ★2026-09-08(서치근거): 2026 플레이스 순위는 "클릭 후 체류 + 사진·메뉴·가격 정보 확인 여부"가 핵심 신호다.
+      //   진짜 손님처럼 저장·길찾기 전에 먼저 사진·메뉴·정보(가격/영업시간) 탭을 눌러 꼼꼼히 보고 완급 스크롤한다.
+      //   (리뷰 없는 가게도 이 '정보 확인' 행동으로 순위를 끌어올릴 수 있다 — 리뷰 대신 행동 신호.)
+      try {
+        const infoTabs: [string, string[]][] = [
+          ["사진", ['a:has-text("사진")', 'button:has-text("사진")', '[role="tab"]:has-text("사진")']],
+          ["메뉴", ['a:has-text("메뉴")', 'button:has-text("메뉴")', '[role="tab"]:has-text("메뉴")', 'a:has-text("가격")']],
+          ["정보", ['a:has-text("정보")', 'button:has-text("정보")', '[role="tab"]:has-text("정보")', 'a:has-text("홈")']],
+        ];
+        let seen = 0;
+        for (const [name, sels] of infoTabs) {
+          if (Math.random() < 0.25) continue;   // 사람처럼 전부는 안 봄(가끔 건너뜀)
+          const ok = await clickFirst(sels, `  👀 ${name} 살펴보는 중(정보 확인 신호)`);
+          if (ok) {
+            seen++;
+            // 완급 스크롤 — 관심 구간에서 천천히 정독(진짜 손님 패턴)
+            for (let s = 0; s < inflowRndInt(3, 6); s++) {
+              await page.mouse.wheel(0, inflowRndInt(350, 900)).catch(() => {});
+              await page.waitForTimeout(inflowRndInt(900, 2100));
+            }
+            await page.mouse.wheel(0, -inflowRndInt(300, 700)).catch(() => {});   // 위로 다시 확인
+            await page.waitForTimeout(inflowRndInt(600, 1400));
+          }
+        }
+        if (seen) log(`  🧑 사진·메뉴·정보 ${seen}곳 꼼꼼히 봄 — "여기 갈까?" 고민하는 손님처럼(순위 신호↑)`);
+      } catch { /* 정보 확인 실패는 무시하고 방문의도 액션 진행 */ }
       // 방문의도 신호(길찾기·전화·예약)가 플레이스 순위에 가장 강함.
       //   ★셀렉터는 m.place.naver.com 실측 기준(2026-09): 텍스트가 정확히 일치하는 a/button을 우선.
       if (skipLoginAction(actions.save)) log("  🔑 저장: 로그인 필요 — 건너뜀");
