@@ -625,3 +625,49 @@ export async function addOutreachLog(row: {
   const { error } = await supabase.from("publy_outreach").insert(row);
   if (error) console.warn("[outreach] 이력 저장 실패:", error.message);
 }
+
+// ─────────────────────────────────────────────────────────────
+// 🔎 네이버 검색광고 API — 키워드 월 검색량·경쟁도 조회 (2026-09-08)
+//   키는 publy_settings.searchad_keys(JSON: {customer, apiKey, secret})에 관리자가 저장.
+//   HMAC-SHA256 서명({timestamp}.{method}.{uri})로 인증. 광고비와 무관·무료 조회.
+// ─────────────────────────────────────────────────────────────
+import * as _crypto from "crypto";
+let _searchadCache: { keys: { customer: string; apiKey: string; secret: string } | null; ts: number } | null = null;
+async function getSearchadKeys(): Promise<{ customer: string; apiKey: string; secret: string } | null> {
+  if (_searchadCache && Date.now() - _searchadCache.ts < 60000) return _searchadCache.keys;
+  let keys: any = null;
+  try {
+    const { data } = await supabase.from("publy_settings").select("value").eq("key", "searchad_keys").maybeSingle();
+    if (data?.value) {
+      const p = typeof data.value === "string" ? JSON.parse(data.value) : data.value;
+      if (p?.customer && p?.apiKey && p?.secret) keys = { customer: String(p.customer), apiKey: String(p.apiKey), secret: String(p.secret) };
+    }
+  } catch { /* 키 없음 */ }
+  _searchadCache = { keys, ts: Date.now() };
+  return keys;
+}
+export type KeywordVol = { keyword: string; pc: number; mobile: number; total: number; comp: string };
+// 씨드 키워드들로 월 검색량·경쟁도 + 연관 키워드 조회. 키 없으면 null(호출부는 자동완성 폴백).
+export async function getKeywordVolumes(seeds: string[], limit = 40): Promise<KeywordVol[] | null> {
+  const keys = await getSearchadKeys();
+  if (!keys) return null;
+  const clean = seeds.map(s => String(s || "").replace(/\s+/g, "").trim()).filter(Boolean).slice(0, 5);
+  if (!clean.length) return [];
+  const ts = Date.now().toString();
+  const uri = "/keywordstool";
+  const sign = _crypto.createHmac("sha256", keys.secret).update(`${ts}.GET.${uri}`).digest("base64");
+  const url = `https://api.searchad.naver.com${uri}?hintKeywords=${encodeURIComponent(clean.join(","))}&showDetail=1`;
+  try {
+    const r = await fetch(url, { headers: { "X-Timestamp": ts, "X-API-KEY": keys.apiKey, "X-Customer": keys.customer, "X-Signature": sign } });
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    const list: KeywordVol[] = (j?.keywordList || []).map((k: any) => {
+      const pc = k.monthlyPcQcCnt === "< 10" ? 5 : Number(k.monthlyPcQcCnt) || 0;
+      const mo = k.monthlyMobileQcCnt === "< 10" ? 5 : Number(k.monthlyMobileQcCnt) || 0;
+      return { keyword: String(k.relKeyword || ""), pc, mobile: mo, total: pc + mo, comp: String(k.compIdx || "") };
+    }).filter((k: KeywordVol) => k.keyword);
+    // 검색량 큰 순 정렬, 상위 limit개
+    list.sort((a, b) => b.total - a.total);
+    return list.slice(0, limit);
+  } catch { return null; }
+}

@@ -298,7 +298,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   // 🔎 키워드 발굴
   const [kwLoading, setKwLoading] = useState(false);
   // 🎯 키워드 도우미 — 추천 결과에 출처(자동완성=실검색어/연관=함께찾음)+검색량(vol, 검색광고 API 연동 시)
-  const [kwSuggest, setKwSuggest] = useState<{ keyword: string; source: string; vol?: number }[]>([]);
+  const [kwSuggest, setKwSuggest] = useState<{ keyword: string; source: string; vol?: number; comp?: string }[]>([]);
   // 🧩 조합 생성기 입력(지역·업종·메뉴/목적) — "고객이 치는 말"로 메인+세부 키워드 자동 조합
   const [cbRegion, setCbRegion] = useState("");
   const [cbType, setCbType] = useState("");
@@ -599,7 +599,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
 
   // 🔎 키워드 발굴 — 입력한 키워드 seed로 숨은 키워드 추천
   const runKeywordSuggest = async () => {
-    const seeds = keywords.split(/[,\n]/).map(k=>k.trim()).filter(Boolean).slice(0, 3);
+    const seeds = keywords.split(/[,\n]/).map(k=>k.trim()).filter(Boolean).slice(0, 5);
     if (!seeds.length) { toast("먼저 키워드를 1개 이상 입력하세요(예: 횡성한우)", "error"); return; }
     setKwLoading(true); setKwSuggest([]);
     try {
@@ -609,7 +609,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       const already = new Set(keywords.split(/[,\n]/).map(k=>k.trim()));
       const list = (j.keywords || [])
         .filter((k: any)=>k?.keyword && !already.has(k.keyword))
-        .map((k: any)=>({ keyword: String(k.keyword), source: String(k.source||"추천"), vol: typeof k.vol==="number"?k.vol:undefined }))
+        .map((k: any)=>({ keyword: String(k.keyword), source: String(k.source||"추천"), vol: typeof k.vol==="number"?k.vol:undefined, comp: k.comp?String(k.comp):undefined }))
         .slice(0, 30);
       if (!list.length) { toast("새로운 추천 키워드가 없어요", "info"); }
       setKwSuggest(list);
@@ -1873,12 +1873,14 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             const mains = kwSuggest.filter(k=>isMain(k.keyword)).sort(sortVol);
             const subs  = kwSuggest.filter(k=>!isMain(k.keyword)).sort(sortVol);
             const srcBadge = (s:string)=> s.includes("자동완성")?"실검색어": s.includes("연관")?"함께찾음": s.includes("조합")?"내조합": "추천";
-            const chip = (k:{keyword:string;source:string;vol?:number}, main:boolean)=>(
-              <button key={k.keyword} onClick={()=>addSuggestedKeyword(k.keyword)} title={`출처: ${srcBadge(k.source)}${k.vol!=null?` · 월 검색량 ${k.vol.toLocaleString()}`:""}`}
+            const compColor = (c?:string)=> c==="높음"?"#dc2626": c==="중간"?"#d97706": c==="낮음"?"#059669": C.sub;
+            const chip = (k:{keyword:string;source:string;vol?:number;comp?:string}, main:boolean)=>(
+              <button key={k.keyword} onClick={()=>addSuggestedKeyword(k.keyword)} title={`출처: ${srcBadge(k.source)}${k.vol!=null?` · 월 검색량 ${k.vol.toLocaleString()}`:""}${k.comp?` · 경쟁 ${k.comp}`:""}`}
                 style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 11px", borderRadius:999, border:`1.5px solid ${main?C.accent:C.line2}`, background: main?C.glow:C.panel, color:C.ink, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
                 + {k.keyword}
                 {k.vol!=null && <span style={{ fontSize:10, fontWeight:800, color:C.accent }}>🔍{k.vol>=10000?`${Math.round(k.vol/1000)}천`:k.vol.toLocaleString()}</span>}
-                <span style={{ fontSize:9.5, fontWeight:700, color:C.sub, opacity:.8 }}>{srcBadge(k.source)}</span>
+                {k.comp && <span style={{ fontSize:9.5, fontWeight:800, color:compColor(k.comp) }}>{k.comp}</span>}
+                {!k.comp && <span style={{ fontSize:9.5, fontWeight:700, color:C.sub, opacity:.8 }}>{srcBadge(k.source)}</span>}
               </button>
             );
             return (
@@ -1891,7 +1893,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                   <div style={{ fontSize: 11.5, fontWeight: 800, color: "#059669", marginBottom: 6 }}>🟢 세부 키워드 <span style={{ color: C.sub, fontWeight: 600 }}>· 경쟁 낮음·전환 높음 (신규는 여기부터!)</span></div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{subs.map(k=>chip(k,false))}</div>
                 </>}
-                <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 8, lineHeight: 1.5 }}>💡 <b>실검색어</b>=사람들이 실제로 치는 말 · <b>함께찾음</b>=연관검색어{kwSuggest.some(k=>k.vol!=null)?" · 🔍=월 검색량":""}. 메인 1 + 세부 4~5개로 채우세요.</div>
+                <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 8, lineHeight: 1.5 }}>{kwSuggest.some(k=>k.vol!=null) ? <>💡 <b>🔍=월 검색량</b>(네이버 실측) · <b style={{color:"#dc2626"}}>높음</b>/<b style={{color:"#d97706"}}>중간</b>/<b style={{color:"#059669"}}>낮음</b>=경쟁도. 신규는 <b>검색량 있고 경쟁 낮은 세부</b>부터 노리세요.</> : <>💡 <b>실검색어</b>=사람들이 실제로 치는 말 · <b>함께찾음</b>=연관검색어. 메인 1 + 세부 4~5개로 채우세요.</>}</div>
               </div>
             );
           })()}
