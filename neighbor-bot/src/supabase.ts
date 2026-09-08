@@ -637,10 +637,24 @@ async function getSearchadKeys(): Promise<{ customer: string; apiKey: string; se
   if (_searchadCache && Date.now() - _searchadCache.ts < 60000) return _searchadCache.keys;
   let keys: any = null;
   try {
-    const { data } = await supabase.from("publy_settings").select("value").eq("key", "searchad_keys").maybeSingle();
-    if (data?.value) {
-      const p = typeof data.value === "string" ? JSON.parse(data.value) : data.value;
-      if (p?.customer && p?.apiKey && p?.secret) keys = { customer: String(p.customer), apiKey: String(p.apiKey), secret: String(p.secret) };
+    // ★2026-09-08 관리자 설정탭이 저장하는 키(admin_naver_*)를 1순위로 읽는다(관리자가 화면에서 넣으면 바로 작동).
+    //   각각 publy_settings.admin_naver_customer_id / admin_naver_access_license / admin_naver_secret_key.
+    const [cRow, aRow, sRow] = await Promise.all([
+      supabase.from("publy_settings").select("value").eq("key", "admin_naver_customer_id").maybeSingle(),
+      supabase.from("publy_settings").select("value").eq("key", "admin_naver_access_license").maybeSingle(),
+      supabase.from("publy_settings").select("value").eq("key", "admin_naver_secret_key").maybeSingle(),
+    ]);
+    const customer = String(cRow.data?.value || "").trim();
+    const apiKey = String(aRow.data?.value || "").trim();
+    const secret = String(sRow.data?.value || "").trim();
+    if (customer && apiKey && secret) keys = { customer, apiKey, secret };
+    // 폴백: searchad_keys JSON(내가 SQL로 넣은 형식)
+    if (!keys) {
+      const { data } = await supabase.from("publy_settings").select("value").eq("key", "searchad_keys").maybeSingle();
+      if (data?.value) {
+        const p = typeof data.value === "string" ? JSON.parse(data.value) : data.value;
+        if (p?.customer && p?.apiKey && p?.secret) keys = { customer: String(p.customer), apiKey: String(p.apiKey), secret: String(p.secret) };
+      }
     }
   } catch { /* 키 없음 */ }
   _searchadCache = { keys, ts: Date.now() };
@@ -651,6 +665,7 @@ export type KeywordVol = { keyword: string; pc: number; mobile: number; total: n
 export async function getKeywordVolumes(seeds: string[], limit = 40): Promise<KeywordVol[] | null> {
   const keys = await getSearchadKeys();
   if (!keys) return null;
+  // ★검색광고 API는 hintKeywords에 공백 있으면 거부(code 11001) → 각 씨드 공백 제거. 다중은 콤마.
   const clean = seeds.map(s => String(s || "").replace(/\s+/g, "").trim()).filter(Boolean).slice(0, 5);
   if (!clean.length) return [];
   const ts = Date.now().toString();
@@ -659,15 +674,25 @@ export async function getKeywordVolumes(seeds: string[], limit = 40): Promise<Ke
   const url = `https://api.searchad.naver.com${uri}?hintKeywords=${encodeURIComponent(clean.join(","))}&showDetail=1`;
   try {
     const r = await fetch(url, { headers: { "X-Timestamp": ts, "X-API-KEY": keys.apiKey, "X-Customer": keys.customer, "X-Signature": sign } });
-    if (!r.ok) return null;
+    if (!r.ok) {
+      // 다중 씨드가 거부되면(11001 등) 첫 씨드 하나로 재시도(연관어가 많이 나옴)
+      const ts2 = Date.now().toString();
+      const sign2 = _crypto.createHmac("sha256", keys.secret).update(`${ts2}.GET.${uri}`).digest("base64");
+      const r2 = await fetch(`https://api.searchad.naver.com${uri}?hintKeywords=${encodeURIComponent(clean[0])}&showDetail=1`, { headers: { "X-Timestamp": ts2, "X-API-KEY": keys.apiKey, "X-Customer": keys.customer, "X-Signature": sign2 } });
+      if (!r2.ok) { console.log(`[searchad] API 오류 ${r2.status}`); return null; }
+      const j2: any = await r2.json();
+      return mapVols(j2, limit);
+    }
     const j: any = await r.json();
-    const list: KeywordVol[] = (j?.keywordList || []).map((k: any) => {
-      const pc = k.monthlyPcQcCnt === "< 10" ? 5 : Number(k.monthlyPcQcCnt) || 0;
-      const mo = k.monthlyMobileQcCnt === "< 10" ? 5 : Number(k.monthlyMobileQcCnt) || 0;
-      return { keyword: String(k.relKeyword || ""), pc, mobile: mo, total: pc + mo, comp: String(k.compIdx || "") };
-    }).filter((k: KeywordVol) => k.keyword);
-    // 검색량 큰 순 정렬, 상위 limit개
-    list.sort((a, b) => b.total - a.total);
-    return list.slice(0, limit);
-  } catch { return null; }
+    return mapVols(j, limit);
+  } catch (e: any) { console.log(`[searchad] 예외: ${e?.message}`); return null; }
+}
+function mapVols(j: any, limit: number): KeywordVol[] {
+  const list: KeywordVol[] = (j?.keywordList || []).map((k: any) => {
+    const pc = k.monthlyPcQcCnt === "< 10" ? 5 : Number(k.monthlyPcQcCnt) || 0;
+    const mo = k.monthlyMobileQcCnt === "< 10" ? 5 : Number(k.monthlyMobileQcCnt) || 0;
+    return { keyword: String(k.relKeyword || ""), pc, mobile: mo, total: pc + mo, comp: String(k.compIdx || "") };
+  }).filter((k: KeywordVol) => k.keyword);
+  list.sort((a, b) => b.total - a.total);   // 검색량 큰 순
+  return list.slice(0, limit);
 }
