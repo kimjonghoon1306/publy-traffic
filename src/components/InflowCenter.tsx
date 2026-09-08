@@ -1937,7 +1937,14 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             {([["normal", "🟢 일반", "다 받음 · 가장 자연스러움", "약 1만 회"], ["save", "💾 절약", "영상·광고·폰트 차단 · GB 반절", "약 2만 회"], ["max", "🔋 초절약", "이미지까지 차단 · GB 1/10", "약 7만 회"]] as const).map(([k, lb, desc, cnt]) => {
               const on = dataSaver === k;
               return (
-                <button key={k} onClick={() => { chooseDataSaver(k); toast(`💾 데이터 '${lb.replace(/^[^ ]+ /, "")}' 모드 선택됨 — 이 선택이 유지돼요`, "success"); }} style={{ flex: "1 1 150px", minWidth: 140, padding: "11px", borderRadius: 10, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                <button key={k} onClick={() => {
+                  chooseDataSaver(k);
+                  const label = k === "normal" ? "일반(다 받음)" : k === "save" ? "절약(영상·광고·폰트 차단)" : "초절약(이미지까지 차단)";
+                  toast(`💾 데이터 '${lb.replace(/^[^ ]+ /, "")}' 모드 선택됨 — 이 선택이 유지돼요`, "success");
+                  // ★2026-09-08(테리): 데이터모드 바꾸면 로그에 명확히 찍는다. 실행 중이면 지금 도는 건 처음 설정대로라 '다음 유입부터' 안내.
+                  const rt = (targetType as RunTT);
+                  pushLogFor(rt, `💾 데이터 모드를 '${label}'로 바꿨어요.${runningTypes[rt] ? " (지금 도는 유입은 시작 설정대로 진행 · 다음 '유입 시작'부터 적용)" : ""}`);
+                }} style={{ flex: "1 1 150px", minWidth: 140, padding: "11px", borderRadius: 10, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
                   <div style={{ fontSize: 13.5, fontWeight: 900, color: on ? C.accent : C.ink }}>{on ? "✓ " : ""}{lb}</div>
                   <div style={{ fontSize: 10.5, fontWeight: 600, color: C.sub, marginTop: 1 }}>{desc}</div>
                   {unlimited && <div style={{ fontSize: 10.5, fontWeight: 800, color: on ? C.accent : C.cyan, marginTop: 3 }}>📊 50GB로 {cnt}</div>}
