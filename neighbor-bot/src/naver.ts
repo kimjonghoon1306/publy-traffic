@@ -5312,12 +5312,14 @@ function decideDwellSec(baseSec: number, customSec: number): number {
 
 // 🩺 실패 원인 정밀 진단 — 페이지 상태를 읽어 "왜 안 됐는지" 정확히 로그로.
 //   네이버가 나중에 뭘 바꿔도 이 로그만 보면 원인 즉시 파악(차단/로그인/노출없음/구조변경 등).
-async function inflowDiagnose(page: any, target: InflowTarget, log: (m: string) => void): Promise<void> {
+//   반환값: 이번 실패가 '접속 제한(rate-limit)' 때문이면 true → 호출부가 자동 백오프(길게 쉬고 텀↑)한다.
+async function inflowDiagnose(page: any, target: InflowTarget, log: (m: string) => void): Promise<boolean> {
   try {
     const body = await page.evaluate(() => (document.body?.innerText || "").slice(0, 500)).catch(() => "");
     const url = (() => { try { return page.url(); } catch { return ""; } })();
     if (/접속이 일시적으로 제한|shopping_stop|비정상적인 접근|abusing/i.test(body)) {
-      log("  🚫 [진단] 네이버 봇 감지 차단 — 자동화 접속으로 막혔어요. 속도를 늦추거나(텀↑) 잠시 후 다시. 반복되면 이 IP를 잠시 쉬게 하세요.");
+      log("  🚫 [진단] 네이버 접속 제한(rate-limit) — 짧은 시간에 너무 몰렸어요. 자동으로 길게 쉬고 텀을 늘립니다.");
+      return true;
     } else if (/로그인|nidlogin|아이디 또는 전화번호/i.test(body) && /nid\.naver\.com|login/i.test(url)) {
       log("  🔑 [진단] 로그인 필요 — 계정을 선택하거나 로그인 세션이 필요해요(저장·찜 등 액션).");
     } else if (/일시적인 오류|잠시 후 다시|서비스 점검/i.test(body)) {
@@ -5326,6 +5328,7 @@ async function inflowDiagnose(page: any, target: InflowTarget, log: (m: string) 
       log("  🔍 [진단] 검색결과에 대상이 노출되지 않았어요(현재 순위가 낮음). 홈 폴백으로 시도하거나 키워드를 바꿔보세요.");
     }
   } catch { log("  ⚠️ [진단] 페이지 상태를 읽지 못했어요(네트워크/타임아웃 가능)."); }
+  return false;
 }
 
 // 검색결과를 스크롤하며 대상(플레이스/블로그) 링크를 찾아 클릭 진입. 성공 시 진입한 page 반환.
@@ -5845,6 +5848,7 @@ export async function searchInflow(params: {
     log(`⏱️ 시간 분산 ON — ${params.spreadHours}시간에 걸쳐 자연스럽게(평균 텀 ~${Math.round(avg)}초)`);
   }
   let done = 0, success = 0, failStreak = 0;
+  let blockBackoff = 0; // 🧊 접속 제한(rate-limit) 감지 누적 — 방문 텀을 (1+backoff)배로 늘려 무리 안 하게(자동 감속)
   const FAIL_BRAKE = 5; // 🛡️ 연속 실패 임계 — 초과 시 자동 정지(계정 보호)
 
   // 🔄 로그인 액션에 쓸 계정 목록(다계정 로테이션). 없으면 단일 계정.
@@ -5929,9 +5933,17 @@ export async function searchInflow(params: {
 
       const entered = await inflowFindAndEnter(page, curTarget, log);
       if (!entered) {
-        await inflowDiagnose(page, curTarget, log);   // 🩺 왜 안 됐는지 정확히 로그로
+        const blocked = await inflowDiagnose(page, curTarget, log);   // 🩺 왜 안 됐는지 정확히 로그로(+접속제한 여부)
         await shot(page, "⚠️ 대상 못 찾음");
         done++; failStreak++; params.onProgress?.(done, rounds);
+        // 🧊 접속 제한(rate-limit) 감지 → 자동 감속: 즉시 길게 쉬고, 이후 방문 텀도 늘린다(무리 방지=정상 동작).
+        if (blocked) {
+          blockBackoff = Math.min(blockBackoff + 1, 3);
+          const cool = inflowRndInt(180, 360);   // 3~6분 즉시 쿨다운
+          log(`  🧊 자동 감속 — ${cool}초 쉬고, 다음부터 방문 텀을 ${1 + blockBackoff}배로 늘립니다(계정·IP 보호).`);
+          if (browser) { await browser.close().catch(() => {}); browser = null; }   // 창 닫고 쉼(리소스·흔적 정리)
+          if (!await inflowInterruptibleWait(cool * 1000, params.shouldStop)) { log("⏹️ 정지 요청 — 쿨다운 중단"); break; }
+        }
       } else {
         await shot(entered, "🎯 대상 진입");
         await inflowDwellRead(entered, log, params.shouldStop, params.dwellBaseSec ?? 60, params.dwellCustomSec ?? 0, curTarget.type);
@@ -5964,9 +5976,11 @@ export async function searchInflow(params: {
     }
 
     // 방문 텀(사용자 지정 랜덤) — 마지막 회차 뒤엔 생략, 정지 반응 위해 1초 단위 분할
+    //   ★접속 제한을 겪었으면 blockBackoff 배율만큼 텀을 늘려 무리 안 함. 성공이 쌓이면 서서히 원복.
+    if (success > 0 && success % 5 === 0 && blockBackoff > 0) blockBackoff -= 1;   // 연속 정상 5회마다 감속 1단계 완화
     if (i < rounds - 1 && !params.shouldStop?.()) {
-      const wait = Math.round(inflowRnd(tmin, tmax));
-      log(`  ⏳ 다음 방문까지 ${wait}초 대기…`);
+      const wait = Math.round(inflowRnd(tmin, tmax) * (1 + blockBackoff));
+      log(`  ⏳ 다음 방문까지 ${wait}초 대기…${blockBackoff > 0 ? ` (자동 감속 ${1 + blockBackoff}배)` : ""}`);
       if (!await inflowInterruptibleWait(wait * 1000, params.shouldStop)) { log("⏹️ 정지 요청 — 대기 중단"); break; }
     }
   }
