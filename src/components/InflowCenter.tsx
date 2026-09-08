@@ -381,6 +381,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     } catch {}
     return "";
   })();
+  // ★2026-09-08(테리): 유입 도중 '오늘 유입' 카운트가 안 오르고 새로고침해야 반영됨 → 실시간 갱신용으로 현재 scope를 ref로 미러링.
+  const currentScopeRef = useRef(currentScope);
+  useEffect(() => { currentScopeRef.current = currentScope; }, [currentScope]);
   // 🔁 대상별 격리 도입 전 과거 기록을 최초 1회 현재 대상으로 이관(업데이트해도 기록 유지)
   const legacyMigratedRef = useRef(false);
   useEffect(() => {
@@ -1077,7 +1080,12 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       let d: any; try { d = JSON.parse(e.data); } catch { return; }
       if (d.type === "log") pushLogFor(runType, d.msg);
       else if (d.type === "shot" && d.dataUrl) pushShotFor(runType, d.caption || "단계별 화면", d.dataUrl);
-      else if (d.type === "progress") { setProgressFor(runType, Math.round((d.done / Math.max(1, d.total)) * 100)); }
+      else if (d.type === "progress") {
+        setProgressFor(runType, Math.round((d.done / Math.max(1, d.total)) * 100));
+        // ★방문마다 '오늘 유입' 실시간 갱신(봇이 성공 시 DB에 저장 → 여기서 재조회). 새로고침 없이 카운트 오르게.
+        const sc = currentScopeRef.current;
+        if (userId && sc) { getInflowStatToday(userId, sc).then(setTodayScoped).catch(() => {}); getInflowDailyUsage(userId).then(setUsed).catch(() => {}); }
+      }
       else if (d.type === "quota_info") setUsed(d.used);
       else if (d.type === "quota_exceeded") { pushLogFor(runType, "🛑 오늘 유입 한도를 다 썼어요"); toast("오늘 유입 한도 초과", "error"); setRunningFor(runType, false); es.close(); esRefByType.current[runType] = null; }
       else if (d.type === "inflow_done") { setSessOkFor(runType, d.success || 0); pushLogFor(runType, `🏁 완료 — 총 ${d.done}회 방문, 성공 ${d.success}회`); toast(`유입 완료 · 성공 ${d.success}회`, "success"); setRunningFor(runType, false); es.close(); esRefByType.current[runType] = null; if (scheduledRunPendingRef.current) { scheduledRunPendingRef.current = false; if (userId && Number(d.success) > 0) void markInflowScheduleRan(userId, scheduledRunScopeRef.current || currentScope); } refreshStats(); if (apEnabled && (runType === "place" || runType === "blog")) { pushLogFor(runType, "📍 순위 자동 측정 중…"); autopilotCheckRef.current().then(() => { if (userId) getRankHistory(userId, chartDays, currentScope).then(setRankHist).catch(() => {}); }); } }
