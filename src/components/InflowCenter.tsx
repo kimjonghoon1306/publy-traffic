@@ -1294,7 +1294,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             {targetType === "place"
               ? <>🗺️ <b style={{ color: C.accent }}>플레이스</b> — 내 가게를 <b>네이버 지도·검색에서 상위</b>로 끌어올려요. 키워드 검색→방문→체류로 노출 순위를 높여요.</>
               : targetType === "store"
-              ? <>🛒 <b style={{ color: C.accent }}>스마트스토어</b> — 내 상품을 <b style={{ color: C.accent }}>네이버쇼핑 검색에서 순위를 끌어올리는</b> 기능이에요. 키워드 검색→클릭→체류로 상위노출을 도와요. (찜·리뷰는 로그인이 필요해 하지 않아요)</>
+              ? <>🛒 <b style={{ color: C.accent }}>스마트스토어</b> — 내 상품을 <b style={{ color: C.accent }}>네이버쇼핑 검색에서 순위를 끌어올리는</b> 기능이에요. 진짜 손님처럼 <b>검색 → 경쟁상품 비교 → 내 상품 클릭 → 상세·리뷰·옵션 꼼꼼히 보고 → 다른 상품도 구경</b>하고, 연관 검색어로도 다양하게 들어와요. (찜·리뷰는 로그인이 필요해 하지 않아요)</>
               : <>📝 <b style={{ color: C.accent }}>블로그</b> — 내 글을 <b>네이버 검색에서 상위</b>로 끌어올려요. 키워드 검색→조회→체류로 노출을 높여요.</>}
           </div>
           {/* 4패널 */}
@@ -2371,6 +2371,29 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                 ))}
               </div>
               <p style={{ margin: "10px 0 0", fontSize: 11.5, color: C.sub, fontWeight: 600, lineHeight: 1.5 }}>💡 경쟁 상품보다 리뷰·찜이 적으면 유입(클릭·체류)으로 노출 기회를 늘리고, 리뷰는 실제 구매 고객에게 유도하세요.</p>
+              {/* 🔤 상품명 SEO 진단 — 내가 노리는 키워드가 상품명에 담겼는지(검색 노출의 기본). 안 막히는 정공법. */}
+              {s.name && keywords.trim() && (()=>{
+                const kws = keywords.split(/[,\n]/).map(k => k.trim()).filter(Boolean);
+                const nmeLC = s.name.toLowerCase();
+                const hit = kws.filter(k => nmeLC.includes(k.toLowerCase()));
+                const miss = kws.filter(k => !nmeLC.includes(k.toLowerCase()));
+                const nameLen = s.name.length;
+                return (
+                  <div style={{ marginTop: 12, padding: "11px 13px", borderRadius: 12, background: C.panel2, border: `1px solid ${C.line}` }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 7 }}>🔤 상품명 SEO 진단 <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· 검색 노출의 기본</span></div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                      {hit.map(k => <span key={k} style={{ fontSize: 11.5, fontWeight: 800, color: "#059669", background: "rgba(16,185,129,.12)", borderRadius: 99, padding: "3px 10px" }}>✓ {k}</span>)}
+                      {miss.map(k => <span key={k} style={{ fontSize: 11.5, fontWeight: 800, color: "#dc2626", background: "rgba(220,38,38,.1)", borderRadius: 99, padding: "3px 10px" }}>✗ {k}</span>)}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: C.sub, fontWeight: 600, lineHeight: 1.6 }}>
+                      {miss.length === 0
+                        ? <>✅ 노리는 키워드가 상품명에 모두 들어있어요. 이제 <b style={{ color: C.ink }}>유입(클릭·체류)</b>으로 순위를 밀어주세요.</>
+                        : <>⚠️ <b style={{ color: "#dc2626" }}>{miss.join(", ")}</b> 이(가) 상품명에 없어요. 스마트스토어 상품명에 자연스럽게 넣으면 검색 노출이 올라가요.</>}
+                      {nameLen > 50 && <><br/>ℹ️ 상품명이 길어요({nameLen}자). 너무 길면 핵심 키워드가 묻혀요 — 50자 안쪽 권장.</>}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ); })() : !storeInfoLoading && (
             <div style={{ padding: "20px", textAlign: "center", color: C.sub, fontSize: 13, fontWeight: 600 }}>위 상품 주소를 넣고 버튼을 누르면 리뷰·찜·평점·가격을 확인해요.</div>

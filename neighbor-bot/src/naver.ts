@@ -5364,6 +5364,37 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
     log(`  🛒 쇼핑 검색으로 상품 찾는 중… "${kw}"`);
     await page.goto(shopUrl, { waitUntil: "domcontentloaded", timeout: 25000 }).catch(() => {});
     await page.waitForTimeout(inflowRndInt(1400, 2800));
+
+    // 🧑‍🤝‍🧑 비교 탐색(가장 강한 랭킹 신호) — 내 상품만 딱 누르지 않고, 경쟁 상품 1~2개를 먼저 구경한 뒤
+    //    내 상품으로 돌아와 오래 본다. "여러 개 비교하다 이걸 골랐다"는 진짜 구매 손님 패턴.
+    try {
+      const myNeedle = String((target as any).productId || (target as any).storeId || "");
+      const compareN = inflowRndInt(1, 2);
+      for (let c = 0; c < compareN; c++) {
+        // 검색결과에서 '내 상품이 아닌' 다른 상품 링크 하나 고름
+        const other = await page.evaluateHandle((mine: string) => {
+          const as = Array.from(document.querySelectorAll('a[href*="/products/"], a[href*="cr.shopping.naver.com"]')) as HTMLAnchorElement[];
+          const cands = as.filter(a => a.href && (!mine || !a.href.includes(mine)));
+          if (!cands.length) return null;
+          return cands[Math.floor(Math.random() * Math.min(cands.length, 8))] || null;   // 상단 결과 중 랜덤
+        }, myNeedle).catch(() => null);
+        const oel = other && other.asElement ? other.asElement() : null;
+        if (!oel) break;
+        const ctx = page.context();
+        const before = ctx.pages().length;
+        log(`  🧑‍🤝‍🧑 경쟁 상품 먼저 비교 구경 (${c + 1}/${compareN})`);
+        await Promise.all([
+          page.waitForTimeout(inflowRndInt(1200, 2400)),
+          oel.click({ timeout: 6000 }).catch(() => {}),
+        ]);
+        const pgs = ctx.pages();
+        const cp = pgs.length > before ? pgs[pgs.length - 1] : page;
+        // 경쟁 상품 잠깐 둘러보고(스크롤) 닫거나 뒤로
+        for (let s = 0; s < inflowRndInt(2, 4); s++) { await cp.mouse.wheel(0, inflowRndInt(500, 1200)).catch(() => {}); await cp.waitForTimeout(inflowRndInt(900, 2000)); }
+        if (cp !== page) { await cp.close().catch(() => {}); } else { await page.goBack({ timeout: 12000 }).catch(() => {}); await page.waitForTimeout(inflowRndInt(1000, 2000)); }
+      }
+      log(`  🔙 비교 끝 — 이제 우리 상품을 찾아 자세히 봅니다`);
+    } catch { /* 비교 탐색 실패는 무시하고 바로 내 상품 탐색 */ }
   }
   for (let s = 0; s < 8; s++) {
     if (target.type === "place") {
@@ -5558,9 +5589,33 @@ async function inflowActions(page: any, target: InflowTarget, actions: InflowAct
     // 🛒 스마트스토어 — 옵션·이미지 탐색(로그인 불필요, 관심 신호) + 찜·장바구니(로그인 필요)
     if (target.type === "store") {
       if (rollStrong(actions.optionView)) {
-        // 옵션 선택 UI·상세 이미지를 눌러보며 둘러본다(구매 고민하는 손님처럼)
-        const ok = await clickFirst(['a:has-text("상세정보")', 'a:has-text("리뷰")', 'button:has-text("옵션")', '[class*="option"] button', 'a:has-text("상품정보")'], "  🔍 옵션·상세 탐색");
-        if (ok) { await page.waitForTimeout(inflowRndInt(1500, 3000)); await page.mouse.wheel(0, inflowRndInt(600, 1400)).catch(() => {}); }
+        // 🧑 구매 고민하는 손님처럼 상세를 진짜로 둘러본다 — ①상세정보·리뷰·상품정보 탭을 차례로 눌러 각 탭을 읽고
+        //    ②옵션(색상·용량)을 2~3개 눌러보고 ③상세 이미지를 끝까지 스크롤. 체류·관심 신호를 자연스럽게 쌓는다.
+        const tabs = ["상세정보", "리뷰", "상품정보", "Q&A"];
+        let tabHit = 0;
+        for (const t of tabs) {
+          if (Math.random() < 0.4) continue;   // 사람처럼 전부는 안 봄
+          const ok = await clickFirst([`a:has-text("${t}")`, `button:has-text("${t}")`, `[role="tab"]:has-text("${t}")`], `  🔍 ${t} 탭 열람`);
+          if (ok) {
+            tabHit++;
+            // 탭 내용을 완급 두어 읽음(정독 구간 포함)
+            for (let s = 0; s < inflowRndInt(3, 6); s++) {
+              await page.mouse.wheel(0, inflowRndInt(400, 1000)).catch(() => {});
+              await page.waitForTimeout(inflowRndInt(900, 2200));
+            }
+            await page.mouse.wheel(0, -inflowRndInt(300, 700)).catch(() => {});   // 위로 다시 확인
+            await page.waitForTimeout(inflowRndInt(600, 1400));
+          }
+        }
+        // 옵션(색상·용량 등) 2~3개 눌러보기 — 진짜 고민하는 손님
+        const optSel = ['[class*="option"] button', '[class*="option"] a', 'select[class*="option"]', 'button[class*="opt"]'];
+        for (let o = 0; o < inflowRndInt(1, 3); o++) {
+          const opt = await (async () => { for (const sl of optSel) { const el = await page.$(sl).catch(() => null); if (el) return el; } return null; })();
+          if (!opt) break;
+          await opt.click().catch(() => {});
+          await page.waitForTimeout(inflowRndInt(800, 1800));
+        }
+        if (tabHit) log(`  🔍 상세 ${tabHit}개 탭·옵션 둘러봄(구매 고민 손님 패턴)`);
       }
       if (skipLoginAction(actions.wish)) log("  🔑 찜: 로그인 필요 — 건너뜀");
       else if (roll(actions.wish)) { if (!await clickFirst(['a:has-text("찜")', 'button:has-text("찜")', '[class*="wish"] button', 'button[class*="wish"]', 'a[class*="wish"]'], "  💚 찜(관심상품)")) log("  ⚙️ [진단] 찜 버튼 못 찾음 — 로그인 필요하거나 네이버 화면 변경 의심."); }
@@ -5671,6 +5726,30 @@ async function inflowFullFunnel(page: any, target: InflowTarget, log: (m: string
             break;
           }
         }
+      }
+      // 🏬 스토어 회유 — 같은 판매자(스토어)의 다른 상품으로 실제 이동해 1~2개 구경(체류·재방문 신호).
+      //    상품 하나만 보고 나가는 게 아니라 "이 가게 다른 것도 볼까?" 하는 진짜 손님 흐름.
+      if (isStore && !shouldStop?.()) {
+        try {
+          const sid = String((target as any).storeId || "");
+          const others: string[] = await page.$$eval(
+            'a[href*="smartstore.naver.com"], a[href*="/products/"]',
+            (as: any[], args: { sid: string; mine: string }) => Array.from(new Set(as
+              .map((a: any) => a.href as string)
+              .filter((h: string) => h && h.includes("/products/") && (!args.sid || h.includes("smartstore.naver.com/" + args.sid)) && (!args.mine || !h.includes(args.mine)))
+            )).slice(0, 10),
+            { sid, mine: String((target as any).productId || "") }
+          ).catch(() => []);
+          const visits = Math.min(others.length, inflowRndInt(1, 2));
+          for (let j = 0; j < visits; j++) {
+            if (shouldStop?.()) break;
+            const url = others[inflowRndInt(0, others.length - 1)];
+            if (!url) continue;
+            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+            log(`    🏬 이 스토어의 다른 상품도 구경 (${j + 1}/${visits})`);
+            await inflowDwellRead(page, log, shouldStop, 40, 0, "store");
+          }
+        } catch { /* 회유 실패는 무시 */ }
       }
     }
   } catch (e: any) {
@@ -5839,6 +5918,27 @@ export async function searchInflow(params: {
     for (let k = 0; k < keywords.length; k++) { r -= Math.max(0, weights[k]); if (r <= 0) return keywords[k]; }
     return keywords[i % keywords.length];
   };
+  // 🔎 연관 검색어 확장 — 입력 키워드의 네이버 자동완성어를 미리 받아, 방문 때 가끔(약 30%) 그 롱테일로도 진입한다.
+  //   실제 사람들이 대표어만 치지 않고 다양한 표현으로 검색해 들어오는 패턴 → 유입 검색어가 다양해져 자연스럽고 노출 폭도 넓어짐.
+  const relatedKw: string[] = [];
+  const acHeaders = { "User-Agent": UA, "Referer": "https://search.naver.com/" };
+  const buildRelated = async () => {
+    const seeds = Array.from(new Set(keywords.map(s => String(s || "").trim()).filter(Boolean))).slice(0, 8);
+    for (const q of seeds) {
+      try {
+        const url = `https://ac.search.naver.com/nx/ac?q=${encodeURIComponent(q)}&con=1&frm=nv&ans=2&r_format=json&r_enc=UTF-8&r_unicode=0&t_koreng=1&run=2&rev=4&q_enc=UTF-8&st=100`;
+        const r = await fetch(url, { headers: acHeaders });
+        const j: any = await r.json();
+        for (const it of (j?.items?.[0] || [])) { const t = String(it?.[0] || "").trim(); if (t && t.length <= 25 && !keywords.includes(t) && !relatedKw.includes(t)) relatedKw.push(t); }
+      } catch { /* skip */ }
+    }
+    if (relatedKw.length) log(`  🔎 연관 검색어 ${relatedKw.length}개 확보 — 방문마다 가끔 롱테일로도 진입해 검색어를 다양화합니다`);
+  };
+  // 대표 키워드 or 연관어 선택(연관어 있으면 약 30% 확률로 롱테일)
+  const pickKeywordMix = (i: number): string => {
+    if (relatedKw.length && Math.random() < 0.3) return relatedKw[inflowRndInt(0, relatedKw.length - 1)];
+    return pickKeyword(i);
+  };
   let [tmin, tmax] = params.intervalSec || [30, 90];
   // ⏱️ 시간 분산 — spreadHours에 걸쳐 rounds회를 자연스럽게 흘려보냄(평균 텀=총시간/횟수, ±40% 랜덤)
   if (params.spreadHours && params.spreadHours > 0 && rounds > 1) {
@@ -5868,12 +5968,13 @@ export async function searchInflow(params: {
   if (multiAcct && params.requireLogin) log(`🔄 다계정 로테이션 — ${loginAccts.length}개 계정을 번갈아 로그인해 저장·찜·공감을 계정마다 실행해요(각 계정 자기 IP)`);
   const typeLabel = (t: InflowTarget) => t.type === "place" ? "플레이스" : t.type === "store" ? "스마트스토어" : "블로그";
   log(`🚀 검색유입 시작 — 대상 ${typeLabel(target)}, 키워드 ${keywords.length}개, 총 ${rounds}회 방문, 텀 ${tmin}~${tmax}초`);
+  await buildRelated();   // 🔎 연관 검색어 미리 확보(가끔 롱테일로 진입해 검색어 다양화)
 
   for (let i = 0; i < rounds; i++) {
     if (params.shouldStop?.()) { log("⏹️ 정지 요청 — 중단"); break; }
     if (params.onQuota && !(await params.onQuota())) { log("🛑 오늘 유입 한도 초과 — 중단(자정 초기화 또는 등급 상향)"); break; }
 
-    const kw = pickKeyword(i);
+    const kw = pickKeywordMix(i);
     const curTarget = targets[i % targets.length];   // 여러 대상 로테이션
     const curLabel = curTarget.type === "place" ? "플레이스" : curTarget.type === "store" ? "스마트스토어 " + ((curTarget as any).storeId || "") : "블로그 " + (curTarget as any).blogId;
     log(`\n[${i + 1}/${rounds}] 🔍 "${kw}" → ${curLabel} 유입`);
