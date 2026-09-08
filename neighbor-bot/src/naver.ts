@@ -5380,6 +5380,13 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
         if (landed !== page) await landed.close().catch(() => {});
         return null;
       }
+      // 🚫 URL은 스토어인데 실제 내용이 네이버 차단페이지('현재 서비스 접속이 불가')면 헛체류·헛성공(테리: "접속 안되는데 유입완료?") 방지 → 무효.
+      const blocked = await landed.evaluate(() => /현재 서비스 접속이 불가|서비스 접속이 불가|접속이 일시적으로 제한|비정상적인 접근|일시적으로 이용/i.test((document.body && document.body.innerText) || "")).catch(() => false);
+      if (blocked) {
+        log("  🚫 스토어 URL은 도달했지만 네이버 차단페이지(현재 서비스 접속이 불가) — 유입 무효 처리(성공으로 안 셈, 다음 방문에서 새 IP로 재시도)");
+        if (landed !== page) await landed.close().catch(() => {});
+        return null;
+      }
       log(`  🛒 대상 스토어 진입 확인 — ${/\/products\//.test(new URL(landed.url()).pathname) ? "상품 상세" : "스토어 홈(유효 체류)"}`);
     }
     return landed;
@@ -6071,7 +6078,8 @@ export async function searchInflow(params: {
     try {
       browser = await launchBrowser(acct, { headless: !params.visible, feature: "inflow", ownerUserId: params.ownerUserId, authToken: params.authToken, log });
       // 접속 기기 결정 — mix면 방문마다 랜덤(사람처럼 모바일/PC 섞임)
-      const dev = params.device === "mix" ? (Math.random() < 0.5 ? "pc" : "mobile") : (params.device === "pc" ? "pc" : "mobile");
+      // 🛒 스토어는 PC에서 네이버가 비로그인 봇을 로그인창(nid)으로 튕긴다(실측: PC 막힘·모바일 통과). → 스토어는 모바일 강제.
+      const dev = curTarget.type === "store" ? "mobile" : (params.device === "mix" ? (Math.random() < 0.5 ? "pc" : "mobile") : (params.device === "pc" ? "pc" : "mobile"));
       const context = await browser.newContext(
         dev === "pc"
           ? { userAgent: INFLOW_PC_UA, viewport: { width: 1280, height: 800 }, locale: "ko-KR" }
@@ -6090,7 +6098,8 @@ export async function searchInflow(params: {
             const url = req.url();
             if (AD_HOSTS.test(url)) return route.abort();               // 광고·트래킹(둘 다 차단)
             if (type === "media" || type === "font") return route.abort(); // 영상·폰트(둘 다 차단)
-            if (dataSaver === "max" && type === "image") return route.abort(); // 초절약만 이미지 차단
+            // 🛒 스토어는 초절약이라도 이미지를 막지 않는다 — 이미지 차단이 네이버에 content-blocker(비정상 접근)로 감지돼 '현재 서비스 접속이 불가' 차단페이지를 유발함(실측+서치). 스토어만 이미지 허용.
+            if (dataSaver === "max" && type === "image" && curTarget.type !== "store") return route.abort(); // 초절약만 이미지 차단(스토어 제외)
             return route.continue();
           } catch { try { return route.continue(); } catch { return; } }
         });
