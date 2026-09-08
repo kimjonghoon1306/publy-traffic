@@ -150,8 +150,12 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const C = THEMES[theme];
 
   // 🔁 탭을 옮겨도·앱을 껐다 켜도 입력값이 유지되게 — 고정 키(userId 무관, 로그인 로딩중 초기화 방지)
-  const formKey = "publy_inflow_form";
-  const saved0: any = (() => { try { return JSON.parse(localStorage.getItem("publy_inflow_form") || "{}"); } catch { return {}; } })();
+  //   ★2026-09-09(테리, git비교): 관리자페이지(AdminPage)와 회원앱(TrafficApp)이 이 키를 '공유'했다.
+  //   회원앱은 licenseSaver=ultra가 dataSaver를 매번 초절약(max)으로 강제해 이 키에 저장 → 관리자가 절약으로
+  //   바꿔도 재설치·새로고침하면 회원앱이 오염시킨 초절약을 다시 읽어 되돌아갔다(v2.10.188 userTouchedSaverRef로도
+  //   못 잡던 진짜 원인). 테리 지시대로 '관리자↔회원 각각 분리' → memberMode로 키를 나눈다.
+  const formKey = memberMode ? "publy_inflow_form" : "publy_inflow_form_admin";
+  const saved0: any = (() => { try { return JSON.parse(localStorage.getItem(formKey) || "{}"); } catch { return {}; } })();
   const [targetType, setTargetType] = useState<"place" | "blog" | "store">(saved0.targetType ?? "place");
   const [blTab, setBlTab] = useState(false);  // 🔗 백링크 탭 활성(유입 targetType과 분리 — 유입 로직 안 건드림)
   // 🎫 현재 대상이 미승인이면 승인된 첫 대상으로 자동 전환(미승인 화면에 갇히지 않게)
