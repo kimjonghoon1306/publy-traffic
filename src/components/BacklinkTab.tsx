@@ -182,8 +182,16 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     setAutoBusy(true);
     const { error } = await supabase.rpc("backlink_my_set_auto_send", { p_token: token, p_order_id: sel, p_on: on });
     setAutoBusy(false);
-    if (!error) { setAutoOn(on); loadAuto(); }
-  }, [token, sel, autoBusy, loadAuto]);
+    if (!error) {
+      setAutoOn(on); loadAuto();
+      // 🕒 켜고 끌 때 로그에 명확히 안내(테리: "켜짐이라는 안내도 6시간마다 5개 설명도 안 뜬다")
+      const dom = subs.find(s => s.id === sel)?.target_domain || "이 도메인";
+      if (on) pushLog("index", `🕒 자동 발송 켜짐 — 지금부터 [${dom}]은(는) 앱을 안 켜도 6시간마다 5개씩 자동으로 발송돼요(하루 최대 20개). 끄면 즉시 멈춰요.`);
+      else pushLog("warn", `⏸ 자동 발송 꺼짐 — [${dom}] 자동 발송을 멈췄어요. 필요하면 언제든 다시 켤 수 있어요.`);
+    } else {
+      pushLog("fail", `자동 발송 변경 실패: ${error.message}`);
+    }
+  }, [token, sel, autoBusy, loadAuto, subs, pushLog]);
 
   useEffect(() => { loadSubs(); loadMyKey(); loadGemKey(); loadMyGithub(); const iv = setInterval(loadSubs, 20000); return () => clearInterval(iv); }, [loadSubs, loadMyKey, loadGemKey, loadMyGithub]);
   useEffect(() => { if (logBoxRef.current) logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight; }, [logs]);
@@ -224,7 +232,9 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     const want = Math.min(QTY_MAX, unlimited ? Math.max(1, qty) : Math.min(qty, remainToday));  // 한 번에 최대 50(락)
     if (!unlimited && remainToday <= 0) { pushLog("warn", "오늘 발송 한도를 다 썼어요 — 자정에 초기화돼요."); return; }
     setRunning(true); setLogs([]);   // 항상 새로 시작(로그 초기화)
-    pushLog("wait", `준비 중… ${cur.target_domain}에 ${want}개 발송을 시작합니다`);
+    pushLog("wait", `준비 중… ${cur.target_domain}에 ${want}개 발송을 시작합니다 (지금 바로 = 수동 발송)`);
+    // 🕒 자동 발송이 켜져 있으면, 이 수동 발송과 별개로 6시간마다도 계속 나간다는 걸 알려준다(테리: 헷갈리지 않게 디테일하게)
+    if (autoOn) pushLog("index", `🕒 이 도메인은 자동 발송도 켜져 있어요 — 이 수동 발송과 별개로 6시간마다 5개씩 자동으로도 나가요.`);
     // 🔑 색인키 출처를 로그에 명확히(테리: 본인키/관리자키 구분 이쁘게). 소스·주소는 비노출, 키 출처만.
     if (isAdminKey) pushLog("index", "🔑 관리자 빙(색인)키가 입력되어 있어요 — 관리자 키로 색인합니다");
     else if (keyMasked) pushLog("index", "🔑 본인 빙(색인)키를 입력하셨어요 — 내 키로 색인합니다");
@@ -238,11 +248,11 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
         const d = JSON.parse(e.data);
         if (d.type === "log") pushLog(d.kind || "wait", d.msg);
         else if (d.type === "error") { pushLog("fail", "❌ " + d.msg); es.close(); setRunning(false); }
-        else if (d.type === "done") { pushLog("done", `🎉 발송 완료 — 이번에 ${d.posted}개 게시됐어요`); es.close(); setRunning(false); loadSubs(); }
+        else if (d.type === "done") { pushLog("done", `🎉 발송 완료 — 이번에 ${d.posted}개 게시됐어요`); if (autoOn) pushLog("index", `🕒 자동 발송이 켜져 있어 앞으로도 6시간마다 5개씩 계속 나가요.`); es.close(); setRunning(false); loadSubs(); loadAuto(); }
       } catch {}
     };
     es.onerror = () => { pushLog("fail", "❌ 연결 오류 — 봇 서버(3374)를 확인해주세요"); es.close(); setRunning(false); };
-  }, [cur, running, unlimited, qty, remainToday, token, pushLog, loadSubs, isAdminKey, keyMasked, keyWaiting]);
+  }, [cur, running, unlimited, qty, remainToday, token, pushLog, loadSubs, isAdminKey, keyMasked, keyWaiting, autoOn, loadAuto]);
 
   const stopPublish = useCallback(() => { esRef.current?.close(); setRunning(false); pushLog("warn", "⏹ 그만뒀어요 — 설정을 바꾼 뒤 다시 시작하면 처음부터 진행돼요"); }, [pushLog]);
 
@@ -326,15 +336,32 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
       </div>
       {/* ── 🎛️ 상단: 대상 도메인 요약 (항상 보임) ── */}
       {cur && (
-        <div style={card({ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" })}>
-          <span style={{ width: 4, height: 18, borderRadius: 2, background: C.accent }} />
-          <b style={{ fontSize: 15, color: C.ink }}>{cur.target_domain}</b>
-          <span style={chip(C.soft, C.accent)}>{PLAN_LABEL[cur.plan] || cur.plan}{unlimited ? " · 무제한" : ` · 하루 ${cur.daily_limit}`}</span>
-          {running && <span style={chip(logC.post.bg, logC.post.fg)}>발송 중…</span>}
-          <div style={{ marginLeft: "auto", display: "flex", gap: 12, fontSize: 12, fontWeight: 700, color: C.sub }}>
-            <span>누적 <b style={{ color: logC.post.fg }}>{cur.total_posted}</b></span>
-            <span>색인 <b style={{ color: logC.done.fg }}>{cur.indexed}</b></span>
+        <div style={card({ marginBottom: 10 })}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ width: 4, height: 18, borderRadius: 2, background: C.accent }} />
+            <b style={{ fontSize: 15, color: C.ink }}>{cur.target_domain}</b>
+            <span style={chip(C.soft, C.accent)}>{PLAN_LABEL[cur.plan] || cur.plan}{unlimited ? " · 무제한" : ` · 하루 ${cur.daily_limit}`}</span>
+            {running && <span style={chip(logC.post.bg, logC.post.fg)}>발송 중…</span>}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 12, fontSize: 12, fontWeight: 700, color: C.sub }}>
+              <span>누적 <b style={{ color: logC.post.fg }}>{cur.total_posted}</b></span>
+              <span>색인 <b style={{ color: logC.done.fg }}>{cur.indexed}</b></span>
+            </div>
           </div>
+          {/* 🔀 도메인 전환 — 여러 도메인이면 여기서 바로 바꿔요(발송·성과 화면이 통째로 그 도메인 걸로 갱신) */}
+          {subs.length > 1 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: C.sub }}>🔀 도메인 선택:</span>
+              {subs.map(s => {
+                const on = s.id === sel;
+                return (
+                  <button key={s.id} onClick={() => { if (running) return; setSel(s.id); }} disabled={running} title={running ? "발송 중엔 바꿀 수 없어요" : "이 도메인으로 전환"}
+                    style={{ padding: "5px 12px", borderRadius: 99, border: `1.5px solid ${on ? C.accent : C.line}`, background: on ? C.accent : C.panel, color: on ? "#fff" : C.sub, fontSize: 12, fontWeight: 800, cursor: running ? "default" : "pointer", fontFamily: "inherit", opacity: running && !on ? 0.5 : 1 }}>
+                    {on ? "✓ " : ""}{s.target_domain}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
