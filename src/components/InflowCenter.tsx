@@ -297,7 +297,12 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [comp, setComp] = useState<{ top: { rank: number; name: string; category: string; review: number; blog: number; isMine: boolean }[]; myRank: number | null } | null>(null);
   // 🔎 키워드 발굴
   const [kwLoading, setKwLoading] = useState(false);
-  const [kwSuggest, setKwSuggest] = useState<string[]>([]);
+  // 🎯 키워드 도우미 — 추천 결과에 출처(자동완성=실검색어/연관=함께찾음)+검색량(vol, 검색광고 API 연동 시)
+  const [kwSuggest, setKwSuggest] = useState<{ keyword: string; source: string; vol?: number }[]>([]);
+  // 🧩 조합 생성기 입력(지역·업종·메뉴/목적) — "고객이 치는 말"로 메인+세부 키워드 자동 조합
+  const [cbRegion, setCbRegion] = useState("");
+  const [cbType, setCbType] = useState("");
+  const [cbExtra, setCbExtra] = useState("");
   // 💬 리뷰 감정분석
   const [revLoading, setRevLoading] = useState(false);
   const [revResult, setRevResult] = useState<{ total: number; likes: { word: string; n: number }[]; dislikes: { word: string; n: number }[] } | null>(null);
@@ -602,15 +607,37 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       const j = await r.json();
       if (!j.ok) { toast(j.error || "추천 실패", "error"); return; }
       const already = new Set(keywords.split(/[,\n]/).map(k=>k.trim()));
-      const list = (j.keywords || []).map((k: any)=>k.keyword).filter((k: string)=>k && !already.has(k)).slice(0, 24);
+      const list = (j.keywords || [])
+        .filter((k: any)=>k?.keyword && !already.has(k.keyword))
+        .map((k: any)=>({ keyword: String(k.keyword), source: String(k.source||"추천"), vol: typeof k.vol==="number"?k.vol:undefined }))
+        .slice(0, 30);
       if (!list.length) { toast("새로운 추천 키워드가 없어요", "info"); }
       setKwSuggest(list);
     } catch { toast("키워드 추천 실패 — 봇 서버(3364) 확인", "error"); }
     finally { setKwLoading(false); }
   };
+  // 🧩 조합 생성기 — 지역·업종·메뉴/목적으로 메인(지역+업종)+세부(지역+메뉴/목적) 키워드 자동 생성
+  const genCombos = () => {
+    const region = cbRegion.trim(), type = cbType.trim();
+    const extras = cbExtra.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);
+    if (!region && !type && !extras.length) { toast("지역·업종·메뉴 중 하나 이상 넣어주세요", "error"); return; }
+    const out: { keyword: string; source: string }[] = [];
+    const push = (kw: string, src: string) => { const t = kw.replace(/\s+/g," ").trim(); if (t && !out.some(o=>o.keyword===t)) out.push({ keyword: t, source: src }); };
+    if (region && type) push(`${region} ${type}`, "조합·메인");
+    for (const e of extras) {
+      if (region) push(`${region} ${e}`, "조합·세부");
+      if (region && type) push(`${region} ${e} ${type}`, "조합·세부");
+      if (type) push(`${e} ${type}`, "조합·세부");
+    }
+    const already = new Set(keywords.split(/[,\n]/).map(k=>k.trim()));
+    const fresh = out.filter(o=>!already.has(o.keyword));
+    if (!fresh.length) { toast("생성된 키워드가 이미 다 들어있어요", "info"); return; }
+    setKwSuggest(prev => { const seen = new Set(prev.map(p=>p.keyword)); return [...fresh.filter(f=>!seen.has(f.keyword)), ...prev]; });
+    toast(`🧩 키워드 ${fresh.length}개 생성 — 아래에서 눌러 추가하세요`, "success");
+  };
   const addSuggestedKeyword = (k: string) => {
     setKeywords(prev => { const list = prev.split(/[,\n]/).map(x=>x.trim()).filter(Boolean); if (list.includes(k)) return prev; return [...list, k].join(", "); });
-    setKwSuggest(prev => prev.filter(x => x !== k));
+    setKwSuggest(prev => prev.filter(x => x.keyword !== k));
   };
 
   // 🏪 현재 입력한 대상을 이름 붙여 저장 — 플레이스/블로그/스토어 각각 격리
@@ -1822,16 +1849,52 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
           </div>
           <textarea value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder={targetType === "store" ? "예) 홍삼 스틱, 산양삼 선물세트, 6년근 홍삼" : targetType === "blog" ? "예) 강남 맛집 후기, 부업 추천, 블로그 체험단" : "예) 강남 맛집, 강남역 삼겹살, 역삼동 고깃집"} rows={2} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
           <div style={{ fontSize: 11, fontWeight: 600, color: C.sub, marginTop: 4 }}>🔒 키워드는 {targetType === "store" ? "스마트스토어" : targetType === "blog" ? "블로그" : "플레이스"} 전용으로 따로 저장돼요 — 대상을 바꿔도 서로 섞이지 않아요.</div>
-          {kwSuggest.length > 0 && (
-            <div style={{ marginTop: 8, padding: 12, borderRadius: 12, background: C.panel2, border: `1px solid ${C.line}` }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: C.sub, marginBottom: 8 }}>💡 이런 키워드도 있어요 (눌러서 추가)</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {kwSuggest.map((k) => (
-                  <button key={k} onClick={() => addSuggestedKeyword(k)} style={{ padding: "6px 12px", borderRadius: 999, border: `1px solid ${C.line2}`, background: C.panel, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>+ {k}</button>
-                ))}
-              </div>
+
+          {/* 🧩 키워드 조합 생성기 — "고객이 치는 말"로 메인+세부 자동 조합 */}
+          <div style={{ marginTop: 10, padding: 12, borderRadius: 12, background: C.glow, border: `1.5px solid ${C.line2}` }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 3 }}>🧩 키워드 조합 만들기 <span style={{ color: C.sub, fontWeight: 600, fontSize: 11 }}>· 고객이 검색창에 치는 말로</span></div>
+            <div style={{ fontSize: 11, color: C.sub, fontWeight: 600, lineHeight: 1.5, marginBottom: 8 }}>
+              {targetType === "store"
+                ? <>대표 카테고리 + 용도/대상/특징을 넣으면 <b>메인·세부 키워드</b>를 자동으로 만들어요. (예: 홍삼스틱 / 부모님선물·6년근)</>
+                : <>지역 + 업종 + 메뉴/목적을 넣으면 <b>메인(지역+업종)·세부(지역+메뉴)</b> 키워드를 자동으로 만들어요. 신규 매장은 <b>세부부터</b> 노려요.</>}
             </div>
-          )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <input value={cbRegion} onChange={e=>setCbRegion(e.target.value)} placeholder={targetType==="store"?"대표 카테고리 (예: 홍삼스틱)":"지역 (예: 역삼동)"} style={{ ...inputStyle, flex: "1 1 130px", minWidth: 110 }} />
+              <input value={cbType} onChange={e=>setCbType(e.target.value)} placeholder={targetType==="store"?"핵심 특징 (예: 6년근)":"업종 (예: 삼겹살)"} style={{ ...inputStyle, flex: "1 1 130px", minWidth: 110 }} />
+              <input value={cbExtra} onChange={e=>setCbExtra(e.target.value)} placeholder={targetType==="store"?"용도·대상 (쉼표: 선물, 면역력)":"메뉴·목적 (쉼표: 회식, 데이트)"} style={{ ...inputStyle, flex: "1 1 100%" }} />
+            </div>
+            <button onClick={genCombos} style={{ marginTop: 8, padding: "9px 16px", borderRadius: 9, border: "none", background: `linear-gradient(135deg,${C.accent},#8b5cf6)`, color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>🧩 조합 키워드 만들기</button>
+          </div>
+
+          {kwSuggest.length > 0 && (()=>{
+            // 메인(어절 2 이하=지역+업종 대장) / 세부(롱테일) 분류. 검색량(vol) 있으면 큰 순 정렬.
+            const isMain = (kw: string) => kw.trim().split(/\s+/).length <= 2;
+            const sortVol = (a:any,b:any)=> (b.vol??-1)-(a.vol??-1);
+            const mains = kwSuggest.filter(k=>isMain(k.keyword)).sort(sortVol);
+            const subs  = kwSuggest.filter(k=>!isMain(k.keyword)).sort(sortVol);
+            const srcBadge = (s:string)=> s.includes("자동완성")?"실검색어": s.includes("연관")?"함께찾음": s.includes("조합")?"내조합": "추천";
+            const chip = (k:{keyword:string;source:string;vol?:number}, main:boolean)=>(
+              <button key={k.keyword} onClick={()=>addSuggestedKeyword(k.keyword)} title={`출처: ${srcBadge(k.source)}${k.vol!=null?` · 월 검색량 ${k.vol.toLocaleString()}`:""}`}
+                style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 11px", borderRadius:999, border:`1.5px solid ${main?C.accent:C.line2}`, background: main?C.glow:C.panel, color:C.ink, fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                + {k.keyword}
+                {k.vol!=null && <span style={{ fontSize:10, fontWeight:800, color:C.accent }}>🔍{k.vol>=10000?`${Math.round(k.vol/1000)}천`:k.vol.toLocaleString()}</span>}
+                <span style={{ fontSize:9.5, fontWeight:700, color:C.sub, opacity:.8 }}>{srcBadge(k.source)}</span>
+              </button>
+            );
+            return (
+              <div style={{ marginTop: 8, padding: 12, borderRadius: 12, background: C.panel2, border: `1px solid ${C.line}` }}>
+                {mains.length>0 && <>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, color: C.accent, marginBottom: 6 }}>🔵 메인 키워드 <span style={{ color: C.sub, fontWeight: 600 }}>· 검색량 많음·경쟁 심함 (기둥 1개)</span></div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>{mains.map(k=>chip(k,true))}</div>
+                </>}
+                {subs.length>0 && <>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, color: "#059669", marginBottom: 6 }}>🟢 세부 키워드 <span style={{ color: C.sub, fontWeight: 600 }}>· 경쟁 낮음·전환 높음 (신규는 여기부터!)</span></div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{subs.map(k=>chip(k,false))}</div>
+                </>}
+                <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 8, lineHeight: 1.5 }}>💡 <b>실검색어</b>=사람들이 실제로 치는 말 · <b>함께찾음</b>=연관검색어{kwSuggest.some(k=>k.vol!=null)?" · 🔍=월 검색량":""}. 메인 1 + 세부 4~5개로 채우세요.</div>
+              </div>
+            );
+          })()}
         </div>
 
         <GroupHeader n="2" color="#7c3aed" title="어떻게 방문할까 (자연스럽게)" desc="접속 기기·방문 텀·횟수·체류시간·액션 확률 — 진짜 손님처럼" />
