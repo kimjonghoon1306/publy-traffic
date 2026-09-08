@@ -224,9 +224,16 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [dwellDraft, setDwellDraft] = useState<string>(String(saved0.maxDwellSec ?? 30)); // 직접지정 입력 임시값(설정 버튼 눌러야 확정)
   const [dataSaver, setDataSaver] = useState<"normal" | "save" | "max">(saved0.dataSaver ?? "save"); // 💾 데이터(프록시) 절약 모드
   const [dataSaverInfo, setDataSaverInfo] = useState(false); // ⓘ 설명 팝업
-  // 🎫 관리자가 라이선스로 데이터 절약 모드를 지정하면 강제 적용(고객은 못 바꿈). ultra→max 매핑.
-  const licenseSaverLocked = !!licenseSaver;
-  useEffect(() => { if (!licenseSaver) return; const m = licenseSaver === "ultra" ? "max" : licenseSaver === "save" ? "save" : "normal"; setDataSaver(m as any); }, [licenseSaver]);
+  // ★2026-09-08(테리): 예전엔 관리자 licenseSaver를 매 폴링마다 강제 적용 → 회원이 '절약'으로 바꿔도 20초 뒤 초절약으로
+  //   되돌아감(백링크 무제한 튐과 동일 버그). 이제 licenseSaver는 '기본값'으로만 쓰고, 회원이 직접 바꾸면 그 선택을 존중한다.
+  const userTouchedSaverRef = useRef(false);   // 회원이 데이터절약을 직접 눌렀나
+  const licenseSaverLocked = false;             // 회원이 항상 바꿀 수 있게(스토어는 이미지 필요 → 절약 선택 필수)
+  useEffect(() => {
+    if (!licenseSaver || userTouchedSaverRef.current) return;   // 회원이 손댔으면 폴링이 안 덮음
+    const m = licenseSaver === "ultra" ? "max" : licenseSaver === "save" ? "save" : "normal";
+    setDataSaver(m as any);
+  }, [licenseSaver]);
+  const chooseDataSaver = (m: "normal" | "save" | "max") => { userTouchedSaverRef.current = true; setDataSaver(m); };
   // ➕ 추가 대상(주소 목록) — 대상(플레이스/블로그/스토어)별로 격리(서로 섞이지 않게)
   const [extraByType, setExtraByType] = useState<{ place: string[]; blog: string[]; store: string[] }>(() => {
     const legacy = private0.extraTargets ?? saved0.extraTargets ?? [];
@@ -1922,7 +1929,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             {([["normal", "🟢 일반", "다 받음 · 가장 자연스러움", "약 1만 회"], ["save", "💾 절약", "영상·광고·폰트 차단 · GB 반절", "약 2만 회"], ["max", "🔋 초절약", "이미지까지 차단 · GB 1/10", "약 7만 회"]] as const).map(([k, lb, desc, cnt]) => {
               const on = dataSaver === k;
               return (
-                <button key={k} onClick={() => { setDataSaver(k); toast(`💾 데이터 '${lb.replace(/^[^ ]+ /, "")}' 모드 선택됨`, "success"); }} style={{ flex: "1 1 150px", minWidth: 140, padding: "11px", borderRadius: 10, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                <button key={k} onClick={() => { chooseDataSaver(k); toast(`💾 데이터 '${lb.replace(/^[^ ]+ /, "")}' 모드 선택됨 — 이 선택이 유지돼요`, "success"); }} style={{ flex: "1 1 150px", minWidth: 140, padding: "11px", borderRadius: 10, border: `2px solid ${on ? C.accent : C.line2}`, background: on ? C.glow : C.panel2, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
                   <div style={{ fontSize: 13.5, fontWeight: 900, color: on ? C.accent : C.ink }}>{on ? "✓ " : ""}{lb}</div>
                   <div style={{ fontSize: 10.5, fontWeight: 600, color: C.sub, marginTop: 1 }}>{desc}</div>
                   {unlimited && <div style={{ fontSize: 10.5, fontWeight: 800, color: on ? C.accent : C.cyan, marginTop: 3 }}>📊 50GB로 {cnt}</div>}
