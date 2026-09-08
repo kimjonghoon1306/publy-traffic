@@ -400,6 +400,15 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url); return { action: "deny" };
   });
+  // ★2026-09-08(테리): 회원이 실수로 새로고침(Cmd+R/F5/Cmd+Shift+R)하면 진행 중이던 로그·화면이 초기화됨.
+  //   실제 작업은 봇(브라우저)이 하므로 앱 새로고침은 필요 없다 → 배포판에서 새로고침 단축키를 막는다(개발 중엔 허용).
+  if (!isDev) {
+    mainWindow.webContents.on("before-input-event", (event, input) => {
+      const key = (input.key || "").toLowerCase();
+      const isReload = key === "f5" || ((input.control || input.meta) && key === "r");
+      if (isReload) event.preventDefault();
+    });
+  }
   if (isDev) {
     mainWindow.loadURL("http://localhost:5173");
   } else {
