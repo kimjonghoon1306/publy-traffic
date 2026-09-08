@@ -8155,7 +8155,7 @@ POST3: (제목)|(이유)
               <div aria-hidden={tab!=="crawl"} style={{ display: tab==="crawl" ? "block" : "none", pointerEvents: tab==="crawl" ? "auto" : "none" }}><CrawlCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} /></div>
             )}
             {visitedAutoTabs.has("inflow") && inflowEnabled && (
-              <div aria-hidden={tab!=="inflow"} style={{ display: tab==="inflow" ? "block" : "none", pointerEvents: tab==="inflow" ? "auto" : "none" }}><InflowCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} /></div>
+              <div aria-hidden={tab!=="inflow"} style={{ display: tab==="inflow" ? "block" : "none", pointerEvents: tab==="inflow" ? "auto" : "none" }}><InflowCenter showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} onBusyChange={setInflowBusy} onManageAccounts={()=>setTab("accounts")} /></div>
             )}
             {visitedAutoTabs.has("place") && place360Enabled && (
               <div aria-hidden={tab!=="place"} style={{ display: tab==="place" ? "block" : "none", pointerEvents: tab==="place" ? "auto" : "none" }}><Place360 showToast={showToast} theme={theme==="dark"?"dark":"light"} userId={user.id} plan={user.plan} onOpenCrawl={()=>setTab("crawl")} onOpenReview={()=>setTab("place_reply")} /></div>
