@@ -634,6 +634,7 @@ const TABS = [
   {k:"blogscore",       i:"📈", l:"블로그 지수"},
   {k:"crawl",           i:"🔍", l:"크롤링"},
   {k:"inflow",          i:"🆕", l:"트래픽 유입"},
+  {k:"proxy",           i:"🌐", l:"프록시 IP"},
   {k:"place",           i:"🏪", l:"플레이스 365"},
   {k:"place_reply",     i:"🗣️", l:"플레이스 리뷰답글"},
   {k:"accounts",        i:"🔗", l:"계정관리"},
@@ -656,7 +657,6 @@ const TABS = [
   {k:"reply_manage",    i:"↩️", l:"답방 관리"},
   {k:"blogscore_manage",i:"🩺", l:"지수 관리"},
   {k:"settings",        i:"🔐", l:"설정"},
-  {k:"proxy",           i:"🌐", l:"프록시 IP"},
 ] as const;
 
 export default function AdminPage({onBack, onDashboard, theme, onThemeToggle}: Props) {

@@ -66,7 +66,10 @@ async function launchBrowser(
         return `${parsed.protocol}//${head}•••${parsed.port ? `:${parsed.port}` : ""}`;
       } catch { return "설정됨(주소 보호)"; }
     })();
-    opts.log?.(`🔒 프록시 사용: ${masked}`);
+    opts.log?.(`🔒 프록시 사용 중 — 내 실제 IP를 가리고 ${masked} 로 접속해요(안전)`);
+  } else if (opts.feature === "inflow") {
+    // ★2026-09-08 테리: 유입은 프록시 없으면 내 실제 IP로 나가 차단 위험 → 로그에 명확히 경고(스토어·플레이스·블로그 공통).
+    opts.log?.(`⚠️ 프록시 미배정 — 내 실제 IP로 접속해요(네이버 차단 위험). 관리자 [🌐 프록시 IP]에서 이 계정에 배정하고 '유입' 기능을 켜면 안전해져요.`);
   }
   return chromium.launch({
     headless: opts.headless ?? true,
