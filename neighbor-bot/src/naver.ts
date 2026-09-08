@@ -5357,6 +5357,7 @@ async function inflowDiagnose(page: any, target: InflowTarget, log: (m: string) 
 //  ★플레이스는 지도(map)로 새지 않게 "플레이스 상세" 링크를 우선 클릭한다.
 async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: string) => void): Promise<any | null> {
   const needle = target.type === "place" ? String(target.placeId) : target.type === "blog" ? String(target.blogId) : String((target as any).productId || (target as any).storeId || "");
+  const isNidLogin = (u: string) => /nid\.naver\.com/.test(u || "");
   const enterVia = async (link: any, s: number) => {
     log(`  🎯 검색결과에서 대상 발견(약 ${s + 1}스크롤 지점) → 클릭 진입`);
     const ctx = page.context();
@@ -5367,7 +5368,14 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
     ]);
     await page.waitForTimeout(inflowRndInt(1200, 2400));
     const pages = ctx.pages();
-    return pages.length > before ? pages[pages.length - 1] : page;
+    const landed = pages.length > before ? pages[pages.length - 1] : page;
+    // 🔐 네이버가 봇 의심으로 로그인창(nid.naver.com)으로 튕기면: 절대 로그인하지 않고 조용히 빠져나온다(이 방문 무효 → 다음 방문에서 다른 IP로 재시도).
+    if (isNidLogin(landed.url())) {
+      log("  🔐 네이버가 로그인창으로 유도 — 봇은 로그인하지 않고 이 진입을 취소합니다(다음 방문에서 새 IP로 재시도).");
+      if (landed !== page) { await landed.close().catch(() => {}); } else { await page.goBack({ timeout: 8000 }).catch(() => {}); }
+      return null;
+    }
+    return landed;
   };
   // 🧑 실사용자 패턴 — 바로 첫 결과를 누르지 않고 검색결과를 먼저 훑어본다(비교 탐색 후 선택)
   try {
@@ -5418,6 +5426,11 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
         ]);
         const pgs = ctx.pages();
         const cp = pgs.length > before ? pgs[pgs.length - 1] : page;
+        // 🔐 경쟁상품이 광고/추적 링크라 로그인창으로 튕겼으면: 스크롤하지 말고 즉시 정리하고 넘어간다.
+        if (isNidLogin(cp.url())) {
+          if (cp !== page) { await cp.close().catch(() => {}); } else { await page.goBack({ timeout: 8000 }).catch(() => {}); await page.waitForTimeout(inflowRndInt(800, 1600)); }
+          continue;
+        }
         // 경쟁 상품 잠깐 둘러보고(스크롤) 닫거나 뒤로
         for (let s = 0; s < inflowRndInt(2, 4); s++) { await cp.mouse.wheel(0, inflowRndInt(500, 1200)).catch(() => {}); await cp.waitForTimeout(inflowRndInt(900, 2000)); }
         if (cp !== page) { await cp.close().catch(() => {}); } else { await page.goBack({ timeout: 12000 }).catch(() => {}); await page.waitForTimeout(inflowRndInt(1000, 2000)); }
@@ -5436,11 +5449,19 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
       const el = placeLink && placeLink.asElement ? placeLink.asElement() : null;
       if (el) return await enterVia(el, s);
     } else if (target.type === "store") {
-      // 🛒 상품ID 또는 스토어명이 들어간 상품 링크를 검색결과에서 찾아 클릭
+      // 🛒 상품ID 또는 스토어명이 들어간 상품 링크를 검색결과에서 찾아 클릭.
+      //   ★2026-09-09(테리, 실측): 네이버쇼핑 결과 링크는 cr.shopping/msearch 리다이렉트로 감싸져 실제 스토어 주소가
+      //   url= 파라미터에 %2F로 '인코딩'돼 있다(예: nid.naver.com/...url=https%3A%2F%2Fsmartstore.naver.com%2F01074323888...).
+      //   그래서 raw href만 보면 못 찾는다 → href를 디코드한 뒤 스토어 slug/상품ID를 매칭한다.
       const sid = String((target as any).storeId || "");
       const link = await page.evaluateHandle((args: { pid: string; sid: string }) => {
+        const dec = (h: string) => { try { return decodeURIComponent(h); } catch { return h; } };
         const as = Array.from(document.querySelectorAll("a")) as HTMLAnchorElement[];
-        return as.find(a => (args.pid && a.href.includes(args.pid)) || (args.sid && a.href.includes("smartstore.naver.com/" + args.sid))) || null;
+        return as.find(a => {
+          const h = dec(a.href || "");
+          return (args.pid && h.includes(args.pid))
+              || (args.sid && (h.includes("smartstore.naver.com/" + args.sid) || h.includes("/" + args.sid + "/") || h.includes("/" + args.sid + "?") || h.endsWith("/" + args.sid)));
+        }) || null;
       }, { pid: String((target as any).productId || ""), sid }).catch(() => null);
       const el = link && link.asElement ? link.asElement() : null;
       if (el) return await enterVia(el, s);
