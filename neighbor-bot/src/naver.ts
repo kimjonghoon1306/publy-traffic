@@ -1,5 +1,5 @@
 import { chromium, BrowserContext } from "playwright";
-import { isStoreLanding, isStoreResult } from "./inflow-store";
+import { extractStoreUrl, isStoreLanding, isStoreResult } from "./inflow-store";
 import fs from "fs";
 import https from "https";
 import http from "http";
@@ -5359,22 +5359,8 @@ async function inflowDiagnose(page: any, target: InflowTarget, log: (m: string) 
 async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: string) => void): Promise<any | null> {
   const needle = target.type === "place" ? String(target.placeId) : target.type === "blog" ? String(target.blogId) : String((target as any).productId || (target as any).storeId || "");
   const isNidLogin = (u: string) => /nid\.naver\.com/.test(u || "");
-  const enterVia = async (link: any, s: number) => {
-    log(`  🎯 검색결과에서 대상 발견 → 클릭 진입 (약 ${s + 1}스크롤 지점)`);
-    const ctx = page.context();
-    const before = ctx.pages().length;
-    let clicked = false;
-    await Promise.all([
-      page.waitForNavigation({ timeout: 15000 }).catch(() => {}),
-      link.click({ timeout: 8000 }).then(() => { clicked = true; }).catch(() => {}),
-    ]);
-    if (target.type === "store" && !clicked) {
-      log("  ⚠️ 스토어 검색결과 클릭 실패 — 방문 무효");
-      return null;
-    }
-    await page.waitForTimeout(inflowRndInt(1200, 2400));
-    const pages = ctx.pages();
-    const landed = pages.length > before ? pages[pages.length - 1] : page;
+  // 직접 진입과 클릭 폴백 모두 동일한 로그인·스토어 도착 검증을 사용한다.
+  const confirmArrival = async (landed: any) => {
     let storeArrivalReady = false;
     if (target.type === "store") {
       // 새 탭의 about:blank 및 추적 리다이렉트가 끝난 뒤 실제 스토어 도착을 확인.
@@ -5397,6 +5383,24 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
       log(`  🛒 대상 스토어 진입 확인 — ${/\/products\//.test(new URL(landed.url()).pathname) ? "상품 상세" : "스토어 홈(유효 체류)"}`);
     }
     return landed;
+  };
+  const enterVia = async (link: any, s: number) => {
+    log(`  🎯 검색결과에서 대상 발견 → 클릭 진입 (약 ${s + 1}스크롤 지점)`);
+    const ctx = page.context();
+    const before = ctx.pages().length;
+    let clicked = false;
+    await Promise.all([
+      page.waitForNavigation({ timeout: 15000 }).catch(() => {}),
+      link.click({ timeout: 8000 }).then(() => { clicked = true; }).catch(() => {}),
+    ]);
+    if (target.type === "store" && !clicked) {
+      log("  ⚠️ 스토어 검색결과 클릭 실패 — 방문 무효");
+      return null;
+    }
+    await page.waitForTimeout(inflowRndInt(1200, 2400));
+    const pages = ctx.pages();
+    const landed = pages.length > before ? pages[pages.length - 1] : page;
+    return await confirmArrival(landed);
   };
   // 🧑 실사용자 패턴 — 바로 첫 결과를 누르지 않고 검색결과를 먼저 훑어본다(비교 탐색 후 선택)
   if (target.type !== "store") try {
@@ -5437,9 +5441,21 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
       const el = placeLink && placeLink.asElement ? placeLink.asElement() : null;
       if (el) return await enterVia(el, s);
     } else if (target.type === "store") {
-      // retUrl을 파싱해 대상을 확인하되 실제 클릭은 검색결과의 원래 링크로 한다.
+      // 검색결과에 실제 노출된 대상만 추출하여 추적 래퍼 없이 진입한다.
       const hrefs: string[] = await page.$$eval("a", (as: HTMLAnchorElement[]) => as.map(a => a.href)).catch(() => []);
       const href = hrefs.find(h => isStoreResult(h, target));
+      const cleanUrl = href ? extractStoreUrl(href, target) : null;
+      if (cleanUrl) {
+        log(`  🎯 검색결과에서 대상 발견 → 스토어로 바로 진입(추적링크 우회) (약 ${s + 1}스크롤 지점)`);
+        try {
+          await page.goto(cleanUrl, { referer: page.url(), waitUntil: "domcontentloaded", timeout: 25000 });
+        } catch {
+          if (isNidLogin(page.url())) return await confirmArrival(page);
+          log("  ⚠️ 스토어 직접 진입 실패 — 방문 무효");
+          return null;
+        }
+        return await confirmArrival(page);
+      }
       const link = href ? await page.evaluateHandle((h: string) =>
         Array.from(document.querySelectorAll("a")).find(a => a.href === h) || null,
       href).catch(() => null) : null;
