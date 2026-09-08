@@ -522,11 +522,14 @@ Deno.serve(async (req) => {
     const results: any[] = [];
     try {
       const { data: orders } = await sb.rpc("admin_backlink_scheduler_targets", { p_token: schedSecret });
+      // ★2026-09-08 틱당 소량(BATCH)으로 나눠 발송 — ①Edge 150초 타임아웃 회피(끝의 실행로그 기록까지 도달) ②구글 footprint 안전(1차 하루 2~5개 권장).
+      //   6시간마다 4틱 → 하루 최대 BATCH×4개. 하루 한도가 더 작으면 remain으로 자름.
+      const SCHED_BATCH = 5;
       for (const o of (orders || [])) {
         const remain = Number(o.remain_today ?? 0);
         if (remain <= 0) { results.push({ order: o.id, skipped: "오늘 한도 소진/완료" }); continue; }
         try {
-          const posted = await runPublish(sb, noop, adminToken, o.id, o.target_domain, Math.min(remain, 50), o.keyword || "", "auto");
+          const posted = await runPublish(sb, noop, adminToken, o.id, o.target_domain, Math.min(remain, SCHED_BATCH), o.keyword || "", "auto");
           results.push({ order: o.id, domain: o.target_domain, posted });
         } catch (e) { results.push({ order: o.id, error: (e as any)?.message || String(e) }); }
       }
