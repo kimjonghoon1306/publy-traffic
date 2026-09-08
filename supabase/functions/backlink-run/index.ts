@@ -315,7 +315,7 @@ async function genOne(slot: number, gistToken: string): Promise<{ domain: string
 }
 
 // ── 핵심 게시 로직(SSE 실행·스케줄러 공유). send 콜백으로 로그 전송(SSE는 스트림, 스케줄러는 무시). posted 반환. ──
-async function runPublish(sb: any, send: (o: any) => void, adminToken: string, orderId: string, targetDomain: string, count: number, kwOverride: string): Promise<number> {
+async function runPublish(sb: any, send: (o: any) => void, adminToken: string, orderId: string, targetDomain: string, count: number, kwOverride: string, triggerType: string = "manual"): Promise<number> {
   const targetUrl = targetDomain.startsWith("http") ? targetDomain : `https://${targetDomain}`;
   send({ type: "log", kind: "wait", msg: `🚀 [서버 실행] ${targetDomain}에 최대 ${count}개` });
 
@@ -424,7 +424,7 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
             else send({ type: "log", kind: "fail", msg: `[${dom}] ⚠️ 게시 실패(가짜) — ${v.note}` });
           }
           // ★V(테리): 어떤 글이었는지 영구 저장 — evidence에 제목·본문·앵커. 감사탭에서 나중에 시분초와 함께 다시 봄.
-          const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote, article: { title: c.title, body: c.body, anchor: c.anchor } };
+          const evidence = { ...r.evidence, events: r.events, verified: realOk, verify_note: verifyNote, trigger: triggerType, article: { title: c.title, body: c.body, anchor: c.anchor } };
           const { error } = await sb.rpc("backlink_bot_record_post", {
             p_token: adminToken, p_order_id: orderId, p_source_domain: dom, p_grade: "A",
             p_status: realOk ? "posted" : "failed", p_post_url: realOk ? (r.postUrl || null) : null, p_anchor: c.anchor, p_evidence: evidence, p_proxy_used: false,
@@ -456,7 +456,7 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
                     await sb.rpc("backlink_bot_record_post", {
                       p_token: adminToken, p_order_id: orderId, p_source_domain: src, p_grade: "B",
                       p_status: "posted", p_post_url: rr.postUrl || null, p_anchor: "관련 글 보기",
-                      p_evidence: { ...rr.evidence, tier: 2, parent_url: p1 }, p_proxy_used: false,
+                      p_evidence: { ...rr.evidence, tier: 2, parent_url: p1, trigger: triggerType }, p_proxy_used: false,
                     });
                   } catch { /* 2차 기록 실패는 무시(1차는 이미 성공) */ }
                 }
@@ -467,6 +467,7 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
         } catch (e) { send({ type: "log", kind: "warn", msg: `2차 부스팅 일부 실패: ${(e as any)?.message}` }); }
 
         // 색인 자동
+        let indexedAcc = 0;   // 이번 실행 색인 수락 건수(자동발송 로그에 기록)
         send({ type: "log", kind: "index", msg: `🔎 색인(IndexNow) 요청 중…` });
         try {
           const { data: planData } = await sb.rpc("backlink_bot_indexnow_plan", { p_token: adminToken, p_order_id: orderId });
@@ -481,12 +482,17 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
             for (const u of jobs) { try { const h = new URL(u).host; if (!groups.has(h)) groups.set(h, []); groups.get(h)!.push(u); } catch { /* skip */ } }
             let acc = 0, rej = 0;
             for (const [host, urls] of groups) { const rr = await submitIndexNow(host, plan.effective_key, urls); if (rr.result === "accepted" || rr.result === "pending") acc += urls.length; else rej += urls.length; }
+            indexedAcc = acc;
             send({ type: "log", kind: "done", msg: `색인 요청 완료 · 빙 수락 ${acc}건 · 거부 ${rej}건 (실제 색인 반영은 빙 확인에서 ✅로 떠요)` });
           } else {
             send({ type: "log", kind: "warn", msg: `색인 키 미설정(색인키 탭에서 지정) — 게시는 완료됨` });
           }
         } catch (e) { send({ type: "log", kind: "warn", msg: `색인 요청 실패: ${(e as any)?.message}` }); }
 
+  // ★2026-09-08 자동발송(스케줄러)일 때만 실행 로그 기록 → 회원/관리자가 "언제 몇 개 자동발송됐는지" 확인.
+  if (triggerType === "auto") {
+    try { await sb.rpc("backlink_scheduler_log_run", { p_token: adminToken, p_order_id: orderId, p_posted: posted, p_indexed: indexedAcc }); } catch { /* 로그 실패는 무시 */ }
+  }
   return posted;
 }
 
@@ -520,7 +526,7 @@ Deno.serve(async (req) => {
         const remain = Number(o.remain_today ?? 0);
         if (remain <= 0) { results.push({ order: o.id, skipped: "오늘 한도 소진/완료" }); continue; }
         try {
-          const posted = await runPublish(sb, noop, adminToken, o.id, o.target_domain, Math.min(remain, 50), o.keyword || "");
+          const posted = await runPublish(sb, noop, adminToken, o.id, o.target_domain, Math.min(remain, 50), o.keyword || "", "auto");
           results.push({ order: o.id, domain: o.target_domain, posted });
         } catch (e) { results.push({ order: o.id, error: (e as any)?.message || String(e) }); }
       }
@@ -629,7 +635,7 @@ Deno.serve(async (req) => {
       const send = (obj: any) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
       try {
         if (!adminToken || !orderId || !targetDomain) { send({ type: "error", msg: "adminToken, orderId, targetDomain 필요" }); controller.close(); return; }
-        const posted = await runPublish(sb, send, adminToken, orderId, targetDomain, count, kwOverride);
+        const posted = await runPublish(sb, send, adminToken, orderId, targetDomain, count, kwOverride, "manual");
         send({ type: "done", posted });
         controller.close();
       } catch (e) {

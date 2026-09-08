@@ -82,6 +82,11 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const [histRows, setHistRows] = useState<{ day: string; posted: number; indexed: number }[] | null>(null);
   const [histLoading, setHistLoading] = useState(false);
 
+  // 🕒 자동 발송(스케줄러 옵트인) — 도메인별 ON/OFF + 발송 내역(링크 없이 발송여부만)
+  const [autoOn, setAutoOn] = useState(false);
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoStat, setAutoStat] = useState<{ last_run_at: string | null; today: number; week: number; runs: { at: string; posted: number; indexed: number }[] } | null>(null);
+
   const pushLog = useCallback((kind: string, msg: string) => {
     setLogs(l => [...l, { kind, msg, at: new Date().toISOString() }]);
   }, []);
@@ -164,11 +169,29 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     setKwMsg(kwInput.trim() ? "✅ 키워드 저장 — 제목·본문·앵커에 자연스럽게 반영돼요" : "✅ 키워드를 비웠어요"); setTimeout(() => setKwMsg(""), 4000);
   }, [kwInput, token]);
 
+  // 🕒 자동 발송 현황 로드(선택 도메인 기준) + 토글
+  const loadAuto = useCallback(async () => {
+    if (!token || !sel) { setAutoStat(null); return; }
+    try {
+      const { data } = await supabase.rpc("backlink_my_auto_status", { p_token: token, p_order_id: sel });
+      if (data) { setAutoOn(!!data.auto_send); setAutoStat({ last_run_at: data.last_run_at ?? null, today: Number(data.today || 0), week: Number(data.week || 0), runs: Array.isArray(data.runs) ? data.runs : [] }); }
+    } catch { /* 무시 */ }
+  }, [token, sel]);
+  const toggleAuto = useCallback(async (on: boolean) => {
+    if (!token || !sel || autoBusy) return;
+    setAutoBusy(true);
+    const { error } = await supabase.rpc("backlink_my_set_auto_send", { p_token: token, p_order_id: sel, p_on: on });
+    setAutoBusy(false);
+    if (!error) { setAutoOn(on); loadAuto(); }
+  }, [token, sel, autoBusy, loadAuto]);
+
   useEffect(() => { loadSubs(); loadMyKey(); loadGemKey(); loadMyGithub(); const iv = setInterval(loadSubs, 20000); return () => clearInterval(iv); }, [loadSubs, loadMyKey, loadGemKey, loadMyGithub]);
   useEffect(() => { if (logBoxRef.current) logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight; }, [logs]);
   useEffect(() => () => { esRef.current?.close(); }, []);
   // 📊 성과 탭 처음 열면 자동으로 기록 로드(빈 화면 방지)
   useEffect(() => { if (ctTab === "report" && histRows == null) loadHist(); }, [ctTab, histRows, loadHist]);
+  // 🕒 발송 탭 열리거나 도메인 바뀌면 자동발송 현황 로드(탭 이동해도 재조회)
+  useEffect(() => { if (ctTab === "run" && sel) loadAuto(); }, [ctTab, sel, loadAuto]);
 
   const cur = subs.find(s => s.id === sel);
   const unlimited = (cur?.plan === "unlimited") || (cur?.daily_limit === 0);
@@ -400,6 +423,47 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
               ? <button onClick={stopPublish} style={{ padding: "12px 22px", borderRadius: 10, border: "none", background: "#dc2626", color: "#fff", fontWeight: 900, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>⏹ 그만두기</button>
               : <button onClick={startPublish} disabled={!unlimited && remainToday <= 0} style={{ padding: "12px 24px", borderRadius: 10, border: "none", background: (!unlimited && remainToday <= 0) ? C.line : `linear-gradient(135deg,${C.accent},#8b5cf6)`, color: "#fff", fontWeight: 900, fontSize: 14, cursor: (!unlimited && remainToday <= 0) ? "default" : "pointer", fontFamily: "inherit" }}>🚀 백링크 시작하기</button>}
           </div>
+        </div>
+
+        {/* ── 🕒 자동 발송(스케줄러 옵트인) ── */}
+        <div style={card({ marginBottom: 12 })}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <b style={{ fontSize: 15, color: C.ink }}>🕒 자동 발송</b>
+            <div style={{ flex: 1 }} />
+            <label style={{ display: "inline-flex", alignItems: "center", cursor: autoBusy ? "default" : "pointer" }} title="6시간마다 자동으로 발송">
+              <input type="checkbox" checked={autoOn} disabled={autoBusy} onChange={e => toggleAuto(e.target.checked)} style={{ display: "none" }} />
+              <span style={{ width: 52, height: 30, borderRadius: 99, background: autoOn ? C.accent : C.line, position: "relative", transition: "background .2s", display: "inline-block" }}>
+                <span style={{ position: "absolute", top: 3, left: autoOn ? 25 : 3, width: 24, height: 24, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.3)" }} />
+              </span>
+              <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 800, color: autoOn ? C.accent : C.sub }}>{autoOn ? "켜짐" : "꺼짐"}</span>
+            </label>
+          </div>
+          <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 10 }}>
+            켜두면 앱을 안 켜도 서버가 <b style={{ color: C.accent }}>6시간마다 자동으로</b> 백링크를 발송해요. 하루 한도만큼 채우고, 끄면 즉시 멈춰요. (도메인마다 따로 켤 수 있어요)
+          </div>
+          {/* 자동발송 내역 — 링크 없이 발송 여부·시각·개수만 */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: (autoStat && autoStat.runs.length) ? 10 : 0 }}>
+            <span style={chip(C.soft, C.accent)}>마지막 자동발송: {autoStat?.last_run_at ? new Date(autoStat.last_run_at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "아직 없음"}</span>
+            <span style={chip(C.soft, C.ink)}>오늘 {autoStat?.today ?? 0}개</span>
+            <span style={chip(C.soft, C.ink)}>이번주 {autoStat?.week ?? 0}개</span>
+          </div>
+          {autoStat && autoStat.runs.length > 0 && (
+            <div style={{ maxHeight: 170, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+              {autoStat.runs.map((r, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: C.sub, padding: "7px 10px", borderRadius: 8, background: C.panel }}>
+                  <span>🕒</span>
+                  <span style={{ color: C.ink }}>{new Date(r.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                  <span style={{ flex: 1 }} />
+                  <span style={{ color: logC.post.fg }}>{r.posted}개 발송</span>
+                  {r.indexed > 0 && <span style={{ color: logC.done.fg }}>· 색인 {r.indexed}</span>}
+                  <span>✅</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {autoOn && autoStat && autoStat.runs.length === 0 && (
+            <div style={{ fontSize: 12, color: C.sub, fontWeight: 600 }}>아직 자동발송 기록이 없어요 — 다음 자동 실행(6시간마다) 때부터 여기 쌓여요.</div>
+          )}
         </div>
         </div>{/* /🚀 발송 탭(현황+시작) */}
 
