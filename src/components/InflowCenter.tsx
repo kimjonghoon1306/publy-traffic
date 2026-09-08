@@ -1289,6 +1289,14 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
 
           {/* 유입 본체 — 백링크 탭일 땐 숨김 */}
           <div style={{ display: blTab ? "none" : "block" }}>
+          {/* 대상별 기능설명 — 라벨('스마트스토어')만으론 뭘 하는지 헷갈려서 명확히(테리 지시) */}
+          <div style={{ fontSize: 12, color: C.sub, fontWeight: 700, lineHeight: 1.6, background: C.glow, border: `1px solid ${C.line2}`, borderRadius: 9, padding: "9px 12px", marginBottom: 12 }}>
+            {targetType === "place"
+              ? <>🗺️ <b style={{ color: C.accent }}>플레이스</b> — 내 가게를 <b>네이버 지도·검색에서 상위</b>로 끌어올려요. 키워드 검색→방문→체류로 노출 순위를 높여요.</>
+              : targetType === "store"
+              ? <>🛒 <b style={{ color: C.accent }}>스마트스토어</b> — 내 상품을 <b style={{ color: C.accent }}>네이버쇼핑 검색에서 순위를 끌어올리는</b> 기능이에요. 키워드 검색→클릭→체류로 상위노출을 도와요. (찜·리뷰는 로그인이 필요해 하지 않아요)</>
+              : <>📝 <b style={{ color: C.accent }}>블로그</b> — 내 글을 <b>네이버 검색에서 상위</b>로 끌어올려요. 키워드 검색→조회→체류로 노출을 높여요.</>}
+          </div>
           {/* 4패널 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
             <div style={mCard}>

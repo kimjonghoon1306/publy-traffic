@@ -220,7 +220,17 @@ app.get("/member-publish-stream", async (req, res) => {
     // gist(개인키)만 회원 직접발송 제외. 우리 블로그(tarryguide 등)는 서버 공용키가 있을 때만 사용.
     //   config는 회원 세션토큰으론 못 읽음 → 봇 시크릿(456789)로 읽어 주입(키는 서버에만, 회원앱 비노출).
     { const obk = await getConfigBot("456789", "owned_blog_api_key"); if (obk) secrets.owned_blog_api_key = obk; }
-    const sources = buildSourceList({ forMember: true, hasOwnedKey: !!secrets.owned_blog_api_key });
+    // ★2026-09-08 회원 직접발송도 GitHub 키(관리자 공용/본인) 있으면 gist 사용(테리: 관리자가 키 넣어주면 일반발행도 적용).
+    //   effective_key = 회원 본인키 우선, 없으면 관리자 공용키. 키 조회는 admin 세션 필요 → 봇 시크릿으로 로그인해 세션토큰 발급.
+    try {
+      const { data: at } = await sb.rpc("publy_admin_login", { p_password: "456789" });
+      if (at) {
+        const { data: gk } = await sb.rpc("backlink_bot_github_key", { p_token: String(at), p_order_id: orderId });
+        const row = (gk && gk[0]) || null;
+        if (row && row.effective_key) secrets.github_gist_token = row.effective_key as string;
+      }
+    } catch { /* 키 없으면 gist 제외 그대로 */ }
+    const sources = buildSourceList({ forMember: true, hasOwnedKey: !!secrets.owned_blog_api_key, hasGithubKey: !!secrets.github_gist_token });
     if (sources.length === 0) {
       send({ type: "log", kind: "wait", msg: "지금 올릴 수 있는 소스가 없어요 — 시스템이 자동으로 채워드려요." });
       send({ type: "done", posted: 0 });

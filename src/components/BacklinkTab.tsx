@@ -196,6 +196,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const cur = subs.find(s => s.id === sel);
   const unlimited = (cur?.plan === "unlimited") || (cur?.daily_limit === 0);
   const remainToday = unlimited ? 999 : Math.max(0, (cur?.daily_limit ?? 0) - (cur?.today_posted ?? 0));
+  const QTY_MAX = 50;                                                     // 한 번에 발송 상한(락) — 초과 입력 차단
+  const qtyMax = unlimited ? QTY_MAX : Math.min(QTY_MAX, remainToday);    // 무제한=50, 제한=min(50, 남은한도)
 
   // ➕ 도메인(계정) 추가
   const addDomain = useCallback(async () => {
@@ -219,7 +221,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   const startPublish = useCallback(() => {
     if (!cur) return;
     if (running) return;
-    const want = unlimited ? Math.max(1, qty) : Math.min(qty, remainToday);
+    const want = Math.min(QTY_MAX, unlimited ? Math.max(1, qty) : Math.min(qty, remainToday));  // 한 번에 최대 50(락)
     if (!unlimited && remainToday <= 0) { pushLog("warn", "오늘 발송 한도를 다 썼어요 — 자정에 초기화돼요."); return; }
     setRunning(true); setLogs([]);   // 항상 새로 시작(로그 초기화)
     pushLog("wait", `준비 중… ${cur.target_domain}에 ${want}개 발송을 시작합니다`);
@@ -413,8 +415,8 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
             <span style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>이 도메인에 백링크</span>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <button onClick={() => setQty(q => Math.max(1, q - 1))} disabled={running} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.line}`, background: C.win, color: C.ink, fontSize: 18, fontWeight: 900, cursor: "pointer" }}>−</button>
-              <input type="number" value={qty} min={1} max={unlimited ? 50 : remainToday || 1} onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))} disabled={running} style={{ width: 60, textAlign: "center", ...inputStyle, padding: "8px" }} />
-              <button onClick={() => setQty(q => q + 1)} disabled={running || (!unlimited && qty >= remainToday)} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.line}`, background: C.win, color: C.ink, fontSize: 18, fontWeight: 900, cursor: "pointer" }}>＋</button>
+              <input type="number" value={qty} min={1} max={qtyMax || 1} onChange={e => setQty(Math.max(1, Math.min(qtyMax || 1, Number(e.target.value) || 1)))} disabled={running} style={{ width: 60, textAlign: "center", ...inputStyle, padding: "8px" }} />
+              <button onClick={() => setQty(q => Math.min(qtyMax || 1, q + 1))} disabled={running || qty >= (qtyMax || 1)} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.line}`, background: C.win, color: C.ink, fontSize: 18, fontWeight: 900, cursor: "pointer" }}>＋</button>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.sub }}>개</span>
             </div>
             {!unlimited && <button onClick={() => setQty(remainToday)} disabled={running || remainToday <= 0} style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${C.line}`, background: C.win, color: C.accent, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>남은 만큼 ({remainToday})</button>}
@@ -439,7 +441,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
             </label>
           </div>
           <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, background: C.panel, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 10 }}>
-            켜두면 앱을 안 켜도 서버가 <b style={{ color: C.accent }}>6시간마다 자동으로</b> 백링크를 발송해요. 하루 한도만큼 채우고, 끄면 즉시 멈춰요. (도메인마다 따로 켤 수 있어요)
+켜두면 앱을 안 켜도 <b style={{ color: C.accent }}>자동발송은 6시간마다 5개씩 진행됩니다.</b> 하루 4번(최대 20개) 자동으로 쌓이고, 끄면 즉시 멈춰요. (도메인마다 따로 켤 수 있어요)
           </div>
           {/* 자동발송 내역 — 링크 없이 발송 여부·시각·개수만 */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: (autoStat && autoStat.runs.length) ? 10 : 0 }}>

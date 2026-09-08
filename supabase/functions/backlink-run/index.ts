@@ -490,8 +490,10 @@ async function runPublish(sb: any, send: (o: any) => void, adminToken: string, o
         } catch (e) { send({ type: "log", kind: "warn", msg: `색인 요청 실패: ${(e as any)?.message}` }); }
 
   // ★2026-09-08 자동발송(스케줄러)일 때만 실행 로그 기록 → 회원/관리자가 "언제 몇 개 자동발송됐는지" 확인.
+  //   색인은 이번 실행 발송분(posted)만큼만 기록(indexedAcc는 밀린 백로그 전체라 "색인 132" 오해 유발 → min으로 이번분만).
   if (triggerType === "auto") {
-    try { await sb.rpc("backlink_scheduler_log_run", { p_token: adminToken, p_order_id: orderId, p_posted: posted, p_indexed: indexedAcc }); } catch { /* 로그 실패는 무시 */ }
+    const runIndexed = Math.min(indexedAcc, posted);
+    try { await sb.rpc("backlink_scheduler_log_run", { p_token: adminToken, p_order_id: orderId, p_posted: posted, p_indexed: runIndexed }); } catch { /* 로그 실패는 무시 */ }
   }
   return posted;
 }
