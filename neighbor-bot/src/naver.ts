@@ -1706,6 +1706,7 @@ export async function suggestKeywordsFromTarget(params: {
   const log = params.onLog || (() => {});
   const texts: string[] = [];
   const blogTitles: string[] = [];   // 블로그는 "제목→검색구절"로(단어조각 아님)
+  const placeRegionKeywords: string[] = [];   // 플레이스 "지역+업종"(횡성 미용실)
   let sourceLabel = "";
 
   try {
@@ -1746,13 +1747,33 @@ export async function suggestKeywordsFromTarget(params: {
           const anyD = detail as any;
           for (const k of ["name", "category", "categoryName", "description"]) if (anyD[k]) texts.push(String(anyD[k]));
           sourceLabel = "매장 정보";
+          // 🗺️ 플레이스는 지역이 핵심 — 손님은 "미용실"이 아니라 "횡성 미용실"·"염창동 미용실"로 검색.
+          //   주소에서 시/군/구·동·읍/면을 뽑아 업종 앞에 붙인 지역키워드를 최우선 seed로.
+          const addr = String(anyD.address || anyD.roadAddress || "");
+          const cat = String(anyD.category || anyD.categoryName || "").trim();
+          if (addr && cat) {
+            const regions: string[] = [];
+            // 구/군/시 (예: 강서구, 횡성군, 성남시) + 동/읍/면 (예: 염창동, 횡성읍)
+            for (const m of addr.matchAll(/([가-힣]{2,4}(?:시|군|구))/g)) regions.push(m[1]);
+            for (const m of addr.matchAll(/([가-힣]{2,4}(?:동|읍|면|리))/g)) regions.push(m[1]);
+            // 시/군/구는 "○○구"뿐 아니라 앞말도(강서구→강서) 사람들이 씀
+            const extra: string[] = [];
+            for (const r of regions) { const bare = r.replace(/(시|군|구|동|읍|면|리)$/, ""); if (bare.length >= 2) extra.push(bare); }
+            const uniqRegions = Array.from(new Set([...regions, ...extra]));
+            for (const r of uniqRegions) placeRegionKeywords.push(`${r} ${cat}`);   // "횡성 미용실","횡성읍 미용실"
+          }
         }
       }
     }
   } catch (e: any) { log(`  ⚠️ 대상 읽기 일부 실패: ${e?.message || e}`); }
 
   // 블로그=제목→검색구절(사람이 실제 치는 묶음), 스토어·플레이스=상품명·업종 명사
-  const seeds = params.targetType === "blog" ? extractSearchPhrases(blogTitles, 12) : extractTopicNouns(texts, 12);
+  let seeds = params.targetType === "blog" ? extractSearchPhrases(blogTitles, 12) : extractTopicNouns(texts, 12);
+  // 플레이스는 지역+업종 키워드를 맨 앞에(손님이 실제 치는 형태). 상호·업종 단독은 뒤로.
+  if (params.targetType === "place" && placeRegionKeywords.length) {
+    const uniq = Array.from(new Set([...placeRegionKeywords, ...seeds]));
+    seeds = uniq.slice(0, 12);
+  }
   if (seeds.length) log(`  ✅ ${sourceLabel}에서 핵심어 추출: ${seeds.slice(0, 8).join(", ")}`);
   return { seeds, source: sourceLabel || "대상 내용" };
 }
