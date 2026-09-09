@@ -1431,18 +1431,28 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               ? <>🛒 <b style={{ color: C.accent }}>스마트스토어</b> — 내 상품을 <b style={{ color: C.accent }}>네이버쇼핑 검색에서 순위를 끌어올리는</b> 기능이에요. 진짜 손님처럼 <b>검색 → 경쟁상품 비교 → 내 상품 클릭 → 상세·리뷰·옵션 꼼꼼히 보고 → 다른 상품도 구경</b>하고, 연관 검색어로도 다양하게 들어와요. (찜·리뷰는 로그인이 필요해 하지 않아요)</>
               : <>📝 <b style={{ color: C.accent }}>블로그</b> — 내 글을 <b>네이버 검색에서 상위</b>로 끌어올려요. 키워드 검색→조회→체류로 노출을 높여요.</>}
           </div>
-          {/* 🛒 스토어 안전 사용법 — 큰 글씨(무리하면 네이버가 어뷰징으로 봄). 락은 안 걸고 조언만. */}
-          {targetType === "store" && (
-            <div style={{ background: "rgba(37,99,235,.06)", border: "1.5px solid rgba(37,99,235,.35)", borderRadius: 12, padding: "13px 15px", marginBottom: 12 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 900, color: C.accent, marginBottom: 9 }}>🛒 스토어 안전 사용법 (꼭 지켜주세요)</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, lineHeight: 2 }}>
-                <div><b style={{ color: C.accent }}>① 하루 100~200회</b> 안에서 하세요.<br/><span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>너무 많으면 네이버가 이상하게 봐서 오히려 손해예요.</span></div>
-                <div style={{ marginTop: 8 }}><b style={{ color: C.accent }}>② 키워드 3~5개로 나눠서</b> 하세요.<br/><span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>한 키워드 몰빵 ❌ · 예) 굴비 40회 + 영광굴비 40회 + 굴비선물세트 40회</span></div>
-                <div style={{ marginTop: 8 }}><b style={{ color: C.accent }}>③ 며칠에 걸쳐 꾸준히</b> 하세요.<br/><span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>하루 몰아치기보다 매일 조금씩이 안전하고 효과도 좋아요.</span></div>
-                <div style={{ marginTop: 8 }}><b style={{ color: C.accent }}>④ 1페이지 드는 키워드로</b> 하세요.<br/><span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>아래 <b>🛒 순위 확인</b>으로 확인하고, 1페이지 안에 드는 키워드에 집중하세요.</span></div>
+          {/* 🛒 스토어 안전 사용법 — 큰 글씨(무리하면 네이버가 어뷰징으로 봄). 락은 안 걸고 조언만. 상품 무관 문구. */}
+          {targetType === "store" && (() => {
+            const tips = [
+              { i: "📊", t: "하루 100~200회", d: "너무 많으면 네이버가 이상하게 봐서 오히려 손해예요." },
+              { i: "🎯", t: "키워드 3~5개로 나눠서", d: "한 키워드에 몰빵하지 말고 여러 개로 골고루 나눠 돌리세요." },
+              { i: "📅", t: "며칠에 걸쳐 꾸준히", d: "하루 몰아치기보다 매일 조금씩이 안전하고 효과도 좋아요." },
+              { i: "🔝", t: "상위 드는 키워드로", d: "아래 순위 확인으로 상위에 드는 키워드를 찾아 거기에 집중하세요." },
+            ];
+            return (
+              <div style={{ background: `linear-gradient(135deg,${C.glow},transparent)`, border: `1.5px solid ${C.line2}`, borderRadius: 14, padding: "14px 15px", marginBottom: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: C.accent, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}><span style={{ fontSize: 18 }}>🛡️</span> 스토어 안전 사용법 <span style={{ fontSize: 11, fontWeight: 700, color: C.sub }}>(꼭 지켜주세요)</span></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {tips.map((t, i) => (
+                    <div key={i} style={{ background: C.panel, borderRadius: 11, padding: "11px 12px", border: `1px solid ${C.line}` }}>
+                      <div style={{ fontSize: 14, fontWeight: 900, color: C.ink, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 17 }}>{t.i}</span>{t.t}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, lineHeight: 1.55 }}>{t.d}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           {/* 4패널 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
             <div style={mCard}>
@@ -1541,34 +1551,58 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                   <button onClick={runMeasureRank} disabled={rankLoading} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: rankLoading ? C.panel2 : C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: rankLoading ? "default" : "pointer", fontFamily: "inherit", opacity: rankLoading ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>{rankLoading ? <><span style={{ width: 11, height: 11, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />측정 중…</> : "📍 순위 측정"}</button>
                 </div>
               </>) : targetType === "store" ? (<>
-                {/* 🛒 스토어 순위 확인 — 쇼핑탭 1페이지에 내 상품이 드는 키워드를 찾아 트래픽 돌릴 키워드 고르기 */}
+                {/* 🛒 스토어 순위 확인 — 살아있는 카드 UI */}
                 <h3 style={mH}><span style={mNum}>4</span> 쇼핑 순위 확인</h3>
-                <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, marginBottom: 8 }}>
-                  키워드를 넣고 눌러보세요. <b style={{ color: C.accent }}>1페이지 안에 드는 키워드</b>로 트래픽을 돌려야 효과가 있어요. (1페이지 밖이면 트래픽만으론 올리기 어려워요 — 더 세부 키워드로 시도)
-                </div>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: keywords ? C.ink : C.sub, marginBottom: 6 }}>확인 키워드: {keywords.split(",")[0]?.trim() || "키워드를 입력하세요"}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ fontSize: 16, fontWeight: 900, color: storeRankText.includes("1페이지") ? "#16a34a" : C.sub }}>{storeRankText}</div>
-                  <button onClick={runStoreRank} disabled={storeRankLoading} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: storeRankLoading ? C.panel2 : C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: storeRankLoading ? "default" : "pointer", fontFamily: "inherit", opacity: storeRankLoading ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>{storeRankLoading ? <><span style={{ width: 11, height: 11, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />확인 중…</> : "🛒 순위 확인"}</button>
-                </div>
-                {/* 🧭 순위 밖이면 "안 되는 걸 되게" 만드는 자세한 가이드 (큰 글씨) */}
-                {storeRankStatus === "out" && (
-                  <div style={{ marginTop: 12, padding: 14, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1.5px solid rgba(245,158,11,.4)" }}>
-                    <div style={{ fontSize: 15, fontWeight: 900, color: "#b45309", marginBottom: 8 }}>📉 이 키워드는 1페이지 밖이에요 — 이렇게 올리세요</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, lineHeight: 1.9 }}>
-                      <div><b style={{ color: C.accent }}>1단계.</b> 경쟁 센 키워드(예: "영광굴비")는 트래픽만으론 어려워요. → <b>더 세부 키워드</b>로 바꿔 확인해보세요.</div>
-                      <div style={{ marginTop: 6 }}><b style={{ color: C.accent }}>2단계.</b> 예) "법성포 참굴비 선물세트 특대"처럼 <b>길고 구체적인 키워드</b>는 경쟁이 약해 1페이지에 들 수 있어요.</div>
-                      <div style={{ marginTop: 6 }}><b style={{ color: C.accent }}>3단계.</b> 1페이지 드는 키워드를 찾으면 → <b>거기에 트래픽</b>을 돌리세요(효과 있어요).</div>
-                      <div style={{ marginTop: 6 }}><b style={{ color: C.accent }}>4단계.</b> 상품이 <b>아예 안 나오면</b> = 스마트스토어 <b>상품명·태그에 그 키워드를 넣으세요</b>(검색에 걸려야 순위가 생겨요).</div>
-                      <div style={{ marginTop: 6 }}><b style={{ color: C.accent }}>5단계.</b> 결국 <b>실제 구매·리뷰</b>가 쌓여야 대표 키워드로 올라가요. 트래픽은 그 시작을 도와요.</div>
+                {/* 결과 히어로 — 확인 전/성공/실패에 따라 색·아이콘이 살아 움직임 */}
+                <div style={{
+                  borderRadius: 14, padding: "16px 16px 14px", marginBottom: 10,
+                  background: storeRankStatus === "in" ? "linear-gradient(135deg,rgba(22,163,74,.14),rgba(22,163,74,.04))" : storeRankStatus === "out" ? "linear-gradient(135deg,rgba(245,158,11,.14),rgba(245,158,11,.04))" : C.panel2,
+                  border: `1.5px solid ${storeRankStatus === "in" ? "rgba(22,163,74,.45)" : storeRankStatus === "out" ? "rgba(245,158,11,.45)" : C.line2}`,
+                  transition: "all .3s ease",
+                }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: C.sub, marginBottom: 4 }}>확인 키워드</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: keywords ? C.ink : C.sub, marginBottom: 10, wordBreak: "keep-all" }}>{keywords.split(",")[0]?.trim() || "위 검색 키워드를 먼저 넣어주세요"}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1, color: storeRankStatus === "in" ? "#16a34a" : storeRankStatus === "out" ? "#d97706" : C.sub }}>
+                      {storeRankStatus === "in" ? "🎯" : storeRankStatus === "out" ? "📉" : "🔍"}<span style={{ fontSize: 17, marginLeft: 6 }}>{storeRankText}</span>
                     </div>
+                    <button onClick={runStoreRank} disabled={storeRankLoading} style={{ marginLeft: "auto", padding: "10px 16px", borderRadius: 11, border: "none", background: storeRankLoading ? C.line2 : `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 13.5, fontWeight: 800, cursor: storeRankLoading ? "default" : "pointer", fontFamily: "inherit", boxShadow: storeRankLoading ? "none" : `0 4px 14px ${C.glow}`, display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>{storeRankLoading ? <><span style={{ width: 12, height: 12, border: "2px solid #fff", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />확인 중…</> : "🛒 순위 확인"}</button>
                   </div>
-                )}
+                </div>
+                <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, marginBottom: 2 }}>
+                  키워드를 넣고 눌러보세요. <b style={{ color: C.accent }}>상위(1페이지)에 드는 키워드</b>로 트래픽을 돌려야 효과가 있어요.
+                </div>
+                {/* 🧭 순위 밖 가이드 — 상품 무관, 단계별 번호 뱃지 카드 */}
+                {storeRankStatus === "out" && (() => {
+                  const steps = [
+                    { n: 1, t: "더 구체적인 키워드로 바꾸기", d: "대표 키워드(2~3글자)는 경쟁이 세서 상위가 어려워요. 종류·용도·지역을 붙여 길게 만들어보세요." },
+                    { n: 2, t: "롱테일로 상위 노려보기", d: "길고 구체적인 키워드일수록 경쟁이 약해 상위(1페이지)에 들 확률이 높아요." },
+                    { n: 3, t: "상위 드는 키워드에 트래픽", d: "여기서 '상위'로 뜨는 키워드를 찾으면 → 그 키워드로 유입을 돌리세요. 효과가 있어요." },
+                    { n: 4, t: "상품이 아예 안 나오면", d: "스마트스토어 상품관리 → 상품명·검색 태그에 그 키워드를 넣으세요. 검색에 걸려야 순위가 생겨요." },
+                    { n: 5, t: "결국 실제 구매·리뷰", d: "트래픽은 시작을 돕는 마중물이에요. 실제 판매·리뷰가 쌓여야 대표 키워드로 올라가요." },
+                  ];
+                  return (
+                    <div style={{ marginTop: 10, padding: 14, borderRadius: 14, background: C.panel2, border: `1.5px solid ${C.line2}` }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 900, color: "#d97706", marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}><span>🧭</span> 상위 밖이에요 — 이렇게 올려요</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {steps.map(s => (
+                          <div key={s.n} style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
+                            <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: `linear-gradient(135deg,${C.accent},${C.cyan})`, color: "#fff", fontSize: 13, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 2px 8px ${C.glow}` }}>{s.n}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 800, color: C.ink, lineHeight: 1.4 }}>{s.t}</div>
+                              <div style={{ fontSize: 12.5, fontWeight: 600, color: C.sub, lineHeight: 1.6, marginTop: 2 }}>{s.d}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {storeRankStatus === "in" && (
-                  <div style={{ marginTop: 12, padding: 14, borderRadius: 12, background: "rgba(22,163,74,.08)", border: "1.5px solid rgba(22,163,74,.4)" }}>
-                    <div style={{ fontSize: 15, fontWeight: 900, color: "#15803d", marginBottom: 6 }}>✅ 1페이지 안에 들었어요 — 트래픽 돌릴 키워드!</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, lineHeight: 1.9 }}>
-                      이 키워드로 <b>유입을 돌리면 효과</b>가 있어요. 여러 키워드를 확인해 <b>1페이지 드는 것들만 모아</b> 유입하면 더 좋아요.
+                  <div style={{ marginTop: 10, padding: 16, borderRadius: 14, background: "linear-gradient(135deg,rgba(22,163,74,.12),rgba(22,163,74,.03))", border: "1.5px solid rgba(22,163,74,.4)" }}>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#15803d", marginBottom: 7, display: "flex", alignItems: "center", gap: 7 }}><span style={{ fontSize: 20 }}>🎉</span> 상위에 들었어요 — 트래픽 돌릴 키워드!</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, lineHeight: 1.8 }}>
+                      이 키워드로 <b style={{ color: "#16a34a" }}>유입을 돌리면 효과</b>가 있어요.<br/>여러 키워드를 확인해 <b>상위에 드는 것들만 모아</b> 돌리면 더 좋아요.
                     </div>
                   </div>
                 )}
