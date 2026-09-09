@@ -1431,6 +1431,18 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               ? <>🛒 <b style={{ color: C.accent }}>스마트스토어</b> — 내 상품을 <b style={{ color: C.accent }}>네이버쇼핑 검색에서 순위를 끌어올리는</b> 기능이에요. 진짜 손님처럼 <b>검색 → 경쟁상품 비교 → 내 상품 클릭 → 상세·리뷰·옵션 꼼꼼히 보고 → 다른 상품도 구경</b>하고, 연관 검색어로도 다양하게 들어와요. (찜·리뷰는 로그인이 필요해 하지 않아요)</>
               : <>📝 <b style={{ color: C.accent }}>블로그</b> — 내 글을 <b>네이버 검색에서 상위</b>로 끌어올려요. 키워드 검색→조회→체류로 노출을 높여요.</>}
           </div>
+          {/* 🛒 스토어 안전 사용법 — 큰 글씨(무리하면 네이버가 어뷰징으로 봄). 락은 안 걸고 조언만. */}
+          {targetType === "store" && (
+            <div style={{ background: "rgba(37,99,235,.06)", border: "1.5px solid rgba(37,99,235,.35)", borderRadius: 12, padding: "13px 15px", marginBottom: 12 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 900, color: C.accent, marginBottom: 9 }}>🛒 스토어 안전 사용법 (꼭 지켜주세요)</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, lineHeight: 2 }}>
+                <div><b style={{ color: C.accent }}>① 하루 100~200회</b> 안에서 하세요.<br/><span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>너무 많으면 네이버가 이상하게 봐서 오히려 손해예요.</span></div>
+                <div style={{ marginTop: 8 }}><b style={{ color: C.accent }}>② 키워드 3~5개로 나눠서</b> 하세요.<br/><span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>한 키워드 몰빵 ❌ · 예) 굴비 40회 + 영광굴비 40회 + 굴비선물세트 40회</span></div>
+                <div style={{ marginTop: 8 }}><b style={{ color: C.accent }}>③ 며칠에 걸쳐 꾸준히</b> 하세요.<br/><span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>하루 몰아치기보다 매일 조금씩이 안전하고 효과도 좋아요.</span></div>
+                <div style={{ marginTop: 8 }}><b style={{ color: C.accent }}>④ 1페이지 드는 키워드로</b> 하세요.<br/><span style={{ fontSize: 12.5, color: C.sub, fontWeight: 600 }}>아래 <b>🛒 순위 확인</b>으로 확인하고, 1페이지 안에 드는 키워드에 집중하세요.</span></div>
+              </div>
+            </div>
+          )}
           {/* 4패널 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
             <div style={mCard}>
