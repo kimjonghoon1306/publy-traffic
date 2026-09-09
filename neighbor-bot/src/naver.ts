@@ -60,13 +60,16 @@ async function launchBrowser(
   let proxy = await getProxyForAccount(userId, opts.feature, opts.ownerUserId, opts.authToken);
   // 🛒 스마트스토어 유입은 모바일 프록시로 교체 — residential IP는 스토어가 429로 막음(3IP 실측 차단),
   //   모바일(통신사) IP는 실제 사람 IP라 통과(실측: 상품 200). store_inflow_proxy 없으면 기본(residential) 유지(안전).
+  // 🛒 스토어 전용 프록시(store_inflow_proxy)가 관리자에 설정돼 있으면 그걸 쓰고, 없으면 기본 residential을 그대로 쓴다.
+  //   ★2026-09-09(테리, 실측): 스마트스토어 429의 진짜 원인은 IP가 아니라 UA/엔진 불일치였음(context에서 크롬UA로 해결).
+  //   residential 프록시로도 상품페이지 도달 성공 → 모바일 프록시 불필요. 그래서 "전용 프록시 없음"은 경고가 아니라 정상.
   if (opts.storeMode && opts.feature === "inflow") {
     const storeProxy = await getStoreProxy();
     if (storeProxy) {
       proxy = storeProxy;
-      opts.log?.(`  🛒 스토어는 모바일 프록시로 접속해요 — 스마트스토어가 일반 프록시(주거용) IP는 막기 때문(실측). 통신사 모바일 IP라 안전.`);
+      opts.log?.(`  🛒 스토어는 관리자가 지정한 전용 프록시로 접속해요.`);
     } else {
-      opts.log?.(`  ⚠️ 스토어 전용 모바일 프록시가 설정되지 않았어요 — 일반 프록시로 접속(스마트스토어에 막힐 수 있음). 관리자에 store_inflow_proxy 등록 필요.`);
+      opts.log?.(`  🛒 스토어 유입 준비 — 기본 프록시(주거용)로 접속해요. (스마트스토어는 크롬 브라우저로 자연 진입해 안전)`);
     }
   }
   // ★2026-09-08 완전 엇갈림(테리): 유입은 "방문마다 완전히 다른 IP + 한 방문 안에선 같은 IP"가 가장 안전+렉없음.
