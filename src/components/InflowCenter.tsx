@@ -540,6 +540,34 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     finally { setDiagLoading(false); }
   };
 
+  // 🛒 스토어 쇼핑 순위 확인 — 키워드로 쇼핑탭 1페이지에 내 상품이 드는지(될 키워드 고르기)
+  const [storeRankLoading, setStoreRankLoading] = useState(false);
+  const [storeRankText, setStoreRankText] = useState("아직 확인 안 함");
+  const runStoreRank = async () => {
+    const kw = (keywords.split(/[,\n]/)[0] || "").trim();
+    if (!kw) { toast("먼저 확인할 키워드를 입력하세요", "error"); return; }
+    const s = parseStoreUrl(storeUrl.trim());
+    if (!s) { toast("먼저 스마트스토어 상품 주소를 입력하세요", "error"); return; }
+    setStoreRankLoading(true); setStoreRankText("확인 중…");
+    pushLog(`🛒 "${kw}" 쇼핑 순위 확인 중…`);
+    try {
+      const url = `${BOT}/api/store-rank?keyword=${encodeURIComponent(kw)}&storeUrl=${encodeURIComponent(storeUrl.trim())}${s.storeId?`&storeId=${encodeURIComponent(s.storeId)}`:""}${s.productId?`&productId=${encodeURIComponent(s.productId)}`:""}`;
+      const r = await botFetch(url);
+      const j = await r.json();
+      if (j.error) { setStoreRankText("확인 실패"); pushLog(`❌ 순위 확인 실패 — ${j.error}`); toast(j.error, "error"); return; }
+      if (j.onFirstPage && j.rank) {
+        setStoreRankText(`✅ 1페이지 ${j.rank}위`);
+        pushLog(`🛒 "${kw}" → 1페이지 ${j.rank}위 (트래픽 돌릴만한 키워드!)`);
+        toast(`"${kw}" 1페이지 ${j.rank}위 — 이 키워드로 트래픽 돌리면 효과 있어요!`, "success");
+      } else {
+        setStoreRankText("⚠️ 1페이지 밖");
+        pushLog(`🛒 "${kw}" → 1페이지 밖(노출 낮음) — 더 세부 키워드로 시도하세요.`);
+        toast(`"${kw}" 1페이지 밖이에요. 더 세부(롱테일) 키워드로 시도해보세요.`, "info");
+      }
+    } catch { setStoreRankText("확인 실패"); pushLog("❌ 순위 확인 실패 — 봇 서버 확인"); toast("순위 확인 실패 — 봇 서버 확인", "error"); }
+    finally { setStoreRankLoading(false); }
+  };
+
   // 📍 순위 측정 — 대표 키워드로 내 플레이스 순위 측정 후 저장(리포트·그래프에 자동 반영)
   const [rankLoading, setRankLoading] = useState(false);
   const runMeasureRank = async () => {
@@ -553,7 +581,12 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       const p = parseBlogUrl(blogUrl.trim());
       if (!p) { toast("먼저 블로그 글 주소를 입력하세요", "error"); return; }
       url = `${BOT}/api/blog-rank?keyword=${encodeURIComponent(kw)}&blogId=${encodeURIComponent(p.blogId)}&logNo=${encodeURIComponent(p.logNo)}`;
-    } else { toast("스토어(쇼핑)는 순위 자동측정을 지원하지 않아요", "error"); return; }
+    } else if (targetType === "store") {
+      // 🛒 스토어 순위 측정 — 쇼핑탭 1페이지에 내 상품이 몇 위인지(될 키워드 고르기용)
+      const s = parseStoreUrl(storeUrl.trim());
+      if (!s) { toast("먼저 스마트스토어 상품 주소를 입력하세요", "error"); return; }
+      url = `${BOT}/api/store-rank?keyword=${encodeURIComponent(kw)}&storeUrl=${encodeURIComponent(storeUrl.trim())}${s.storeId?`&storeId=${encodeURIComponent(s.storeId)}`:""}${s.productId?`&productId=${encodeURIComponent(s.productId)}`:""}`;
+    } else { toast("순위 측정 대상을 인식하지 못했어요", "error"); return; }
     setRankLoading(true);
     pushLog(`📍 "${kw}" 현재 순위 측정 중…`);
     try {
@@ -1491,12 +1524,21 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                   <div style={{ fontSize: 22, fontWeight: 900, color: C.accent }}>{rankText} <span style={{ fontSize: 11, color: C.sub, fontWeight: 700 }}>현재</span></div>
                   <button onClick={runMeasureRank} disabled={rankLoading} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: rankLoading ? C.panel2 : C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: rankLoading ? "default" : "pointer", fontFamily: "inherit", opacity: rankLoading ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>{rankLoading ? <><span style={{ width: 11, height: 11, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />측정 중…</> : "📍 순위 측정"}</button>
                 </div>
+              </>) : targetType === "store" ? (<>
+                {/* 🛒 스토어 순위 확인 — 쇼핑탭 1페이지에 내 상품이 드는 키워드를 찾아 트래픽 돌릴 키워드 고르기 */}
+                <h3 style={mH}><span style={mNum}>4</span> 쇼핑 순위 확인</h3>
+                <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, marginBottom: 8 }}>
+                  키워드를 넣고 눌러보세요. <b style={{ color: C.accent }}>1페이지 안에 드는 키워드</b>로 트래픽을 돌려야 효과가 있어요. (1페이지 밖이면 트래픽만으론 올리기 어려워요 — 더 세부 키워드로 시도)
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: keywords ? C.ink : C.sub, marginBottom: 6 }}>확인 키워드: {keywords.split(",")[0]?.trim() || "키워드를 입력하세요"}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: storeRankText.includes("1페이지") ? "#16a34a" : C.sub }}>{storeRankText}</div>
+                  <button onClick={runStoreRank} disabled={storeRankLoading} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: storeRankLoading ? C.panel2 : C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: storeRankLoading ? "default" : "pointer", fontFamily: "inherit", opacity: storeRankLoading ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>{storeRankLoading ? <><span style={{ width: 11, height: 11, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />확인 중…</> : "🛒 순위 확인"}</button>
+                </div>
               </>) : (<>
                 <h3 style={mH}><span style={mNum}>4</span> 안내</h3>
                 <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, marginTop: 4 }}>
-                  {targetType === "blog"
-                    ? "블로그는 순위 측정을 쓰지 않아요. 키워드 검색 유입으로 조회수·체류·공감·이웃을 쌓아요."
-                    : "스마트스토어는 순위 자동측정을 지원하지 않아요. 검색 유입으로 조회·찜을 쌓아요."}
+                  블로그는 순위 측정을 쓰지 않아요. 키워드 검색 유입으로 조회수·체류·공감·이웃을 쌓아요.
                 </div>
               </>)}
             </div>

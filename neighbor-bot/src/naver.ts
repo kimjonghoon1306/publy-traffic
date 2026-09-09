@@ -1704,6 +1704,7 @@ export async function suggestKeywordsFromTarget(params: {
   productId?: string;
   placeId?: string;
   placeDomain?: string;
+  seedKeyword?: string;   // 🛒 스토어용 씨앗 키워드(예 "굴비") — 상품 직접읽기는 429라, 이 키워드로 검색해 상품명들에서 키워드 확장
   onLog?: (m: string) => void;
 }): Promise<{ seeds: string[]; source: string }> {
   const log = params.onLog || (() => {});
@@ -4018,8 +4019,9 @@ export async function diagnoseStore(params: { storeUrl: string; onLog?: (m: stri
   const log = onLog || console.log;
   const url = storeUrl.trim();
   log(`🛒 스마트스토어 상품 정보 수집 중… (프록시+브라우저로 안전 접근)`);
-  const browser = await launchBrowser(null, { headless: true, feature: "inflow", log });
-  const context = await browser.newContext({ userAgent: INFLOW_MOBILE_UA, viewport: { width: 420, height: 900 }, locale: "ko-KR" });
+  const browser = await launchBrowser(null, { headless: true, feature: "inflow", log, storeMode: true });
+  // 🛒 스토어는 UA를 엔진(Chromium)과 맞는 안드로이드 크롬으로 — 사파리UA면 429(거짓말 감지). 크롬UA로 상품 읽힘(실측).
+  const context = await browser.newContext({ userAgent: INFLOW_STORE_UA, viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, locale: "ko-KR" });
   await applyAntiDetection(context);
   const page = await context.newPage();
   try {
@@ -6050,6 +6052,47 @@ export async function measurePlaceRank(params: { keyword: string; placeUrl: stri
     const idx = list.findIndex((p) => String(p.placeId) === String(parsed.placeId));
     return { rank: idx >= 0 ? idx + 1 : null, scanned: list.length };
   } catch (e: any) { return { error: e?.message || "순위 측정 실패" }; }
+}
+
+/* 🛒 스토어 상품 순위 측정 — 키워드로 통합검색 쇼핑탭에서 내 상품(storeId/productId)이 몇 번째인지.
+   ★네이버가 쇼핑 전체순위(몇백위)는 API·크롤 막음 → "1페이지(쇼핑탭 노출분) 안 몇 위인지"만 정확히 본다.
+   신상·저순위 상품은 대개 1페이지 밖(=아직 트래픽 효과 단계 아님) / 롱테일 키워드는 1페이지 안일 수 있음(트래픽 될 키워드).
+   크롬UA로 429 회피(실측). 여러 키워드를 이 함수로 각각 재보면 "될 키워드"를 고를 수 있다. */
+export async function measureStoreRank(params: { keyword: string; storeId?: string; productId?: string; storeUrl?: string; onLog?: (m: string) => void }): Promise<{ rank: number | null; scanned: number; onFirstPage: boolean } | { error: string }> {
+  const log = params.onLog || (() => {});
+  const kw = (params.keyword || "").trim();
+  if (!kw) return { error: "키워드를 입력하세요" };
+  // 대상 식별자: storeId 우선(스토어 채널), 없으면 productId
+  const sid = (params.storeId || "").trim() || (() => { try { return new URL(params.storeUrl || "").pathname.split("/").filter(Boolean)[0] || ""; } catch { return ""; } })();
+  const pid = (params.productId || "").trim() || (() => { const m = (params.storeUrl || "").match(/products\/(\d+)/); return m ? m[1] : ""; })();
+  const needle = sid || pid;
+  if (!needle) return { error: "스토어 주소나 상품ID를 인식하지 못했어요" };
+  let browser: any = null;
+  try {
+    browser = await launchBrowser(null, { headless: true, feature: "inflow", log, storeMode: true });
+    const ctx = await browser.newContext({ userAgent: INFLOW_STORE_UA, viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, locale: "ko-KR" });
+    await applyAntiDetection(ctx);
+    const page = await ctx.newPage();
+    log(`  🛒 "${kw}"로 쇼핑검색해 내 상품 순위 확인 중…`);
+    await page.goto(`https://m.search.naver.com/search.naver?ssc=tab.m_shop.all&query=${encodeURIComponent(kw)}`, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(inflowRndInt(1800, 2800));
+    // 1페이지(쇼핑탭 노출분)의 상품 링크를 순서대로 수집 → 내 상품 위치 = 순위
+    const seen = new Set<string>();
+    let rank: number | null = null; let scanned = 0;
+    for (let i = 0; i < 6 && rank == null; i++) {
+      const items: string[] = await page.$$eval('a[href*="cr3.shopping.naver.com"], a[href*="cr.shopping.naver.com"], a[href*="smartstore.naver.com"], a[href*="brand.naver.com"]', (as: HTMLAnchorElement[]) => as.map(a => a.href)).catch(() => []);
+      for (const h of items) { if (seen.has(h)) continue; seen.add(h); scanned++; if (h.includes(needle) && rank == null) rank = scanned; }
+      if (rank == null) { await page.mouse.wheel(0, 1500); await page.waitForTimeout(inflowRndInt(700, 1100)); }
+    }
+    await browser.close().catch(() => {}); browser = null;
+    const onFirstPage = rank != null;
+    if (onFirstPage) log(`  ✅ "${kw}" → 1페이지 ${rank}위 (트래픽 돌릴만한 키워드)`);
+    else log(`  ⚠️ "${kw}" → 1페이지 밖(노출 순위 낮음) — 트래픽 효과 적어요. 더 세부(롱테일) 키워드로 시도해보세요.`);
+    return { rank, scanned, onFirstPage };
+  } catch (e: any) {
+    if (browser) await browser.close().catch(() => {});
+    return { error: e?.message || "스토어 순위 측정 실패" };
+  }
 }
 
 /* 📝 블로그 글 순위 측정 — 키워드로 통합검색(모바일 블로그탭)해서 내 (blogId/logNo)가 몇 위인지.
