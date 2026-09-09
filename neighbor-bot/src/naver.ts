@@ -5617,11 +5617,12 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
       //   (inflow.pay.naver.com/rd·cr3.shopping.naver.com)를 그대로 클릭해 들어간다 → referer·세션이 붙어 로그인 없이 열림.
       //   그래서 브릿지 링크를 '그대로' 타고 진입한다(우회 안 함). +UA를 엔진과 맞는 크롬으로 바꿔 429도 해결(위 context).
       const bridge = matches.find(h => /inflow\.pay\.naver\.com\/rd|(^|\/\/)(cr\d*|msearch)\.shopping\.naver\.com/i.test(h));
-      const enterHref = bridge || matches[0];
-      if (enterHref) {
-        log(`  🎯 검색결과에서 대상 발견 → ${bridge ? "검색 링크 그대로 클릭 진입(자연 도착)" : "스토어 진입"} (약 ${s + 1}스크롤 지점)`);
+      // ★브릿지(검색결과 클릭링크)로만 진입한다. 직접 스토어링크(matches[0])는 "검색 안 거친 갑작스런 진입"으로
+      //   네이버가 로그인창으로 튕김(실측) → 헛방문·낭비 → 안 씀. 브릿지가 없으면 = 그 키워드에서 쇼핑노출 밖 → 건너뜀.
+      if (bridge) {
+        log(`  🎯 검색결과에서 대상 발견 → 검색 링크 그대로 클릭 진입(자연 도착) (약 ${s + 1}스크롤 지점)`);
         try {
-          await page.goto(enterHref, { referer: page.url(), waitUntil: "domcontentloaded", timeout: 25000 });
+          await page.goto(bridge, { referer: page.url(), waitUntil: "domcontentloaded", timeout: 25000 });
         } catch {
           if (isNidLogin(page.url())) return await confirmArrival(page);
           log("  ⚠️ 스토어 진입 실패 — 방문 무효");
@@ -5641,7 +5642,7 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
   //   ★2026-09-08(테리): 상품 직접 진입은 네이버가 로그인(nid.naver.com)/"접속 불가"로 튕겨 rate-limit을 악화시켰다.
   //   검색결과에 상품이 없다 = 그 키워드에서 노출 순위 밖일 뿐 → 직접 진입으로 무리하지 말고 이 방문만 건너뛰고 다음 키워드로.
   if (target.type === "store") {
-    log(`  🛒 검색결과에서 상품을 못 찾았어요(그 키워드 노출 밖) — 무리하지 않고 이 방문은 건너뛰어요`);
+    log(`  🛒 쇼핑결과에 이 상품이 안 보여요 — 이 방문은 건너뜁니다. 원인: ①이 키워드에서 노출 순위 밖 ②스마트스토어에서 '네이버쇼핑 노출'을 안 켰을 수 있어요(스토어 상품관리에서 노출 설정 확인) → 노출되는 키워드로 바꾸거나 노출을 켜면 유입됩니다.`);
     return null;   // 방문 무효 → 호출부가 다음 방문으로(로그인/직접진입 안 함)
   }
   // 🏢 플레이스 폴백(B) — 검색결과에서 못 찾으면(또는 지도로만 뜨면) 플레이스 상세로 직접 진입
