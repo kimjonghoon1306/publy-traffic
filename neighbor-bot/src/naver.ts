@@ -1640,17 +1640,48 @@ export async function crawlPlaceByUrl(params: {
    조사·활용형·불용어를 걷어내 '이 글/상품/매장이 실제로 다루는 명사'만 빈도순으로.
    네이버 상위노출이 "검색어↔문서 의미 매칭"으로 바뀌어(DIA+/AI브리핑), 대상과 무관한 키워드 유입은
    무의미/역효과 → 반드시 대상 내용에서 뽑은 명사를 seed로 써야 관련성 신호가 쌓인다. */
+// 검색어에 무의미한 토큰(숫자·연도·낚시말·흔한 단어) — seed에서 제거
+const KW_NOISE = new Set(["추천","후기","방법","정리","총정리","완벽","꿀팁","리뷰","best","top","가이드","입문","초보","초보자","기초","쉽게","간단","간단한","최신","트렌드","트랜드","반영","필수","필수템","리스트","비교","순위","모음","총모음","활용","소개","정보","이유","효과","종류","특징","장점","단점","가지","방법들","하는법","하는","되는","위한","전체","기본","실패","성공","제대로","한번에","한방에","완벽정리","진짜","레전드","대박","요즘","2020","2021","2022","2023","2024","2025","2026","2027","20","30","40","50","100"]);
+const isNoiseToken = (w: string): boolean => {
+  if (/^\d+$/.test(w)) return true;              // 순수 숫자(20, 2026, 3일의 3 등)
+  if (/^\d+(년|일|가지|위|개|주|월|시|분)$/.test(w)) return true;  // 3일·5가지·2026년
+  if (KW_NOISE.has(w.toLowerCase())) return true;
+  return false;
+};
+
+/* ── 📝 제목 목록 → "실제 검색할 구절" 추출(블로그용) ──
+   단어 조각(운동·홈트)이 아니라 사람이 실제로 치는 묶음(초보 홈트 유산소, 고단백 저칼로리 식단)을 뽑는다.
+   각 제목을 낚시말·숫자·장식 걷어내고 핵심 명사 2~4개 묶음으로 줄인다. */
+function extractSearchPhrases(titles: string[], topN = 12): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const stripJosa = (w: string): string => { const s = w.replace(/(으로서|으로써|이라는|라는|으로|로서|로써|에서|에게|한테|께서|부터|까지|보다|처럼|만큼|이나|이란|라도|든지|은|는|이|가|을|를|의|에|도|만|로|과|와|나|용|들)$/, ""); return s.length >= 2 ? s : w; };
+  for (const title of titles) {
+    const cleaned = (title || "").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    if (!cleaned) continue;
+    // 토큰화 → 낚시말·숫자·조사 제거 → 의미있는 명사만
+    const tokens = cleaned.split(" ")
+      .map(w => stripJosa(w))
+      .filter(w => w.length >= 2 && !isNoiseToken(w));
+    if (tokens.length < 2) { if (tokens.length === 1 && !seen.has(tokens[0])) { out.push(tokens[0]); seen.add(tokens[0]); } continue; }
+    // 핵심 명사 2~4개를 하나의 검색구절로(앞쪽이 보통 핵심 주제)
+    const phrase = tokens.slice(0, 4).join(" ");
+    if (phrase && !seen.has(phrase)) { out.push(phrase); seen.add(phrase); }
+  }
+  return out.slice(0, topN);
+}
+
+/* ── 📝 텍스트에서 주제 명사만 뽑기(스토어·플레이스용 — 상품명·업종은 짧아서 명사가 맞음) ── */
 function extractTopicNouns(texts: string[], topN = 12): string[] {
   const STOP = new Set(["안녕하세요","있는","합니다","입니다","그리고","하는","이번","오늘","저는","제가","너무","정말","진짜","우리","해서","에서","으로","까지","부터","같은","위해","통해","대한","관련","경우","때문","많이","다시","바로","여기","하지만","그런","이런","하고","보고","보다","되는","있어요","없는","위한","요즘","지금","이제","아주","매우","제일","가장","자주","계속","먼저","특히","역시","물론","그냥","완전","엄청","이미","아직","항상","보통","대부분","여러","추천","후기","이유","방법","사람","생각","시간","하루","정도","다음","부분","모습","느낌","마음","사실","블로그","포스팅","시작","마지막","전체","기본","정보","내용","이야기","얘기","자신","본인","최근","내일","어제","최고","진행","사용","경험","선택","고민","준비","확인","소개","상품","제품","판매","구매","배송","리뷰","가격","할인","이벤트","네이버","스토어","쇼핑","무료","선물","세트","포함","구성"]);
   const CONJ = /(습니다|었습니다|였습니다|해요|아요|어요|에요|예요|이에요|네요|겠다|었다|였다|한다|된다|해서|아서|어서|하고|하며|하니|하는|되는|있는|없는|같은|으면|하면|되면|려고|면서|처럼|만큼|보다|라고|다고|든지|거나|지만|는데|은데|으로|에서|까지|부터|에게|한테)$/;
   const stripJosa = (w: string): string => { const s = w.replace(/(으로서|으로써|이라는|라는|으로|로서|로써|에서|에게|한테|께서|부터|까지|보다|처럼|만큼|이나|이란|라도|든지|은|는|이|가|을|를|의|에|도|만|로|과|와|나)$/, ""); return s.length >= 2 ? s : w; };
   const freq: Record<string, number> = {};
   const joined = texts.join(" ");
-  // 한글 2~6자 + 영문/숫자 혼합어(브랜드·모델명) 둘 다 수집
-  for (const raw of joined.match(/[가-힣]{2,6}|[A-Za-z0-9]{2,}/g) || []) {
+  for (const raw of joined.match(/[가-힣]{2,6}|[A-Za-z]{2,}/g) || []) {  // 순수숫자는 안 뽑음(연도·조각 방지)
     const w = /[가-힣]/.test(raw) ? stripJosa(raw) : raw;
     if (w.length < 2) continue;
-    if (STOP.has(w)) continue;
+    if (STOP.has(w) || isNoiseToken(w)) continue;
     if (CONJ.test(w)) continue;
     freq[w] = (freq[w] || 0) + 1;
   }
@@ -1674,21 +1705,22 @@ export async function suggestKeywordsFromTarget(params: {
 }): Promise<{ seeds: string[]; source: string }> {
   const log = params.onLog || (() => {});
   const texts: string[] = [];
+  const blogTitles: string[] = [];   // 블로그는 "제목→검색구절"로(단어조각 아님)
   let sourceLabel = "";
 
   try {
     if (params.targetType === "blog") {
       if (params.blogId && params.logNo) {
-        // 글 하나 → 본문 읽어 주제어
-        log(`  📖 글 본문을 읽어 핵심 키워드를 뽑는 중…`);
+        // 글 하나 → 그 글 제목이 곧 검색 구절의 핵심(본문은 노이즈 많아 제목 우선)
+        log(`  📖 글을 읽어 핵심 키워드를 뽑는 중…`);
         const body = await fetchPostBody(params.blogId, params.logNo).catch(() => null);
-        if (body) { texts.push(body.title || "", body.body || ""); sourceLabel = "글 본문"; }
+        if (body?.title) { blogTitles.push(body.title); sourceLabel = "이 글"; }
       }
-      if (!texts.length && params.blogId) {
+      if (!blogTitles.length && params.blogId) {
         // 아이디만 → 최근 글 제목들로 블로그 주제 파악
         log(`  📚 블로그 최근 글들을 분석해 주제를 파악하는 중…`);
         const posts = await crawlPublicPosts({ blogId: params.blogId, count: 20, onLog: log }).catch(() => []);
-        for (const p of posts) texts.push(p.title || "");
+        for (const p of posts) if (p.title) blogTitles.push(p.title);
         sourceLabel = "블로그 최근 글";
       }
     } else if (params.targetType === "store") {
@@ -1719,9 +1751,10 @@ export async function suggestKeywordsFromTarget(params: {
     }
   } catch (e: any) { log(`  ⚠️ 대상 읽기 일부 실패: ${e?.message || e}`); }
 
-  const nouns = extractTopicNouns(texts, 12);
-  if (nouns.length) log(`  ✅ ${sourceLabel}에서 핵심어 추출: ${nouns.slice(0, 8).join(", ")}`);
-  return { seeds: nouns, source: sourceLabel || "대상 내용" };
+  // 블로그=제목→검색구절(사람이 실제 치는 묶음), 스토어·플레이스=상품명·업종 명사
+  const seeds = params.targetType === "blog" ? extractSearchPhrases(blogTitles, 12) : extractTopicNouns(texts, 12);
+  if (seeds.length) log(`  ✅ ${sourceLabel}에서 핵심어 추출: ${seeds.slice(0, 8).join(", ")}`);
+  return { seeds, source: sourceLabel || "대상 내용" };
 }
 
 export async function crawlPlaces(params: {
