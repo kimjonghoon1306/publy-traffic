@@ -543,6 +543,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   // 🛒 스토어 쇼핑 순위 확인 — 키워드로 쇼핑탭 1페이지에 내 상품이 드는지(될 키워드 고르기)
   const [storeRankLoading, setStoreRankLoading] = useState(false);
   const [storeRankText, setStoreRankText] = useState("아직 확인 안 함");
+  const [storeRankStatus, setStoreRankStatus] = useState<"none" | "in" | "out">("none");
   const runStoreRank = async () => {
     const kw = (keywords.split(/[,\n]/)[0] || "").trim();
     if (!kw) { toast("먼저 확인할 키워드를 입력하세요", "error"); return; }
@@ -554,17 +555,17 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       const url = `${BOT}/api/store-rank?keyword=${encodeURIComponent(kw)}&storeUrl=${encodeURIComponent(storeUrl.trim())}${s.storeId?`&storeId=${encodeURIComponent(s.storeId)}`:""}${s.productId?`&productId=${encodeURIComponent(s.productId)}`:""}`;
       const r = await botFetch(url);
       const j = await r.json();
-      if (j.error) { setStoreRankText("확인 실패"); pushLog(`❌ 순위 확인 실패 — ${j.error}`); toast(j.error, "error"); return; }
+      if (j.error) { setStoreRankText("확인 실패"); setStoreRankStatus("none"); pushLog(`❌ 순위 확인 실패 — ${j.error}`); toast(j.error, "error"); return; }
       if (j.onFirstPage && j.rank) {
-        setStoreRankText(`✅ 1페이지 ${j.rank}위`);
+        setStoreRankText(`✅ 1페이지 ${j.rank}위`); setStoreRankStatus("in");
         pushLog(`🛒 "${kw}" → 1페이지 ${j.rank}위 (트래픽 돌릴만한 키워드!)`);
         toast(`"${kw}" 1페이지 ${j.rank}위 — 이 키워드로 트래픽 돌리면 효과 있어요!`, "success");
       } else {
-        setStoreRankText("⚠️ 1페이지 밖");
+        setStoreRankText("⚠️ 1페이지 밖"); setStoreRankStatus("out");
         pushLog(`🛒 "${kw}" → 1페이지 밖(노출 낮음) — 더 세부 키워드로 시도하세요.`);
         toast(`"${kw}" 1페이지 밖이에요. 더 세부(롱테일) 키워드로 시도해보세요.`, "info");
       }
-    } catch { setStoreRankText("확인 실패"); pushLog("❌ 순위 확인 실패 — 봇 서버 확인"); toast("순위 확인 실패 — 봇 서버 확인", "error"); }
+    } catch { setStoreRankText("확인 실패"); setStoreRankStatus("none"); pushLog("❌ 순위 확인 실패 — 봇 서버 확인"); toast("순위 확인 실패 — 봇 서버 확인", "error"); }
     finally { setStoreRankLoading(false); }
   };
 
@@ -699,7 +700,10 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
       if (b?.logNo) qs.set("logNo", b.logNo);
       if (!b?.blogId) { qs.set("blogId", url.replace(/@.*/, "").trim()); }   // 아이디만 넣은 경우
     } else if (targetType === "store") {
-      const s = parseStoreUrl(url); qs.set("url", url);
+      // 🛒 스토어는 씨앗 키워드(첫 키워드) 필요 — 상품 직접읽기는 429라, 씨앗으로 쇼핑검색해 관련 상품명에서 키워드 추출.
+      const seed = (keywords.split(/[,\n]/)[0] || "").trim();
+      if (!seed) { toast('상품과 관련된 단어 1개를 먼저 입력하세요(예: "굴비") — 그걸로 관련 키워드를 찾아드려요', "info"); return; }
+      const s = parseStoreUrl(url); qs.set("url", url); qs.set("seedKeyword", seed);
       if (s?.storeId) qs.set("storeId", s.storeId);
       if (s?.productId) qs.set("productId", s.productId);
     } else {
@@ -1535,6 +1539,27 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                   <div style={{ fontSize: 16, fontWeight: 900, color: storeRankText.includes("1페이지") ? "#16a34a" : C.sub }}>{storeRankText}</div>
                   <button onClick={runStoreRank} disabled={storeRankLoading} style={{ marginLeft: "auto", padding: "7px 12px", borderRadius: 9, border: `1.5px solid ${C.accent}`, background: storeRankLoading ? C.panel2 : C.glow, color: C.accent, fontSize: 12, fontWeight: 800, cursor: storeRankLoading ? "default" : "pointer", fontFamily: "inherit", opacity: storeRankLoading ? 0.7 : 1, display: "inline-flex", alignItems: "center", gap: 6 }}>{storeRankLoading ? <><span style={{ width: 11, height: 11, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />확인 중…</> : "🛒 순위 확인"}</button>
                 </div>
+                {/* 🧭 순위 밖이면 "안 되는 걸 되게" 만드는 자세한 가이드 (큰 글씨) */}
+                {storeRankStatus === "out" && (
+                  <div style={{ marginTop: 12, padding: 14, borderRadius: 12, background: "rgba(245,158,11,.08)", border: "1.5px solid rgba(245,158,11,.4)" }}>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#b45309", marginBottom: 8 }}>📉 이 키워드는 1페이지 밖이에요 — 이렇게 올리세요</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, lineHeight: 1.9 }}>
+                      <div><b style={{ color: C.accent }}>1단계.</b> 경쟁 센 키워드(예: "영광굴비")는 트래픽만으론 어려워요. → <b>더 세부 키워드</b>로 바꿔 확인해보세요.</div>
+                      <div style={{ marginTop: 6 }}><b style={{ color: C.accent }}>2단계.</b> 예) "법성포 참굴비 선물세트 특대"처럼 <b>길고 구체적인 키워드</b>는 경쟁이 약해 1페이지에 들 수 있어요.</div>
+                      <div style={{ marginTop: 6 }}><b style={{ color: C.accent }}>3단계.</b> 1페이지 드는 키워드를 찾으면 → <b>거기에 트래픽</b>을 돌리세요(효과 있어요).</div>
+                      <div style={{ marginTop: 6 }}><b style={{ color: C.accent }}>4단계.</b> 상품이 <b>아예 안 나오면</b> = 스마트스토어 <b>상품명·태그에 그 키워드를 넣으세요</b>(검색에 걸려야 순위가 생겨요).</div>
+                      <div style={{ marginTop: 6 }}><b style={{ color: C.accent }}>5단계.</b> 결국 <b>실제 구매·리뷰</b>가 쌓여야 대표 키워드로 올라가요. 트래픽은 그 시작을 도와요.</div>
+                    </div>
+                  </div>
+                )}
+                {storeRankStatus === "in" && (
+                  <div style={{ marginTop: 12, padding: 14, borderRadius: 12, background: "rgba(22,163,74,.08)", border: "1.5px solid rgba(22,163,74,.4)" }}>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#15803d", marginBottom: 6 }}>✅ 1페이지 안에 들었어요 — 트래픽 돌릴 키워드!</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, lineHeight: 1.9 }}>
+                      이 키워드로 <b>유입을 돌리면 효과</b>가 있어요. 여러 키워드를 확인해 <b>1페이지 드는 것들만 모아</b> 유입하면 더 좋아요.
+                    </div>
+                  </div>
+                )}
               </>) : (<>
                 <h3 style={mH}><span style={mNum}>4</span> 안내</h3>
                 <div style={{ fontSize: 12, color: C.sub, fontWeight: 600, lineHeight: 1.6, marginTop: 4 }}>

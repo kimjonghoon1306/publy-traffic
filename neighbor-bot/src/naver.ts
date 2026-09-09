@@ -1691,6 +1691,36 @@ function extractTopicNouns(texts: string[], topN = 12): string[] {
   return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, topN).map(([w]) => w);
 }
 
+/* ── 🛒 씨앗 키워드로 쇼핑검색 → 노출된 상품명들 수집 ──
+   상품 직접읽기는 429라, 씨앗 키워드(예 "굴비")로 쇼핑탭을 검색해 노출된 상품 제목을 긁는다.
+   상품명엔 사람들이 실제 치는 키워드(영광굴비·보리굴비·굴비선물세트 등)가 다 들어있어 여기서 뽑는다.
+   크롬UA로 429 회피(실측). */
+async function collectStoreTitlesByKeyword(seed: string, log: (m: string) => void): Promise<string[]> {
+  let browser: any = null;
+  try {
+    browser = await launchBrowser(null, { headless: true, feature: "inflow", log, storeMode: true });
+    const ctx = await browser.newContext({ userAgent: INFLOW_STORE_UA, viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, locale: "ko-KR" });
+    await applyAntiDetection(ctx);
+    const page = await ctx.newPage();
+    await page.goto(`https://m.search.naver.com/search.naver?ssc=tab.m_shop.all&query=${encodeURIComponent(seed)}`, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(inflowRndInt(1800, 2800));
+    for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, 1400); await page.waitForTimeout(inflowRndInt(600, 1000)); }
+    const titles: string[] = await page.evaluate(() => {
+      const out: string[] = [];
+      document.querySelectorAll('a[href*="cr3.shopping.naver.com"], a[href*="smartstore.naver.com"], a[href*="brand.naver.com"]').forEach((a) => {
+        let t = (a.textContent || "").trim().replace(/\s+/g, " ");
+        if (t.length < 6) { let p = (a as HTMLElement).parentElement; for (let i = 0; i < 3 && p; i++) { const pt = (p.textContent || "").trim().replace(/\s+/g, " "); if (pt.length >= 8) { t = pt; break; } p = p.parentElement; } }
+        // 가격·할인 등 꼬리 제거(상품명만) — '할인'/'판매가'/숫자원 앞까지
+        t = t.split(/할인 전|판매가|최저|배송비|\d[\d,]*원/)[0].trim();
+        if (t.length >= 5 && t.length <= 60) out.push(t.slice(0, 60));
+      });
+      return Array.from(new Set(out)).slice(0, 15);
+    }).catch(() => []);
+    await browser.close().catch(() => {}); browser = null;
+    return titles;
+  } catch { if (browser) await browser.close().catch(() => {}); return []; }
+}
+
 /* ── 🎯 대상(글/블로그/플레이스/스토어) 내용 → 관련 키워드 추천 ──
    "쌩뚱맞은 키워드 유입은 무의미(네이버 정밀매칭)" → 대상 내용을 실제로 읽어 주제어를 뽑고,
    그걸 seed로 검색량(검색광고 API)+연관검색어까지 붙여 관련도순으로 추천한다.
@@ -1729,15 +1759,17 @@ export async function suggestKeywordsFromTarget(params: {
         sourceLabel = "블로그 최근 글";
       }
     } else if (params.targetType === "store") {
-      // 상품 상세 → 상품명 기반
-      const storeUrl = params.url || (params.storeId ? `https://smartstore.naver.com/${params.storeId}/products/${params.productId || ""}` : "");
-      if (storeUrl) {
-        log(`  🛒 상품 정보를 읽어 키워드를 뽑는 중…`);
-        const d = await diagnoseStore({ storeUrl, onLog: log }).catch(() => null);
-        // 스토어가 429 차단페이지를 주면 name이 "에러페이지" 등 쓰레기 → 거르고 seed 안 씀(잘못된 키워드 방지)
-        const badName = !d?.name || /에러|error|접속이 불가|페이지를 찾을|not found/i.test(d.name);
-        if (d && d.name && !badName) { texts.push(d.name); sourceLabel = "상품명"; }
-        else if (badName) log(`  ⚠️ 상품 정보를 읽지 못했어요(스토어 접근 제한) — 키워드는 직접 입력해 주세요`);
+      // 🛒 상품 직접읽기는 429(직접 goto 차단) → 씨앗 키워드로 쇼핑검색해 '같은 카테고리 상품명들'에서 키워드 추출.
+      //   씨앗은 회원이 넣은 키워드(첫 키워드) 또는 상품주소의 스토어명. 상품명엔 사람들이 실제 치는 키워드가 다 들어있음.
+      const seed = (params.seedKeyword || "").trim();
+      if (!seed) {
+        log(`  🛒 스토어 키워드 추천은 씨앗 키워드가 필요해요 — 상품과 관련된 단어 1개를 먼저 입력해주세요(예: "굴비").`);
+      } else {
+        log(`  🛒 "${seed}"로 쇼핑검색해 관련 상품명에서 키워드를 뽑는 중…`);
+        const productTitles = await collectStoreTitlesByKeyword(seed, log).catch(() => []);
+        for (const t of productTitles) texts.push(t);
+        sourceLabel = `"${seed}" 관련 상품`;
+        if (!productTitles.length) log(`  ⚠️ 쇼핑결과를 읽지 못했어요 — 키워드는 직접 입력해 주세요`);
       }
     } else if (params.targetType === "place") {
       // 플레이스 상세 → 업종·상호
@@ -6211,6 +6243,10 @@ export async function searchInflow(params: {
   //   실제 사람들이 대표어만 치지 않고 다양한 표현으로 검색해 들어오는 패턴 → 유입 검색어가 다양해져 자연스럽고 노출 폭도 넓어짐.
   const relatedKw: string[] = [];
   const acHeaders = { "User-Agent": UA, "Referer": "https://search.naver.com/" };
+  // ★스토어 유입은 자동완성에서 '음식점/블로그용' 연관어(맛집·정식·후기 등)를 걸러낸다 — 상품 사는데 "영광굴비 맛집"으로
+  //   검색하면 그 상품이 안 뜬다(테리 지적). "영광굴비 선물세트/가격/법성포" 같은 쇼핑 검색어만 남긴다.
+  const isStoreInflow = targets.some(t => t.type === "store");
+  const STORE_NG = /맛집|정식|후기|먹방|메뉴|식당|점심|저녁|반찬|백반|한정식|맛있|근처|배달/;
   const buildRelated = async () => {
     const seeds = Array.from(new Set(keywords.map(s => String(s || "").trim()).filter(Boolean))).slice(0, 8);
     for (const q of seeds) {
@@ -6218,10 +6254,15 @@ export async function searchInflow(params: {
         const url = `https://ac.search.naver.com/nx/ac?q=${encodeURIComponent(q)}&con=1&frm=nv&ans=2&r_format=json&r_enc=UTF-8&r_unicode=0&t_koreng=1&run=2&rev=4&q_enc=UTF-8&st=100`;
         const r = await fetch(url, { headers: acHeaders });
         const j: any = await r.json();
-        for (const it of (j?.items?.[0] || [])) { const t = String(it?.[0] || "").trim(); if (t && t.length <= 25 && !keywords.includes(t) && !relatedKw.includes(t)) relatedKw.push(t); }
+        for (const it of (j?.items?.[0] || [])) {
+          const t = String(it?.[0] || "").trim();
+          if (!t || t.length > 25 || keywords.includes(t) || relatedKw.includes(t)) continue;
+          if (isStoreInflow && STORE_NG.test(t)) continue;   // 스토어면 음식점·블로그용 연관어 제외
+          relatedKw.push(t);
+        }
       } catch { /* skip */ }
     }
-    if (relatedKw.length) log(`  🔎 연관 검색어 ${relatedKw.length}개 확보 — 방문마다 가끔 롱테일로도 진입해 검색어를 다양화합니다`);
+    if (relatedKw.length) log(`  🔎 ${isStoreInflow ? "쇼핑 " : ""}연관 검색어 ${relatedKw.length}개 확보 — 방문마다 가끔 롱테일로도 진입해 검색어를 다양화합니다`);
   };
   // 대표 키워드 or 연관어 선택(연관어 있으면 약 30% 확률로 롱테일)
   const pickKeywordMix = (i: number): string => {

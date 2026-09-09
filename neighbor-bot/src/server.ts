@@ -304,17 +304,19 @@ app.get("/api/inflow/keyword-suggest", async (req, res) => {
       productId: q.productId || undefined,
       placeId: q.placeId || undefined,
       placeDomain: q.placeDomain || undefined,
+      seedKeyword: q.seedKeyword || undefined,   // 🛒 스토어용 씨앗 키워드
       onLog: () => {},
     });
     if (!seeds.length) return res.json({ ok: true, keywords: [], hasVolume: false, seeds: [], source, note: "대상에서 키워드를 찾지 못했어요(주소·아이디를 확인하거나 직접 입력해 주세요)" });
-    // 2) seed → 검색량(우선) 또는 연관검색어 확장
+    // 2) seed → 검색량(우선). 스토어는 상품명에서 뽑은 seed가 '이미 쇼핑 키워드'라 그대로 검색량만 붙인다.
     const vols = await getKeywordVolumes(seeds, 40).catch(() => null);
     if (vols && vols.length) {
       const keywords = vols.map(v => ({ keyword: v.keyword, source: "검색광고", vol: v.total, comp: v.comp }));
       return res.json({ ok: true, keywords, hasVolume: true, seeds, source });
     }
-    const expanded = await suggestPlaceKeywords({ seeds }).catch(() => []);
-    // 확장 결과가 비면 seed 자체라도 반환(대상 명사 = 이미 관련 키워드)
+    // ★스토어는 suggestPlaceKeywords(플레이스 자동완성='○○ 맛집·후기' 붙음) 쓰면 안 됨 — 상품 사는데 '맛집'은 무의미.
+    //   스토어는 상품명 seed 그대로 반환. 플레이스/블로그만 연관검색어 확장.
+    const expanded = targetType === "store" ? [] : await suggestPlaceKeywords({ seeds }).catch(() => []);
     const keywords = expanded.length ? expanded : seeds.map(s => ({ keyword: s, source: source || "대상 추출" }));
     res.json({ ok: true, keywords, hasVolume: false, seeds, source });
   } catch (e: any) {
