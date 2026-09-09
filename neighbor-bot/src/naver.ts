@@ -6,7 +6,7 @@ import http from "http";
 import os from "os";
 import path from "path";
 import { deleteSession, hasSession, readSession, writeSession, SESSION_DIR } from "./session-store";
-import { getAdminBlogSearchKeys, getProxyForAccount } from "./supabase";
+import { getAdminBlogSearchKeys, getProxyForAccount, getStoreProxy } from "./supabase";
 
 const LEGACY_SESSION_DIRS = [path.join(__dirname, "../sessions"), path.join(__dirname, "../../naver-bot/sessions")];
 const sessionName = (userId: string) => `naver_${userId}`;
@@ -54,10 +54,21 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
    업체 미선정 상태여도 안전: 배정된 프록시가 없으면 그냥 로컬 IP로 뜬다. */
 async function launchBrowser(
   userId: string | null | undefined,
-  opts: { headless?: boolean; maximized?: boolean; slowMo?: number; log?: (s: string) => void; feature?: string; ownerUserId?: string | null; authToken?: string } = {}
+  opts: { headless?: boolean; maximized?: boolean; slowMo?: number; log?: (s: string) => void; feature?: string; ownerUserId?: string | null; authToken?: string; storeMode?: boolean } = {}
 ) {
   const args = opts.maximized ? [...LAUNCH_ARGS, "--start-maximized"] : LAUNCH_ARGS;
   let proxy = await getProxyForAccount(userId, opts.feature, opts.ownerUserId, opts.authToken);
+  // 🛒 스마트스토어 유입은 모바일 프록시로 교체 — residential IP는 스토어가 429로 막음(3IP 실측 차단),
+  //   모바일(통신사) IP는 실제 사람 IP라 통과(실측: 상품 200). store_inflow_proxy 없으면 기본(residential) 유지(안전).
+  if (opts.storeMode && opts.feature === "inflow") {
+    const storeProxy = await getStoreProxy();
+    if (storeProxy) {
+      proxy = storeProxy;
+      opts.log?.(`  🛒 스토어는 모바일 프록시로 접속해요 — 스마트스토어가 일반 프록시(주거용) IP는 막기 때문(실측). 통신사 모바일 IP라 안전.`);
+    } else {
+      opts.log?.(`  ⚠️ 스토어 전용 모바일 프록시가 설정되지 않았어요 — 일반 프록시로 접속(스마트스토어에 막힐 수 있음). 관리자에 store_inflow_proxy 등록 필요.`);
+    }
+  }
   // ★2026-09-08 완전 엇갈림(테리): 유입은 "방문마다 완전히 다른 IP + 한 방문 안에선 같은 IP"가 가장 안전+렉없음.
   //   DataImpulse 게이트웨이는 기본(포트 823)이 요청마다 IP 로테이션 → 방문 도중에도 IP가 바뀌어 네이버가 봇으로 의심+렉.
   //   해결: 유입 방문마다 새 세션ID(sessid)를 username에 붙이고 sticky 포트(10000)로 접속 → 이 방문은 IP 하나로 고정,
@@ -6076,7 +6087,7 @@ export async function searchInflow(params: {
     let browser: any = null;
     let proxyUnavailable = false;
     try {
-      browser = await launchBrowser(acct, { headless: !params.visible, feature: "inflow", ownerUserId: params.ownerUserId, authToken: params.authToken, log });
+      browser = await launchBrowser(acct, { headless: !params.visible, feature: "inflow", ownerUserId: params.ownerUserId, authToken: params.authToken, log, storeMode: curTarget.type === "store" });
       // 접속 기기 결정 — mix면 방문마다 랜덤(사람처럼 모바일/PC 섞임)
       // 🛒 스토어는 PC에서 네이버가 비로그인 봇을 로그인창(nid)으로 튕긴다(실측: PC 막힘·모바일 통과). → 스토어는 모바일 강제.
       const dev = curTarget.type === "store" ? "mobile" : (params.device === "mix" ? (Math.random() < 0.5 ? "pc" : "mobile") : (params.device === "pc" ? "pc" : "mobile"));

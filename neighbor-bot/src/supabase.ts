@@ -565,6 +565,25 @@ async function getDefaultProxy(token?: string): Promise<ProxyConfig | null> {
   return proxy;
 }
 
+// 🛒 스토어 전용 프록시(모바일) — 스마트스토어는 residential IP를 429로 막는다(3IP 실측 전부 차단).
+//    모바일(통신사) IP는 실제 사람 IP라 네이버가 못 막음(실측: 스마트스토어 상품 200). 스토어 유입만 이걸 쓴다.
+//    publy_settings.store_inflow_proxy 의 JSON. 없으면 null → 호출측이 기본(residential)로 폴백(안전).
+//    anon으로 publy_settings 직접 read 됨(실측) → RPC 불필요. 공개레포라 크레덴셜은 항상 DB에서.
+let _storeProxyCache: { proxy: ProxyConfig | null; ts: number } | null = null;
+export async function getStoreProxy(): Promise<ProxyConfig | null> {
+  if (_storeProxyCache && Date.now() - _storeProxyCache.ts < PROXY_CACHE_MS) return _storeProxyCache.proxy;
+  let proxy: ProxyConfig | null = null;
+  try {
+    const { data } = await supabase.from("publy_settings").select("value").eq("key", "store_inflow_proxy").maybeSingle();
+    if (data?.value) {
+      const p = typeof data.value === "string" ? JSON.parse(data.value) : data.value;
+      if (p && p.server) proxy = { server: normalizeProxyServer(p.server), username: p.username || undefined, password: p.password || undefined };
+    }
+  } catch {}
+  _storeProxyCache = { proxy, ts: Date.now() };
+  return proxy;
+}
+
 // 🌐 프록시 사용량 카운트 — 오늘 접속 횟수(관리자 프록시 탭에서 표시). 로깅 실패가 본 로직 안 막게 삼킴.
 export async function incrementProxyUsage(): Promise<void> {
   try {
