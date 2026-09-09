@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { saveSession, sessionExists, removeSession, crawlBlogIds, crawlBuddyPosts, analyzeBuddyKeywords, addNeighbors, NeighborResult, donePath, engageBlogs, EngageResult, engageDonePath, crawlMyPosts, crawlPublicPosts, replyToComments, crawlPlaceReviews, generatePlaceReviewReply, replyToPlaceReviews, crawlBlogStats, checkSelectedBlogExposure, pumasiEngage, crawlPumasiReport, pumasiPreview, updatePostTitle, checkProxy, analyzeBlogAuthenticity, fetchPostBody, crawlPostViews, sendWebmail, sendBlogComments, crawlPlaces, crawlPlaceBloggers, crawlPlaceDetail, crawlPlaceByUrl, suggestPlaceKeywords, parsePlaceUrl, resolvePlaceUrl, searchInflow, diagnosePlace, diagnoseStore, measurePlaceRank, measureBlogRank, collectPlaceReviews, InflowTarget } from "./naver";
+import { saveSession, sessionExists, removeSession, crawlBlogIds, crawlBuddyPosts, analyzeBuddyKeywords, addNeighbors, NeighborResult, donePath, engageBlogs, EngageResult, engageDonePath, crawlMyPosts, crawlPublicPosts, replyToComments, crawlPlaceReviews, generatePlaceReviewReply, replyToPlaceReviews, crawlBlogStats, checkSelectedBlogExposure, pumasiEngage, crawlPumasiReport, pumasiPreview, updatePostTitle, checkProxy, analyzeBlogAuthenticity, fetchPostBody, crawlPostViews, sendWebmail, sendBlogComments, crawlPlaces, crawlPlaceBloggers, crawlPlaceDetail, crawlPlaceByUrl, suggestPlaceKeywords, suggestKeywordsFromTarget, parsePlaceUrl, resolvePlaceUrl, searchInflow, diagnosePlace, diagnoseStore, measurePlaceRank, measureBlogRank, collectPlaceReviews, InflowTarget } from "./naver";
 import { checkNeighborQuota, incrementNeighborQuota, getNeighborDailyUsage, incrementEngageQuota, getEngageDailyUsage, getUserPlan, checkMembershipAccess, NEIGHBOR_DAILY_LIMIT, ENGAGE_DAILY_LIMIT, REPLY_DAILY_LIMIT, getReplyDailyUsage, incrementReplyQuota, PLACE_REPLY_DAILY_LIMIT, getPlaceReplyDailyUsage, incrementPlaceReplyQuota, addNeighborHistory, addReplyHistory, addPlaceReplyHistory, addBlogscoreHistory, incrementPumasiQuota, TITLE_EDIT_DAILY_LIMIT, getTitleEditDailyUsage, incrementTitleEditQuota, getProxyForAccount, supabase, getOutreachSender, getOutreachSentToday, addOutreachLog, checkPlaceDetailQuota, incrementPlaceDetailQuota, checkInflowQuota, incrementInflowQuota, incrementInflowStat, inflowReviewAllowed, verifyInflowSession, verifyAdminSession, consumeInflowQuota, INFLOW_DAILY_LIMIT, getTrafficLicenseForTool, getKeywordVolumes } from "./supabase";
 import nodemailer from "nodemailer";
 import fs from "fs";
@@ -282,6 +282,43 @@ app.get("/api/place/keywords", async (req, res) => {
     res.json({ ok: true, keywords, hasVolume: false });
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e.message || "키워드 발굴 실패" });
+  }
+});
+
+/* ── 🎯 대상 내용 기반 키워드 추천 ──
+   대상(블로그 글/아이디·플레이스·스토어)의 실제 내용을 읽어 주제어를 뽑고,
+   그걸 seed로 검색량(검색광고 API)+연관검색어를 붙여 관련도순 추천.
+   "쌩뚱맞은 키워드 유입은 무의미" → 대상과 관련된 키워드만 추천되게. */
+app.get("/api/inflow/keyword-suggest", async (req, res) => {
+  const q = req.query as Record<string, string>;
+  try {
+    const targetType = (q.targetType || "blog") as "blog" | "place" | "store";
+    const onLog = (m: string) => sseSend(res, { type: "log", msg: m });   // 진단용(SSE 아니어도 무해)
+    // 1) 대상 내용 읽어 seed(주제 명사) 추출
+    const { seeds, source } = await suggestKeywordsFromTarget({
+      targetType,
+      url: q.url || undefined,
+      blogId: q.blogId || undefined,
+      logNo: q.logNo || undefined,
+      storeId: q.storeId || undefined,
+      productId: q.productId || undefined,
+      placeId: q.placeId || undefined,
+      placeDomain: q.placeDomain || undefined,
+      onLog: () => {},
+    });
+    if (!seeds.length) return res.json({ ok: true, keywords: [], hasVolume: false, seeds: [], source, note: "대상에서 키워드를 찾지 못했어요(주소·아이디를 확인하거나 직접 입력해 주세요)" });
+    // 2) seed → 검색량(우선) 또는 연관검색어 확장
+    const vols = await getKeywordVolumes(seeds, 40).catch(() => null);
+    if (vols && vols.length) {
+      const keywords = vols.map(v => ({ keyword: v.keyword, source: "검색광고", vol: v.total, comp: v.comp }));
+      return res.json({ ok: true, keywords, hasVolume: true, seeds, source });
+    }
+    const expanded = await suggestPlaceKeywords({ seeds }).catch(() => []);
+    // 확장 결과가 비면 seed 자체라도 반환(대상 명사 = 이미 관련 키워드)
+    const keywords = expanded.length ? expanded : seeds.map(s => ({ keyword: s, source: source || "대상 추출" }));
+    res.json({ ok: true, keywords, hasVolume: false, seeds, source });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: e.message || "키워드 추천 실패" });
   }
 });
 

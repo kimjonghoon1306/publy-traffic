@@ -1636,6 +1636,94 @@ export async function crawlPlaceByUrl(params: {
   return crawlPlaceDetail({ accountId: "", placeId: parsed.placeId, domain: parsed.domain, ownerUserId: params.ownerUserId, onLog: log });
 }
 
+/* ── 📝 텍스트에서 주제 명사만 뽑기(컴팩트 자체 구현) ──
+   조사·활용형·불용어를 걷어내 '이 글/상품/매장이 실제로 다루는 명사'만 빈도순으로.
+   네이버 상위노출이 "검색어↔문서 의미 매칭"으로 바뀌어(DIA+/AI브리핑), 대상과 무관한 키워드 유입은
+   무의미/역효과 → 반드시 대상 내용에서 뽑은 명사를 seed로 써야 관련성 신호가 쌓인다. */
+function extractTopicNouns(texts: string[], topN = 12): string[] {
+  const STOP = new Set(["안녕하세요","있는","합니다","입니다","그리고","하는","이번","오늘","저는","제가","너무","정말","진짜","우리","해서","에서","으로","까지","부터","같은","위해","통해","대한","관련","경우","때문","많이","다시","바로","여기","하지만","그런","이런","하고","보고","보다","되는","있어요","없는","위한","요즘","지금","이제","아주","매우","제일","가장","자주","계속","먼저","특히","역시","물론","그냥","완전","엄청","이미","아직","항상","보통","대부분","여러","추천","후기","이유","방법","사람","생각","시간","하루","정도","다음","부분","모습","느낌","마음","사실","블로그","포스팅","시작","마지막","전체","기본","정보","내용","이야기","얘기","자신","본인","최근","내일","어제","최고","진행","사용","경험","선택","고민","준비","확인","소개","상품","제품","판매","구매","배송","리뷰","가격","할인","이벤트","네이버","스토어","쇼핑","무료","선물","세트","포함","구성"]);
+  const CONJ = /(습니다|었습니다|였습니다|해요|아요|어요|에요|예요|이에요|네요|겠다|었다|였다|한다|된다|해서|아서|어서|하고|하며|하니|하는|되는|있는|없는|같은|으면|하면|되면|려고|면서|처럼|만큼|보다|라고|다고|든지|거나|지만|는데|은데|으로|에서|까지|부터|에게|한테)$/;
+  const stripJosa = (w: string): string => { const s = w.replace(/(으로서|으로써|이라는|라는|으로|로서|로써|에서|에게|한테|께서|부터|까지|보다|처럼|만큼|이나|이란|라도|든지|은|는|이|가|을|를|의|에|도|만|로|과|와|나)$/, ""); return s.length >= 2 ? s : w; };
+  const freq: Record<string, number> = {};
+  const joined = texts.join(" ");
+  // 한글 2~6자 + 영문/숫자 혼합어(브랜드·모델명) 둘 다 수집
+  for (const raw of joined.match(/[가-힣]{2,6}|[A-Za-z0-9]{2,}/g) || []) {
+    const w = /[가-힣]/.test(raw) ? stripJosa(raw) : raw;
+    if (w.length < 2) continue;
+    if (STOP.has(w)) continue;
+    if (CONJ.test(w)) continue;
+    freq[w] = (freq[w] || 0) + 1;
+  }
+  return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, topN).map(([w]) => w);
+}
+
+/* ── 🎯 대상(글/블로그/플레이스/스토어) 내용 → 관련 키워드 추천 ──
+   "쌩뚱맞은 키워드 유입은 무의미(네이버 정밀매칭)" → 대상 내용을 실제로 읽어 주제어를 뽑고,
+   그걸 seed로 검색량(검색광고 API)+연관검색어까지 붙여 관련도순으로 추천한다.
+   블로그·플레이스·스토어 모두 동일 원리(대상 내용에 맞는 키워드). */
+export async function suggestKeywordsFromTarget(params: {
+  targetType: "blog" | "place" | "store";
+  url?: string;
+  blogId?: string;
+  logNo?: string;
+  storeId?: string;
+  productId?: string;
+  placeId?: string;
+  placeDomain?: string;
+  onLog?: (m: string) => void;
+}): Promise<{ seeds: string[]; source: string }> {
+  const log = params.onLog || (() => {});
+  const texts: string[] = [];
+  let sourceLabel = "";
+
+  try {
+    if (params.targetType === "blog") {
+      if (params.blogId && params.logNo) {
+        // 글 하나 → 본문 읽어 주제어
+        log(`  📖 글 본문을 읽어 핵심 키워드를 뽑는 중…`);
+        const body = await fetchPostBody(params.blogId, params.logNo).catch(() => null);
+        if (body) { texts.push(body.title || "", body.body || ""); sourceLabel = "글 본문"; }
+      }
+      if (!texts.length && params.blogId) {
+        // 아이디만 → 최근 글 제목들로 블로그 주제 파악
+        log(`  📚 블로그 최근 글들을 분석해 주제를 파악하는 중…`);
+        const posts = await crawlPublicPosts({ blogId: params.blogId, count: 20, onLog: log }).catch(() => []);
+        for (const p of posts) texts.push(p.title || "");
+        sourceLabel = "블로그 최근 글";
+      }
+    } else if (params.targetType === "store") {
+      // 상품 상세 → 상품명 기반
+      const storeUrl = params.url || (params.storeId ? `https://smartstore.naver.com/${params.storeId}/products/${params.productId || ""}` : "");
+      if (storeUrl) {
+        log(`  🛒 상품 정보를 읽어 키워드를 뽑는 중…`);
+        const d = await diagnoseStore({ storeUrl, onLog: log }).catch(() => null);
+        // 스토어가 429 차단페이지를 주면 name이 "에러페이지" 등 쓰레기 → 거르고 seed 안 씀(잘못된 키워드 방지)
+        const badName = !d?.name || /에러|error|접속이 불가|페이지를 찾을|not found/i.test(d.name);
+        if (d && d.name && !badName) { texts.push(d.name); sourceLabel = "상품명"; }
+        else if (badName) log(`  ⚠️ 상품 정보를 읽지 못했어요(스토어 접근 제한) — 키워드는 직접 입력해 주세요`);
+      }
+    } else if (params.targetType === "place") {
+      // 플레이스 상세 → 업종·상호
+      const placeUrl = params.url || "";
+      if (placeUrl || params.placeId) {
+        log(`  🗺️ 매장 정보(업종·이름)를 읽어 키워드를 뽑는 중…`);
+        const detail = params.placeId
+          ? await crawlPlaceDetail({ accountId: "", placeId: params.placeId, domain: params.placeDomain || "place", onLog: log }).catch(() => null)
+          : await crawlPlaceByUrl({ placeUrl, onLog: log }).catch(() => null);
+        if (detail) {
+          const anyD = detail as any;
+          for (const k of ["name", "category", "categoryName", "description"]) if (anyD[k]) texts.push(String(anyD[k]));
+          sourceLabel = "매장 정보";
+        }
+      }
+    }
+  } catch (e: any) { log(`  ⚠️ 대상 읽기 일부 실패: ${e?.message || e}`); }
+
+  const nouns = extractTopicNouns(texts, 12);
+  if (nouns.length) log(`  ✅ ${sourceLabel}에서 핵심어 추출: ${nouns.slice(0, 8).join(", ")}`);
+  return { seeds: nouns, source: sourceLabel || "대상 내용" };
+}
+
 export async function crawlPlaces(params: {
   accountId: string;
   query: string;                    // "강남 맛집" 처럼 지역+업종을 이미 합친 검색어

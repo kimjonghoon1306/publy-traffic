@@ -654,6 +654,42 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     setKwSuggest(prev => prev.filter(x => x.keyword !== k));
   };
 
+  // 🎯 대상 내용 기반 키워드 추천 — 지금 입력한 대상(글/블로그/플레이스/스토어)을 읽어 관련 키워드를 추천.
+  //   "쌩뚱맞은 키워드 유입은 무의미"(네이버 정밀매칭) → 대상과 관련된 키워드만 뽑아준다. 직접 입력과 공존.
+  const runTargetKeywordSuggest = async () => {
+    const url = (targetType === "place" ? placeUrl : targetType === "store" ? storeUrl : blogUrl).trim();
+    if (!url) { toast(`먼저 ${targetType === "place" ? "플레이스" : targetType === "store" ? "상품" : "블로그"} 주소를 입력하세요 — 그 내용을 읽어 딱 맞는 키워드를 추천해요`, "error"); return; }
+    const qs = new URLSearchParams({ targetType });
+    if (targetType === "blog") {
+      const b = parseBlogUrl(url);
+      if (b?.blogId) qs.set("blogId", b.blogId);
+      if (b?.logNo) qs.set("logNo", b.logNo);
+      if (!b?.blogId) { qs.set("blogId", url.replace(/@.*/, "").trim()); }   // 아이디만 넣은 경우
+    } else if (targetType === "store") {
+      const s = parseStoreUrl(url); qs.set("url", url);
+      if (s?.storeId) qs.set("storeId", s.storeId);
+      if (s?.productId) qs.set("productId", s.productId);
+    } else {
+      const pid = extractPlaceId(url); qs.set("url", url);
+      if (pid) qs.set("placeId", pid);
+    }
+    setKwLoading(true); setKwSuggest([]);
+    try {
+      const r = await botFetch(`${BOT}/api/inflow/keyword-suggest?${qs.toString()}`);
+      const j = await r.json();
+      if (!j.ok) { toast(j.error || "추천 실패", "error"); return; }
+      const already = new Set(keywords.split(/[,\n]/).map(k => k.trim()));
+      const list = (j.keywords || [])
+        .filter((k: any) => k?.keyword && !already.has(k.keyword))
+        .map((k: any) => ({ keyword: String(k.keyword), source: String(k.source || j.source || "추천"), vol: typeof k.vol === "number" ? k.vol : undefined, comp: k.comp ? String(k.comp) : undefined }))
+        .slice(0, 30);
+      if (!list.length) { toast(j.note || "대상에서 새 키워드를 못 찾았어요 — 직접 입력해도 돼요", "info"); }
+      else { toast(`🎯 "${j.source || "대상"}"에서 관련 키워드 ${list.length}개 추천 — 눌러서 추가하세요`, "success"); }
+      setKwSuggest(list);
+    } catch { toast("키워드 추천 실패 — 봇 서버 확인", "error"); }
+    finally { setKwLoading(false); }
+  };
+
   // 🏪 현재 입력한 대상을 이름 붙여 저장 — 플레이스/블로그/스토어 각각 격리
   const saveCurrentTarget = () => {
     const url = (targetType === "place" ? placeUrl : targetType === "store" ? storeUrl : blogUrl).trim();
@@ -1409,8 +1445,21 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                   ))}
                 </div>
               )}
-              <div style={mFl}>검색 키워드 (여러 개는 , 로 구분)</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                <div style={{ ...mFl, margin: 0 }}>검색 키워드 (여러 개는 , 로 구분)</div>
+                <button onClick={runTargetKeywordSuggest} disabled={kwLoading} title="위에 넣은 대상의 내용을 읽어 딱 맞는 키워드를 추천해요" style={{ marginLeft: "auto", padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${C.accent}`, background: kwLoading ? C.panel2 : C.glow, color: C.accent, fontSize: 11.5, fontWeight: 800, cursor: kwLoading ? "default" : "pointer", fontFamily: "inherit", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5 }}>{kwLoading ? <><span style={{ width: 10, height: 10, border: `2px solid ${C.accent}`, borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />읽는 중…</> : "🎯 추천 키워드 받기"}</button>
+              </div>
               <input style={mInput} value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="예: 횡성시장맛집, 횡성한우" />
+              <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 4, lineHeight: 1.5 }}>💡 직접 입력하거나, <b style={{ color: C.accent }}>🎯 추천 키워드 받기</b>를 누르면 위 대상 내용에 맞는 키워드를 찾아줘요. <b>대상과 관련된 키워드로 유입해야</b> 네이버가 관련성을 인정해 순위가 올라요(엉뚱한 키워드는 효과 없음).</div>
+              {kwSuggest.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
+                  {kwSuggest.map((k) => (
+                    <button key={k.keyword} onClick={() => addSuggestedKeyword(k.keyword)} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 9px", borderRadius: 7, border: `1px solid ${C.accent}`, background: C.panel, color: C.ink, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                      <span style={{ color: C.accent, fontWeight: 900 }}>＋</span>{k.keyword}{typeof k.vol === "number" && <span style={{ fontSize: 9.5, color: C.sub, fontWeight: 600 }}>·{k.vol >= 10000 ? (k.vol / 10000).toFixed(1) + "만" : k.vol.toLocaleString()}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div style={mCard}>
               <h3 style={mH}><span style={mNum}>2</span> 방문 설정</h3>
