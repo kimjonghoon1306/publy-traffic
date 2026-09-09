@@ -311,7 +311,20 @@ app.get("/api/inflow/keyword-suggest", async (req, res) => {
     // 2) seed → 검색량(우선). 스토어는 상품명에서 뽑은 seed가 '이미 쇼핑 키워드'라 그대로 검색량만 붙인다.
     const vols = await getKeywordVolumes(seeds, 40).catch(() => null);
     if (vols && vols.length) {
-      const keywords = vols.map(v => ({ keyword: v.keyword, source: "검색광고", vol: v.total, comp: v.comp }));
+      let keywords = vols.map(v => ({ keyword: v.keyword, source: "검색광고", vol: v.total, comp: v.comp }));
+      // 🎯 스토어는 "찾는 사람 있으면서(검색량>0) + 순위 될 만한(경쟁 낮음/중간)" 키워드를 위로 정렬(테리: 경쟁 세면 순위밖,
+      //    검색량 0이면 유입 소용없음 → 중간지대가 golden). 경쟁 낮음>중간>높음, 같으면 검색량 큰 순.
+      if (targetType === "store") {
+        const compRank = (c?: string) => c === "낮음" ? 0 : c === "중간" ? 1 : c === "높음" ? 2 : 1.5;
+        // 씨앗 단어(예 "굴비")를 포함하는 키워드가 진짜 관련어 — 검색광고 API가 주는 엉뚱한 연관어(민어·태극기 등) 걸러냄.
+        const seedWords = seeds.flatMap(s => s.replace(/\s+/g, "").match(/[가-힣]{2,}/g) || []);
+        const isRelated = (kw: string) => { const bare = kw.replace(/\s+/g, ""); return seedWords.some(w => bare.includes(w) || w.includes(bare)); };
+        const related = keywords.filter(k => (k.vol || 0) > 0 && isRelated(k.keyword));
+        const rest = keywords.filter(k => (k.vol || 0) > 0 && !isRelated(k.keyword));
+        const sortFn = (a: any, b: any) => { const cr = compRank(a.comp) - compRank(b.comp); return cr !== 0 ? cr : (b.vol || 0) - (a.vol || 0); };
+        // 관련어(씨앗 포함) 우선 + 경쟁 낮음/중간 우선. 관련어가 부족하면 나머지도 뒤에 붙임.
+        keywords = [...related.sort(sortFn), ...rest.sort(sortFn)];
+      }
       return res.json({ ok: true, keywords, hasVolume: true, seeds, source });
     }
     // ★스토어는 suggestPlaceKeywords(플레이스 자동완성='○○ 맛집·후기' 붙음) 쓰면 안 됨 — 상품 사는데 '맛집'은 무의미.
