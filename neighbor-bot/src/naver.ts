@@ -1,5 +1,5 @@
 import { chromium, BrowserContext } from "playwright";
-import { extractStoreUrl, isStoreLanding, isStoreResult } from "./inflow-store";
+import { isStoreLanding, isStoreResult } from "./inflow-store";
 import fs from "fs";
 import https from "https";
 import http from "http";
@@ -5458,6 +5458,11 @@ export type InflowTarget =
 
 const INFLOW_MOBILE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1";
+// 🛒 스토어 전용 = 안드로이드 크롬 모바일 UA. ★스마트스토어 429의 진짜 원인은 UA/엔진 불일치였음:
+//   봇 엔진은 Chromium인데 UA를 아이폰 사파리로 속이면 네이버가 "거짓말=봇"→429. UA를 실엔진(크롬)과
+//   맞추면 429 사라짐(실측: 사파리UA=429 / 크롬UA=200, residential 프록시로 상품페이지 도달 성공 2/2).
+const INFLOW_STORE_UA =
+  "Mozilla/5.0 (Linux; Android 14; SM-S928N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 const INFLOW_PC_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const inflowSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -5601,26 +5606,26 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
       const el = placeLink && placeLink.asElement ? placeLink.asElement() : null;
       if (el) return await enterVia(el, s);
     } else if (target.type === "store") {
-      // 검색결과에 실제 노출된 대상만 추출하여 추적 래퍼 없이 진입한다.
+      // 🛒 우리 대상 스토어를 가리키는 검색결과 링크를 찾는다(추적 브릿지 또는 직접).
       const hrefs: string[] = await page.$$eval("a", (as: HTMLAnchorElement[]) => as.map(a => a.href)).catch(() => []);
-      const href = hrefs.find(h => isStoreResult(h, target));
-      const cleanUrl = href ? extractStoreUrl(href, target) : null;
-      if (cleanUrl) {
-        log(`  🎯 검색결과에서 대상 발견 → 스토어로 바로 진입(추적링크 우회) (약 ${s + 1}스크롤 지점)`);
+      const matches = hrefs.filter(h => isStoreResult(h, target));
+      // ★2026-09-09(테리, 실측): 예전엔 extractStoreUrl로 '깨끗한 상품 URL'을 뽑아 직접 goto(우회)했는데, 그러면
+      //   네이버가 "검색 안 거친 갑작스런 상품 진입"으로 봐 로그인창/차단. 실사용자는 검색결과의 '추적 브릿지 링크'
+      //   (inflow.pay.naver.com/rd·cr3.shopping.naver.com)를 그대로 클릭해 들어간다 → referer·세션이 붙어 로그인 없이 열림.
+      //   그래서 브릿지 링크를 '그대로' 타고 진입한다(우회 안 함). +UA를 엔진과 맞는 크롬으로 바꿔 429도 해결(위 context).
+      const bridge = matches.find(h => /inflow\.pay\.naver\.com\/rd|(^|\/\/)(cr\d*|msearch)\.shopping\.naver\.com/i.test(h));
+      const enterHref = bridge || matches[0];
+      if (enterHref) {
+        log(`  🎯 검색결과에서 대상 발견 → ${bridge ? "검색 링크 그대로 클릭 진입(자연 도착)" : "스토어 진입"} (약 ${s + 1}스크롤 지점)`);
         try {
-          await page.goto(cleanUrl, { referer: page.url(), waitUntil: "domcontentloaded", timeout: 25000 });
+          await page.goto(enterHref, { referer: page.url(), waitUntil: "domcontentloaded", timeout: 25000 });
         } catch {
           if (isNidLogin(page.url())) return await confirmArrival(page);
-          log("  ⚠️ 스토어 직접 진입 실패 — 방문 무효");
+          log("  ⚠️ 스토어 진입 실패 — 방문 무효");
           return null;
         }
         return await confirmArrival(page);
       }
-      const link = href ? await page.evaluateHandle((h: string) =>
-        Array.from(document.querySelectorAll("a")).find(a => a.href === h) || null,
-      href).catch(() => null) : null;
-      const el = link && link.asElement ? link.asElement() : null;
-      if (el) return await enterVia(el, s);
     } else {
       const link = await page.$(`a[href*="${needle}"]`).catch(() => null);
       if (link) return await enterVia(link, s);
@@ -6233,10 +6238,12 @@ export async function searchInflow(params: {
       // 접속 기기 결정 — mix면 방문마다 랜덤(사람처럼 모바일/PC 섞임)
       // 🛒 스토어는 PC에서 네이버가 비로그인 봇을 로그인창(nid)으로 튕긴다(실측: PC 막힘·모바일 통과). → 스토어는 모바일 강제.
       const dev = curTarget.type === "store" ? "mobile" : (params.device === "mix" ? (Math.random() < 0.5 ? "pc" : "mobile") : (params.device === "pc" ? "pc" : "mobile"));
+      // 🛒 스토어는 UA를 엔진(Chromium)과 맞는 안드로이드 크롬으로 — 이게 429의 진짜 해결(사파리UA=거짓말=차단).
+      const mobileUA = curTarget.type === "store" ? INFLOW_STORE_UA : INFLOW_MOBILE_UA;
       const context = await browser.newContext(
         dev === "pc"
           ? { userAgent: INFLOW_PC_UA, viewport: { width: 1280, height: 800 }, locale: "ko-KR" }
-          : { userAgent: INFLOW_MOBILE_UA, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, locale: "ko-KR" }
+          : { userAgent: mobileUA, viewport: { width: curTarget.type === "store" ? 412 : 390, height: curTarget.type === "store" ? 915 : 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, locale: "ko-KR" }
       );
       await context.addInitScript(ANTI_DETECTION_SCRIPT);   // 🥷 봇 감지 회피(쇼핑·플레이스 안정성↑)
       // 💾 데이터 절약 — 프록시(GB) 아끼기. normal=다 받음 / save=영상·광고·폰트 차단 / max=이미지까지 차단.
