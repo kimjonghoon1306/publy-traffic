@@ -319,7 +319,7 @@ export async function signUp(email: string, password: string, name: string, phon
     p_email: email, p_password: password, p_name: name, p_phone: phone || null,
   });
   if (error || !data?.token || !data?.user) {
-    if (error?.message?.includes("EMAIL_EXISTS")) throw new Error("이미 가입된 이메일입니다");
+    if (error?.message?.includes("EMAIL_EXISTS")) throw new Error("이미 가입된 이메일입니다. 기존 퍼블리 회원은 같은 계정으로 로그인해주세요. 비밀번호가 기억나지 않거나 로그인이 안 되면 관리자에게 본인 확인 후 비밀번호 재설정을 요청해주세요.");
     if (error?.message?.includes("WEAK_PASSWORD")) throw new Error("비밀번호는 6자 이상이어야 합니다");
     throw new Error(error?.message || "회원가입에 실패했습니다");
   }
@@ -327,13 +327,24 @@ export async function signUp(email: string, password: string, name: string, phon
   // 추천인 컬럼이 없는 기존 운영 스키마에서는 가입 자체를 막지 않고 추후 추천 테이블로 처리한다.
   void referredBy;
   const u = data.user as PublyUser;
+  // 🚗 트래픽 앱 가입 → '트래픽 회원'으로 표시(퍼블리↔트래픽 분리). 이미 다른 앱이면 'both'로 승격. 실패해도 가입은 유지.
+  try { await supabase.rpc("publy_mark_app_type", { p_user_id: u.id, p_app_type: "traffic" }); } catch { /* 태그 실패 무시 */ }
   await claimActiveDevice(u.id, (u as any).email);   // 이 기기를 활성 기기로 등록
   return u;
 }
 
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.rpc("publy_login", { p_email: email, p_password: password });
-  if (error || !data?.token || !data?.user) throw new Error("이메일 또는 비밀번호가 올바르지 않습니다");
+  if (error) {
+    if (error.message?.includes("INVALID_CREDENTIALS")) {
+      throw new Error("이메일 또는 비밀번호가 올바르지 않습니다. 기존 퍼블리 계정으로 계속 로그인되지 않으면 관리자에게 본인 확인 후 비밀번호 재설정을 요청해주세요.");
+    }
+    // DB timeout/권한/네트워크 오류를 비밀번호 오류로 표시하지 않는다.
+    // 서버 메시지·입력값·토큰은 노출하지 않고 진단용 오류 코드만 표시한다.
+    const code = /^[A-Z0-9]{5,12}$/.test(error.code || "") ? ` (${error.code})` : "";
+    throw new Error(`로그인 처리 중 오류가 발생했습니다${code}. 잠시 후 다시 시도하고, 계속되면 관리자에게 문의해주세요.`);
+  }
+  if (!data?.token || !data?.user) throw new Error("로그인 응답을 확인할 수 없습니다. 관리자에게 문의해주세요.");
   localStorage.setItem(MEMBER_SESSION_KEY, data.token);
   const u = data.user as PublyUser;
   await claimActiveDevice(u.id, (u as any).email);   // 이 기기를 활성 기기로 등록(다른 기기는 튕김)
