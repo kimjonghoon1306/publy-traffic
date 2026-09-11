@@ -6277,9 +6277,10 @@ export async function searchInflow(params: {
     tmax = Math.round(avg * 1.4);
     log(`⏱️ 시간 분산 ON — ${params.spreadHours}시간에 걸쳐 자연스럽게(평균 텀 ~${Math.round(avg)}초)`);
   }
-  let done = 0, success = 0, failStreak = 0;
+  let done = 0, success = 0, failStreak = 0, netFailStreak = 0;
   let blockBackoff = 0; // 🧊 접속 제한(rate-limit) 감지 누적 — 방문 텀을 (1+backoff)배로 늘려 무리 안 하게(자동 감속)
-  const FAIL_BRAKE = 5; // 🛡️ 연속 실패 임계 — 초과 시 자동 정지(계정 보호)
+  const FAIL_BRAKE = 5;      // 🛡️ 연속 "대상 못 찾음/차단 의심" 임계 — 초과 시 자동 정지(계정 보호)
+  const NET_FAIL_BRAKE = 12; // 🌐 연속 네트워크/방문 오류 임계 — 일시 오류는 스킵하고 계속, 계속 실패해야 환경문제로 정지
 
   // 🔄 로그인 액션에 쓸 계정 목록(다계정 로테이션). 없으면 단일 계정.
   const loginAccts = (params.accountIds && params.accountIds.length) ? params.accountIds.filter(Boolean) : (params.accountId ? [params.accountId] : []);
@@ -6399,25 +6400,38 @@ export async function searchInflow(params: {
         }
         await shot(entered, "✅ 체류·액션 완료");
         log("  ⏱️ 체류·액션 완료");
-        success++; done++; failStreak = 0;
+        success++; done++; failStreak = 0; netFailStreak = 0;
         await Promise.resolve(params.onSuccess?.(curTarget)).catch(() => {}); // 성공한 그 대상(curTarget)으로 통계 기록
         log(`  ✅ 유입 완료 (${kw}) — 누적 성공 ${success}회`);
         params.onProgress?.(done, rounds);
       }
     } catch (e: any) {
       const errorText = String(e?.message || e);
-      proxyUnavailable = /proxy|ERR_TUNNEL|ERR_NO_SUPPORTED_PROXIES|407|dataimpulse|balance|quota|traffic limit/i.test(errorText);
-      if (proxyUnavailable) log("⚠️ 프록시 사용량 초과/부족 — 중단합니다");
-      else log(`  ❌ 방문 오류: ${errorText}`);
-      done++; failStreak++; params.onProgress?.(done, rounds);
+      // 🔴 프록시 "소진/한도"(잔액·트래픽 초과)면 계속해도 전부 실패 → 중단(충전 후 재개).
+      //    일시적 네트워크/터널 오류(ERR_TUNNEL·프록시 일시끊김·타임아웃 등)는 그 방문만 스킵하고 다음으로 계속(테리: 15명에서 멈추지 말 것).
+      const proxyExhausted = /ERR_NO_SUPPORTED_PROXIES|no supported proxies|insufficient|balance|traffic limit|used up|payment required|402|quota exceeded/i.test(errorText);
+      if (proxyExhausted) {
+        proxyUnavailable = true;
+        log("⚠️ 프록시 사용량 소진/부족 — 중단합니다(충전 후 이어서 재개하세요)");
+        done++; params.onProgress?.(done, rounds);
+      } else {
+        netFailStreak++;
+        log(`  ❌ 방문 오류(건너뛰고 다음으로 계속, ${netFailStreak}회째): ${errorText}`);
+        done++; params.onProgress?.(done, rounds);
+      }
     } finally {
       if (browser) await browser.close().catch(() => {});
     }
     if (proxyUnavailable || params.shouldStop?.()) break;
 
-    // 🛡️ 안전 브레이크 — 연속 실패가 임계를 넘으면 계정 보호를 위해 자동 정지
+    // 🛡️ 안전 브레이크 — 연속 "대상 못 찾음/차단 의심"이 임계를 넘으면 계정 보호를 위해 자동 정지
     if (failStreak >= FAIL_BRAKE) {
       log(`\n🛡️ 안전 브레이크 — ${FAIL_BRAKE}회 연속 실패(대상 못 찾음/차단 의심). 계정 보호를 위해 자동 정지합니다.`);
+      break;
+    }
+    // 🌐 네트워크 오류는 스킵하고 계속하되, 너무 많이 연속되면(환경 문제) 정지
+    if (netFailStreak >= NET_FAIL_BRAKE) {
+      log(`\n🌐 네트워크가 계속 불안정해요 — ${NET_FAIL_BRAKE}회 연속 방문 오류로 자동 정지합니다(잠시 후 다시 시도). 지금까지 성공 ${success}회.`);
       break;
     }
 

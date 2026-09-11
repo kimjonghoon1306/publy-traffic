@@ -1,0 +1,29 @@
+--- a/index.html
++++ b/index.html
+@@ -888,11 +888,21 @@
+       // ⚠️ 회원 계정 완전 삭제 — publy_users에서 진짜 삭제(트래픽↔퍼블리 공유라 퍼블리 회원도 사라짐). 테스트 회원 정리용.
+       const bx=mk('❌ 삭제','#991b1b','#991b1b');
+       bx.onclick=async()=>{ if(!confirm('['+m.email+'] 회원 계정을 완전히 삭제할까요?\n\n⚠️ 되돌릴 수 없어요. 이 회원의 트래픽 대여·백링크 데이터도 함께 지워지고,\n트래픽↔퍼블리 공유 계정이라 퍼블리 회원에서도 사라집니다.'))return;
+-        // 딸린 데이터 먼저 정리(유령 방지): tool_licenses. (backlink order는 회원 계정 삭제와 별개로 남을 수 있어 함께 정리)
+-        await sb.rpc('admin_delete_licenses',{p_secret:adminSecret,p_customer:m.email,p_tool:null});
+-        const {data,error}=await sb.rpc('admin_delete_user',{p_token:adminToken,p_user_id:m.id});
+-        if(error||data!==true){ alert('회원 삭제 실패'+(error?': '+error.message:' (권한 또는 대상 없음)')); return; }
+-        alert('['+m.email+'] 회원을 삭제했어요.'); editorDirty=false; loadMembers(); loadLicenses(); };
++        bx.disabled=true;
++        try {
++          const {data,error}=await sb.rpc('admin_delete_user_atomic',{p_token:adminToken,p_secret:adminSecret,p_user_id:m.id});
++          if(error||data!==true){
++            const detail=error?.code==='57014'?'처리 시간이 초과되었습니다. 회원과 대여 상태를 확인한 뒤 관리자에게 문의해주세요.':(error?.message||'권한 또는 대상 없음');
++            alert('회원 삭제 실패: '+detail); return;
++          }
++          alert('['+m.email+'] 회원을 삭제했어요.'); editorDirty=false;
++        } catch(e) {
++          alert('회원 삭제 응답을 확인하지 못했습니다. 회원과 대여 상태를 확인한 뒤 다시 시도해주세요.');
++        } finally {
++          bx.disabled=false;
++          await Promise.allSettled([loadMembers(),loadLicenses()]);
++        }
++      };
+       row.appendChild(ba); row.appendChild(br); row.appendChild(bd); row.appendChild(bx); card.appendChild(row);
+       wrap.appendChild(card);
+     });
