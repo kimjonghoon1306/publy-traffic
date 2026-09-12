@@ -1155,6 +1155,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     pushLog(`━━━━━ 🚀 트래픽 유입 시작 · 적용된 설정(전체) ━━━━━`);
     pushLog(`📍 대상: ${targetLabel}  ·  주소: ${targetUrl || "(없음)"}`);
     if (extras.length) pushLog(`➕ 추가 대상 ${extras.length}개(방문마다 로테이션)`);
+    const totalTargets = (targetUrl ? 1 : 0) + extras.length;
+    if (targetType === "blog" && totalTargets > 1) pushLog(`🎯 유입 대상 글 총 ${totalTargets}개 — ${n}회 방문을 이 글들에 번갈아 나눠 유입해요(방문마다 어느 글인지 로그에 찍힘)`);
     pushLog(`🔎 키워드(${kwList.length}개): ${kwList.join(", ")}`);
     pushLog(`🔁 방문 횟수: ${n}회${auto ? "(자동=오늘 한도까지)" : ""}`);
     pushLog(`👤 로그인 계정: ${acctNames.length ? acctNames.join(", ") : "(선택 안 함 — 저장·찜·공감은 건너뜀)"}`);
