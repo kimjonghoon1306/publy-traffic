@@ -188,7 +188,7 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
           <OrderHome token={getMemberSessionToken()} theme={theme} memberName={user.name} approvedFeats={allowedFeatures} onGoDashboard={() => setHomeView(false)} />
         </div>
         <div style={{ display: homeView ? "none" : "block" }}>
-          <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} licenseRemainByFeat={licenseRemainByFeat} onActiveToolChange={setActiveTool} onManageAccounts={() => setShowAcc(true)} onBusyChange={setInflowBusy} externalAccounts={accounts} memberEmail={user.email} memberName={user.name} />
+          <InflowCenter memberMode showToast={showToast} theme={theme} userId={user.id} plan={user.plan} allowedFeatures={allowedFeatures} licenseSaver={licenseSaver} licenseByFeat={licenseByFeat} licenseRemainByFeat={licenseRemainByFeat} onActiveToolChange={setActiveTool} onManageAccounts={() => setShowAcc(true)} onBusyChange={setInflowBusy} externalAccounts={accounts} onAccountsChanged={reloadAccounts} memberEmail={user.email} memberName={user.name} />
         </div>
       </div>
 

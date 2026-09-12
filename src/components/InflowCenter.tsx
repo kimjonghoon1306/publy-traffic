@@ -3,9 +3,10 @@ import { BotEventStream, botFetch } from "../lib/botApi";
 import UsageGuide from "./UsageGuide";
 import SproutAssistant from "./SproutAssistant";
 import BacklinkTab from "./BacklinkTab";
-import { INFLOW_DAILY_LIMIT, PLAN_CONFIG, getInflowDailyUsage, getInflowUsageHistory, getAccounts, PublyAccount, getAutopilot, saveAutopilot, getRankHistory, AutopilotConfig, getInflowSchedule, saveInflowSchedule, inflowScheduleRanToday, markInflowScheduleRan, getPerfReport, PerfReport, recordRankPoint, getMemberSessionToken, getAdminSessionToken, getInflowTargets, saveInflowTargets, inflowScope, getInflowStatToday, migrateLegacyInflowToScope, sendTrafficLog } from "../lib/supabase";
+import { INFLOW_DAILY_LIMIT, PLAN_CONFIG, getInflowDailyUsage, getInflowUsageHistory, getAccounts, PublyAccount, getAutopilot, saveAutopilot, getRankHistory, AutopilotConfig, getInflowSchedule, saveInflowSchedule, inflowScheduleRanToday, markInflowScheduleRan, getPerfReport, PerfReport, recordRankPoint, getMemberSessionToken, getAdminSessionToken, getInflowTargets, saveInflowTargets, inflowScope, getInflowStatToday, migrateLegacyInflowToScope, sendTrafficLog, upsertAccount, deleteTrafficAccount } from "../lib/supabase";
 
 const BOT = "http://127.0.0.1:3364"; // neighbor-bot
+const NAVER_BOT = "http://127.0.0.1:3363"; // naver-bot (계정 연결 save-session)
 
 /* ═══════════════════════════════════════════════════════════════
    🆕 NEW 트래픽 유입 — CONTROL TOWER
@@ -134,7 +135,7 @@ function RankChart({ data, goal, C }: { data: { label: string; rank: number | nu
   );
 }
 
-export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, licenseRemainByFeat, onActiveToolChange, onManageAccounts, onBusyChange, memberMode, externalAccounts, memberEmail, memberName }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; licenseRemainByFeat?: Record<string, number>; onActiveToolChange?: (tool: "place" | "blog" | "store" | "backlink") => void; onManageAccounts?: () => void; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string }) {
+export default function InflowCenter({ showToast, theme: extTheme, userId, plan = "free", allowedFeatures, licenseSaver, licenseByFeat, licenseRemainByFeat, onActiveToolChange, onManageAccounts, onBusyChange, memberMode, externalAccounts, memberEmail, memberName, onAccountsChanged }: { showToast?: (m: string, t?: any) => void; theme?: "dark" | "light"; userId?: string; plan?: string; allowedFeatures?: ("place" | "blog" | "store" | "backlink")[]; licenseSaver?: string; licenseByFeat?: Record<string,{limit:number;actions:string[];plan:string}>; licenseRemainByFeat?: Record<string, number>; onActiveToolChange?: (tool: "place" | "blog" | "store" | "backlink") => void; onManageAccounts?: () => void; onBusyChange?: (busy: boolean) => void; memberMode?: boolean; externalAccounts?: PublyAccount[]; memberEmail?: string; memberName?: string; onAccountsChanged?: () => void }) {
   const toast = (m: string, t?: string) => showToast?.(m, t);
   // 🎫 승인된 기능만 노출 — 컨트롤타워에서 이 고객에게 켜준 대상만 탭으로 보인다.
   //   회원앱(memberMode)=엄격: 승인된 것만(승인 없으면 아무것도 안 보임=잠금).
@@ -267,6 +268,43 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   const [accountsInternal, setAccounts] = useState<PublyAccount[]>([]);
   // 🔗 부모(TrafficApp)가 계정을 넘기면 그걸 우선 사용 → 헤더에서 연결하면 팝업에도 즉시 반영(계정 안 뜨는 버그 해결)
   const accounts = externalAccounts ?? accountsInternal;
+  // 🔗 계정 연결/추가/삭제를 '내 글 가져오기' 팝업 안에서 바로 (테리 2026-09-12: 팝업 안에 아이디/비번칸·삭제·추가가 없어 막힘)
+  //   회원(externalAccounts)·관리자(내부 accountsInternal) 공용. save-session=naver-bot(3363).
+  const [connId, setConnId] = useState("");
+  const [connPw, setConnPw] = useState("");
+  const [connBlog, setConnBlog] = useState("");
+  const [connShowPw, setConnShowPw] = useState(false);
+  const [connBusy, setConnBusy] = useState(false);
+  const [connDelArm, setConnDelArm] = useState("");   // 삭제 2단계(Electron confirm 안 뜸)
+  const [showConnForm, setShowConnForm] = useState(false);  // 계정 추가 폼 펼침
+  const refreshAccounts = () => {
+    if (userId) getAccounts(userId, "traffic").then((a) => setAccounts(a.filter((x) => x.platform === "naver"))).catch(() => {});
+    onAccountsChanged?.();   // 부모(TrafficApp) 계정목록 재로드 → externalAccounts 갱신
+  };
+  const connectAccountInline = async () => {
+    const id = connId.trim(), pw = connPw;
+    if (!id || !pw.trim()) { showToast?.("네이버 아이디·비밀번호를 입력하세요", "error"); return; }
+    if (!userId) { showToast?.("로그인 정보가 없어요", "error"); return; }
+    setConnBusy(true);
+    try {
+      const r = await botFetch(`${NAVER_BOT}/api/naver/save-session`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, id, pw, blogName: connBlog.trim() || undefined }), signal: AbortSignal.timeout(120000) });
+      const d = await r.json(); if (!d.success) throw new Error(d.error || "연결 실패");
+      const existing = accounts.find((a) => a.platform === "naver" && a.username === id);
+      await upsertAccount({ ...(existing ? { id: existing.id } : {}), user_id: userId, platform: "naver", username: id, blog_name: connBlog.trim() || undefined, is_connected: true, connected_at: new Date().toISOString(), app: "traffic" });
+      setConnId(""); setConnPw(""); setConnBlog(""); setShowConnForm(false);
+      refreshAccounts();
+      showToast?.("✅ 네이버 계정을 연결했어요 — 아래에서 선택해 글을 불러오세요", "success");
+    } catch (e: any) {
+      const msg = e?.name === "TimeoutError" || /fetch|network|failed/i.test(e?.message || "") ? "봇에 연결 못 했어요 — PC에서 트래픽 앱이 켜져 있는지 확인해주세요" : (e?.message || "오류");
+      showToast?.("연결 실패: " + msg, "error");
+    } finally { setConnBusy(false); }
+  };
+  const deleteAccountInline = async (a: PublyAccount) => {
+    if (connDelArm !== a.id) { setConnDelArm(a.id); showToast?.("한 번 더 '삭제'를 누르면 삭제돼요", "info"); setTimeout(() => setConnDelArm(""), 3000); return; }
+    setConnDelArm("");
+    try { await deleteTrafficAccount(a.id); if (popupAccountId === a.id) setPopupAccountId(""); refreshAccounts(); showToast?.("계정을 삭제했어요", "success"); }
+    catch (e: any) { showToast?.("삭제 실패: " + (e?.message || "오류"), "error"); }
+  };
   // 🔀 탭(플레이스/블로그/스토어)별 독립 실행 — 봇(3363)은 동시 3개 처리 가능. 상태를 대상별로 분리해 각자 돌린다.
   //   화면에는 현재 탭 것을 파생값으로 보여준다(running/logs/progress/sessOk). backlink는 blTab로 이미 별개.
   type RunTT = "place" | "blog" | "store";
@@ -1263,21 +1301,40 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
           <div style={{ padding: 18 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, lineHeight: 1.7, marginBottom: 11, background: "rgba(245,158,11,.10)", border: "1.5px solid #d97706", borderRadius: 10, padding: "10px 13px" }}>
               <b style={{ color: "#d97706" }}>🔑 로그인이 필요해요.</b> 내 글 목록은 로그인해야 볼 수 있어요.<br />
-              <b>① 오른쪽 위 ‘🔗 계정’</b>에서 네이버 아이디·비밀번호로 연결한 뒤<br />
-              <b>② 여기서 그 계정을 선택</b>하면 목록이 나와요. <span style={{ color: C.sub }}>(한 번 연결하면 다음부턴 비번 없이 바로)</span>
+              <b>① 네이버 아이디·비밀번호로 계정 연결</b> → <b>② 계정 선택</b> → <b>③ 내 글 불러오기</b> <span style={{ color: C.sub }}>(한 번 연결하면 다음부턴 비번 없이 바로)</span>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: C.sub, marginBottom: 6 }}>불러올 계정 (계정 연결한 것)</div>
-            {accounts.length === 0 ? (
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#dc2626", padding: "11px 13px", borderRadius: 10, background: "rgba(220,38,38,.06)", border: "1px solid rgba(220,38,38,.3)", lineHeight: 1.6 }}>⚠️ 아직 연결된 네이버 계정이 없어요.<br /><b>오른쪽 위 ‘🔗 계정’으로 연결</b>한 뒤 다시 오세요.</div>
-            ) : (
+            {/* 🔗 연결된 계정 목록 — 선택 + 삭제 (테리: 팝업 안에서 바로 지우고 골라야) */}
+            {accounts.length > 0 && (<>
+              <div style={{ fontSize: 12, fontWeight: 800, color: C.sub, marginBottom: 6 }}>불러올 계정 (선택)</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {accounts.map((a) => { const on = popupAccountId === a.id; return (
-                  <button key={a.id} onClick={() => setPopupAccountId(a.id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 10, background: on ? C.glow : C.panel2, border: `1.5px solid ${on ? C.accent : C.line}`, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: on ? C.accent : C.line2, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13.5, fontWeight: 800, color: on ? C.accent : C.ink }}>{on ? "✓ " : ""}{a.username}</span>
-                    {a.blog_name && <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· {a.blog_name}</span>}
-                  </button>
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderRadius: 10, background: on ? C.glow : C.panel2, border: `1.5px solid ${on ? C.accent : C.line}` }}>
+                    <button onClick={() => setPopupAccountId(a.id)} style={{ flex: 1, display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left", padding: 0 }}>
+                      <span style={{ width: 9, height: 9, borderRadius: "50%", background: on ? C.accent : C.line2, flexShrink: 0 }} />
+                      <span style={{ fontSize: 13.5, fontWeight: 800, color: on ? C.accent : C.ink }}>{on ? "✓ " : ""}{a.username}</span>
+                      {a.blog_name && <span style={{ fontSize: 11, color: C.sub, fontWeight: 600 }}>· {a.blog_name}</span>}
+                    </button>
+                    <button onClick={() => deleteAccountInline(a)} style={{ padding: "5px 9px", borderRadius: 7, border: "1px solid #dc2626", background: connDelArm === a.id ? "#dc2626" : "transparent", color: connDelArm === a.id ? "#fff" : "#dc2626", fontSize: 11, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}>{connDelArm === a.id ? "정말 삭제" : "삭제"}</button>
+                  </div>
                 ); })}
+              </div>
+              {!showConnForm && <button onClick={() => setShowConnForm(true)} style={{ marginTop: 8, padding: "8px 12px", borderRadius: 9, border: `1.5px dashed ${C.accent}`, background: "transparent", color: C.accent, fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", width: "100%" }}>➕ 다른 계정 추가</button>}
+            </>)}
+            {/* 🔗 계정 연결 폼 — 계정이 없거나 '추가'를 누르면 표시 (아이디/비번 그 자리서 바로 연결) */}
+            {(accounts.length === 0 || showConnForm) && (
+              <div style={{ marginTop: accounts.length > 0 ? 8 : 0, padding: "12px 13px", borderRadius: 11, background: C.panel2, border: `1.5px solid ${C.accent}` }}>
+                <div style={{ fontSize: 12.5, fontWeight: 900, color: C.accent, marginBottom: 8 }}>🔗 네이버 계정 연결</div>
+                <input placeholder="네이버 아이디" value={connId} onChange={(e) => setConnId(e.target.value)} style={{ ...inputStyle, width: "100%", marginBottom: 7, boxSizing: "border-box" }} />
+                <div style={{ position: "relative", marginBottom: 7 }}>
+                  <input type={connShowPw ? "text" : "password"} placeholder="네이버 비밀번호" value={connPw} onChange={(e) => setConnPw(e.target.value)} style={{ ...inputStyle, width: "100%", padding: "10px 38px 10px 12px", boxSizing: "border-box" }} />
+                  <span onClick={() => setConnShowPw((v) => !v)} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", cursor: "pointer", fontSize: 15, userSelect: "none" }}>{connShowPw ? "🙈" : "👁️"}</span>
+                </div>
+                <input placeholder="블로그 주소/이름 (선택)" value={connBlog} onChange={(e) => setConnBlog(e.target.value)} style={{ ...inputStyle, width: "100%", marginBottom: 9, boxSizing: "border-box" }} />
+                <div style={{ display: "flex", gap: 7 }}>
+                  <button onClick={connectAccountInline} disabled={connBusy || !connId.trim() || !connPw.trim()} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: (connBusy || !connId.trim() || !connPw.trim()) ? C.line2 : "linear-gradient(135deg,#f59e0b,#d97706)", color: "#fff", fontSize: 13, fontWeight: 900, cursor: (connBusy || !connId.trim() || !connPw.trim()) ? "default" : "pointer", fontFamily: "inherit" }}>{connBusy ? "연결 중… (봇 창 뜨면 잠시 기다려요)" : "계정 연결"}</button>
+                  {accounts.length > 0 && <button onClick={() => { setShowConnForm(false); setConnId(""); setConnPw(""); setConnBlog(""); }} style={{ padding: "11px 14px", borderRadius: 10, border: `1px solid ${C.line2}`, background: C.panel, color: C.sub, fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>취소</button>}
+                </div>
+                <div style={{ fontSize: 11, color: C.sub, marginTop: 7, lineHeight: 1.5 }}>연결을 누르면 봇 브라우저가 네이버 로그인을 진행해요(1~2분). PC에서 트래픽 앱이 켜져 있어야 해요.</div>
               </div>
             )}
             <div style={{ marginTop: 12, padding: "11px 13px", borderRadius: 11, background: C.panel2, border: `1px solid ${C.line}` }}>
