@@ -6198,6 +6198,43 @@ export async function diagnosePlace(params: { placeUrl: string; onLog?: (m: stri
   }
 }
 
+/* ═══════════════ 🚪 유입 게이트 다양화 (트래픽/퍼블리) ═══════════════
+   테리 2026-09-15: 유입경로가 늘 "네이버 통합검색" 한 줄로만 찍히면 봇티가 나고, 여러 곳에서 인용·유입되는
+   자연스러운 글로 안 보인다. 그래서 하이브리드(네이버검색 70 : 외부 30)로 섞는다:
+   - 네이버검색(70%): 기존 검색결과 클릭 진입 = 검색 순위 신호(트래픽 본연 목적) 유지.
+   - 외부(30%): 구글·다음·SNS·직접입력을 referer로 대상 페이지에 '직접 진입' → 유입경로 통계가 사람처럼 흩어짐.
+   ⚠️ 스토어는 검증된 검색 흐름만(429/UA 민감) → 외부 게이트에서 제외(directUrl=null로 검색 폴백). */
+type TrafficGateKey = "naver-search" | "google" | "daum" | "direct" | "sns";
+interface TrafficGate { key: TrafficGateKey; label: string; weight: number; external: boolean; referer?: (kw: string) => string | undefined; }
+const TRAFFIC_GATE_SEARCH: TrafficGate = { key: "naver-search", label: "네이버 통합검색", weight: 70, external: false };
+const TRAFFIC_GATES: TrafficGate[] = [
+  TRAFFIC_GATE_SEARCH,
+  { key: "google", label: "구글 검색",   weight: 10, external: true, referer: (kw) => `https://www.google.com/search?q=${encodeURIComponent(kw)}` },
+  { key: "direct", label: "직접입력(북마크)", weight: 8, external: true, referer: () => undefined },
+  { key: "daum",   label: "다음 검색",   weight: 6,  external: true, referer: (kw) => `https://search.daum.net/search?q=${encodeURIComponent(kw)}` },
+  { key: "sns",    label: "외부 공유(밴드/블로그/카톡)", weight: 6, external: true, referer: () => { const a = ["https://band.us/", "https://m.blog.naver.com/", "https://blog.naver.com/", "https://t.co/", "https://l.facebook.com/"]; return a[Math.floor(Math.random() * a.length)]; } },
+];
+function pickTrafficGate(): TrafficGate {
+  const total = TRAFFIC_GATES.reduce((a, g) => a + g.weight, 0);
+  let r = Math.random() * total;
+  for (const g of TRAFFIC_GATES) { if ((r -= g.weight) < 0) return g; }
+  return TRAFFIC_GATE_SEARCH;
+}
+// 대상 페이지 직접 진입 URL(외부 게이트용). 특정 글/페이지가 없으면 null → 검색 게이트로 폴백.
+function buildTargetDirectUrl(t: InflowTarget, mobile: boolean): string | null {
+  if (t.type === "blog") {
+    const b = (t as any).blogId, l = (t as any).logNo;
+    if (!b || !l) return null; // 특정 글(logNo)이 없으면 직접진입 불가 → 검색으로 찾아 들어감
+    return mobile ? `https://m.blog.naver.com/${b}/${l}` : `https://blog.naver.com/${b}/${l}`;
+  }
+  if (t.type === "place") {
+    const pu = (t as any).placeUrl; if (pu) return String(pu);
+    const d = (t as any).domain || "place", id = (t as any).placeId;
+    return id ? `https://m.place.naver.com/${d}/${id}/home` : null;
+  }
+  return null; // 🛒 스토어는 검증된 검색 흐름만(429/UA 민감) → 외부 게이트 제외
+}
+
 export async function searchInflow(params: {
   accountId: string;
   ownerUserId?: string;
@@ -6278,6 +6315,7 @@ export async function searchInflow(params: {
     log(`⏱️ 시간 분산 ON — ${params.spreadHours}시간에 걸쳐 자연스럽게(평균 텀 ~${Math.round(avg)}초)`);
   }
   let done = 0, success = 0, failStreak = 0, netFailStreak = 0;
+  const gateCount: Record<string, number> = {}; // 🚪 유입경로별 집계(끝 분포 보고)
   let blockBackoff = 0; // 🧊 접속 제한(rate-limit) 감지 누적 — 방문 텀을 (1+backoff)배로 늘려 무리 안 하게(자동 감속)
   const FAIL_BRAKE = 5;      // 🛡️ 연속 "대상 못 찾음/차단 의심" 임계 — 초과 시 자동 정지(계정 보호)
   const NET_FAIL_BRAKE = 12; // 🌐 연속 네트워크/방문 오류 임계 — 일시 오류는 스킵하고 계속, 계속 실패해야 환경문제로 정지
@@ -6373,13 +6411,36 @@ export async function searchInflow(params: {
         } catch {}
       };
 
-      const searchBase = dev === "pc" ? "https://search.naver.com/search.naver" : "https://m.search.naver.com/search.naver";
-      await page.goto(`${searchBase}?query=${encodeURIComponent(kw)}`, { waitUntil: "domcontentloaded", timeout: 25000 });
-      log(`  ${dev === "pc" ? "🖥️ PC" : "📱 모바일"} 검색결과 로드 완료 — 결과 탐색 중…`);
-      await page.waitForTimeout(inflowRndInt(1200, 2600));
-      await shot(page, `🔍 "${kw}" 검색결과`);
+      // 🚪 이번 방문 유입경로 게이트(네이버검색 70 : 외부 30). 외부는 대상 페이지 직접 진입(referer 세팅)으로 유입경로 다양화.
+      const directUrl = buildTargetDirectUrl(curTarget, dev !== "pc");
+      let gate = pickTrafficGate();
+      if (gate.external && !directUrl) gate = TRAFFIC_GATE_SEARCH; // 직접URL 없음(블로그 logNo 없음/스토어) → 검색으로 폴백
+      const gateLabel = gate.external ? gate.label : `네이버 통합검색(${dev === "pc" ? "PC" : "모바일"})`;
+      gateCount[gateLabel] = (gateCount[gateLabel] || 0) + 1;
 
-      const entered = await inflowFindAndEnter(page, curTarget, log);
+      let entered: any = null;
+      if (gate.external && directUrl) {
+        // 외부 유입 — 대상 페이지로 직접 진입(검색 클릭 없이 referer만 다르게). 검색순위 신호는 없지만 유입경로가 다양해짐.
+        const ref = gate.referer?.(kw);
+        log(`  🚪 유입경로=${gate.label} → 대상 페이지 직접 진입${ref ? ` (referer: ${(() => { try { return new URL(ref).hostname; } catch { return ref; } })()})` : " (직접입력)"}`);
+        // 검색류 외부 게이트는 실제 그 검색페이지를 먼저 방문해 진짜 referrer 체인을 만든다
+        if (ref && (gate.key === "google" || gate.key === "daum")) {
+          try { await page.goto(ref, { waitUntil: "domcontentloaded", timeout: 15000 }); await page.waitForTimeout(inflowRndInt(800, 1800)); } catch {}
+        }
+        try {
+          await page.goto(directUrl, { referer: ref, waitUntil: "domcontentloaded", timeout: 25000 });
+          await page.waitForTimeout(inflowRndInt(1000, 2200));
+          entered = page;
+          await shot(page, `🚪 ${gate.label} 진입`);
+        } catch { entered = null; }
+      } else {
+        const searchBase = dev === "pc" ? "https://search.naver.com/search.naver" : "https://m.search.naver.com/search.naver";
+        await page.goto(`${searchBase}?query=${encodeURIComponent(kw)}`, { waitUntil: "domcontentloaded", timeout: 25000 });
+        log(`  🚪 유입경로=${gateLabel} · ${dev === "pc" ? "🖥️ PC" : "📱 모바일"} 검색결과 로드 완료 — 결과 탐색 중…`);
+        await page.waitForTimeout(inflowRndInt(1200, 2600));
+        await shot(page, `🔍 "${kw}" 검색결과`);
+        entered = await inflowFindAndEnter(page, curTarget, log);
+      }
       if (!entered) {
         const blocked = await inflowDiagnose(page, curTarget, log);   // 🩺 왜 안 됐는지 정확히 로그로(+접속제한 여부)
         await shot(page, "⚠️ 대상 못 찾음");
@@ -6453,6 +6514,8 @@ export async function searchInflow(params: {
     }
   }
 
+  const gateSummary = Object.entries(gateCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(" · ");
+  if (gateSummary) log(`📊 유입경로 분포: ${gateSummary}`);
   log(`\n🏁 검색유입 종료 — 총 ${done}회 방문, 성공 ${success}회`);
   return { done, success };
 }

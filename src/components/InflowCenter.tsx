@@ -1165,6 +1165,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     const totalSec = Math.round(dwellSec + actionSec);
     pushLog(`📖 체류시간: ${maxDwellSec > 0 ? `직접지정 약 ${maxDwellSec}초` : `${intensityLabel} 약 ${dwellSec}초`} (방문마다 ±오차)`);
     pushLog(`🎬 방문해서 할 행동: ${actionLabels.length ? `${actionLabels.join("  ")} — 약 ${actionSec}초 추가` : "없음(체류만)"}`);
+    pushLog(`🚪 유입경로 다양화: 네이버검색 70% + 구글·다음·SNS·직접입력 30% — 여러 곳에서 인용·유입되는 자연스러운 글로 흩어서 방문(검색순위 + 유입 다양성). 경로는 방문마다 로그에 찍혀요`);
     if (acctList.length > 1) pushLog(`🔄 다계정 로테이션: ${acctList.length}개 계정을 번갈아 로그인 — 저장·찜·공감이 계정마다 실행돼요`);
     else if (acctList.length === 1) pushLog(`👤 로그인 계정 1개 사용 (저장·찜·공감)`);
     pushLog(`⏳ 방문 텀: ${termMin}~${termMax}초 랜덤${spread ? ` · ${spreadHours}시간 분산` : ""}  ·  🎲 액션확률 ${actionRate}%`);
