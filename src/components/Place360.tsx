@@ -817,7 +817,7 @@ export default function Place360({ showToast, theme = "light", userId, plan = "f
   }, [dark]);
 
   // 🔎 플레이스 주소만 붙여넣으면 이름·업종·지역을 봇이 공개 페이지에서 바로 당겨온다(로그인 불필요).
-  const pushLog = (pct: number, msg: string) => { setScanPct(pct); setScanLog(prev => [...prev, `${pct}% · ${msg}`]); };
+  const pushLog = (pct: number, msg: string) => { setScanPct(pct); setScanLog(prev => [...prev, `${new Date().toLocaleTimeString("ko-KR", { hour12: false })}  ${pct}% · ${msg}`]); };
   // 🎯 자동 키워드 발굴(자동완성+연관검색) — 지역·업종·상호를 시드로 봇 공개 엔드포인트 호출
   const loadAutoKeywords = async (override?: Partial<StoreProfile>) => {
     const reg = (override?.region || profile.region || draft.region || "").trim();

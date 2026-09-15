@@ -314,7 +314,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
   //   (이어하기가 최초 설정을 물고 가서 수정한 설정이 무시되던 버그 근본해결).
   const anyRunning = runningTypes.place || runningTypes.blog || runningTypes.store;
   const running = runningTypes[(targetType as RunTT)] ?? false;   // 현재 탭 실행 여부(렌더·기존 로직 호환)
-  type InflowLogEntry = { type: "text"; text: string } | { type: "shot"; caption: string; dataUrl: string };
+  type InflowLogEntry = ({ type: "text"; text: string } | { type: "shot"; caption: string; dataUrl: string }) & { t?: number };
+  // 🕒 로그 한 줄마다 실시간 시각(테리: 행위마다 시간 찍혀야) — [시:분:초]
+  const logTs = (t?: number) => (t ? new Date(t).toLocaleTimeString("ko-KR", { hour12: false }) : "");
   const [logsByType, setLogsByType] = useState<Record<RunTT, InflowLogEntry[]>>({ place: [], blog: [], store: [] });
   const logs = logsByType[(targetType as RunTT)] ?? [];
   const [logZoom, setLogZoom] = useState(false);   // 🔍 로그 크게 보기(앱 내 모달)
@@ -403,7 +405,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
 
   // 로그는 대상(탭)별 배열에 쌓는다. appendLog=현재 탭, appendLogFor(t)=특정 탭(실행 콜백은 시작 시점 탭 runType에 명시적으로 쌓아 탭 이동해도 안 섞임).
   const appendLogFor = (t: RunTT, entry: InflowLogEntry) => setLogsByType((cur) => {
-    let next = [...(cur[t] || []), entry].slice(-300);
+    const stamped = { ...entry, t: entry.t ?? Date.now() }; // 🕒 쌓는 시점의 실시간 시각 기록
+    let next = [...(cur[t] || []), stamped].slice(-300);
     const shots = next.reduce((count, item) => count + (item.type === "shot" ? 1 : 0), 0);
     if (shots > 8) { const firstShot = next.findIndex((item) => item.type === "shot"); if (firstShot >= 0) next = next.filter((_, index) => index !== firstShot); }
     return { ...cur, [t]: next };
@@ -1076,7 +1079,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
 
   const copyLogs = () => {
     if (!logs.length) return;
-    navigator.clipboard.writeText(logs.map((entry) => entry.type === "text" ? entry.text : `📸 ${entry.caption}`).join("\n")).then(() => toast("로그 전체를 복사했어요", "success")).catch(() => toast("복사 실패", "error"));
+    navigator.clipboard.writeText(logs.map((entry) => `${logTs(entry.t)}  ${entry.type === "text" ? entry.text : `📸 ${entry.caption}`}`).join("\n")).then(() => toast("로그 전체를 복사했어요", "success")).catch(() => toast("복사 실패", "error"));
   };
   // 📨 관리자에게 로그 전송 — 문제 생기면 회원이 바로 관리자에게 로그를 보냄
   const [sendingLog, setSendingLog] = useState(false);
@@ -1084,7 +1087,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
     if (!logs.length) { toast("보낼 로그가 없어요", "error"); return; }
     setSendingLog(true);
     try {
-      const text = logs.map((e) => e.type === "text" ? e.text : `📸 ${e.caption}`).join("\n");
+      const text = logs.map((e) => `${logTs(e.t)}  ${e.type === "text" ? e.text : `📸 ${e.caption}`}`).join("\n");
       await sendTrafficLog(memberEmail || userId || "", memberName || "", text.slice(0, 20000));
       toast("관리자에게 로그를 보냈어요 ✅", "success");
     } catch (e: any) { toast("전송 실패: " + (e?.message || "오류"), "error"); }
@@ -1753,8 +1756,8 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             </div>
             <div ref={logBoxRef} style={{ background: C.logBg, color: C.logInk, borderRadius: 12, padding: "14px 16px", height: 240, overflowY: "auto", fontSize: 13.5, lineHeight: 1.75, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               {logs.length ? logs.map((entry, i) => entry.type === "text"
-                ? <div key={i}>{entry.text}</div>
-                : <div key={i} style={{ margin: "8px 0 12px" }}><div style={{ marginBottom: 5, fontWeight: 800 }}>📸 {entry.caption}</div><img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(280px,100%)", maxHeight: 190, objectFit: "contain", borderRadius: 9, border: "1px solid rgba(255,255,255,.18)" }} /></div>
+                ? <div key={i}><span style={{ opacity: 0.45, marginRight: 6 }}>{logTs(entry.t)}</span>{entry.text}</div>
+                : <div key={i} style={{ margin: "8px 0 12px" }}><div style={{ marginBottom: 5, fontWeight: 800 }}><span style={{ opacity: 0.45, marginRight: 6, fontWeight: 400 }}>{logTs(entry.t)}</span>📸 {entry.caption}</div><img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(280px,100%)", maxHeight: 190, objectFit: "contain", borderRadius: 9, border: "1px solid rgba(255,255,255,.18)" }} /></div>
               ) : <div style={{ opacity: 0.5 }}>키워드 검색 → 진입 → 체류 → 액션 전 과정이 여기 실시간으로 표시돼요.</div>}
             </div>
           </div>
@@ -1775,7 +1778,7 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
                 </div>
               </div>
               <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", color: C.logInk, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", fontSize: 15, lineHeight: 1.85, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {logs.length ? logs.map((entry, i) => entry.type === "text" ? <div key={i}>{entry.text}</div> : <div key={i} style={{ margin: "8px 0 12px" }}><div style={{ marginBottom: 5, fontWeight: 800 }}>📸 {entry.caption}</div><img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(420px,100%)", maxHeight: 280, objectFit: "contain", borderRadius: 9 }} /></div>) : <div style={{ opacity: 0.5 }}>아직 로그가 없어요.</div>}
+                {logs.length ? logs.map((entry, i) => entry.type === "text" ? <div key={i}><span style={{ opacity: 0.45, marginRight: 6 }}>{logTs(entry.t)}</span>{entry.text}</div> : <div key={i} style={{ margin: "8px 0 12px" }}><div style={{ marginBottom: 5, fontWeight: 800 }}><span style={{ opacity: 0.45, marginRight: 6, fontWeight: 400 }}>{logTs(entry.t)}</span>📸 {entry.caption}</div><img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(420px,100%)", maxHeight: 280, objectFit: "contain", borderRadius: 9 }} /></div>) : <div style={{ opacity: 0.5 }}>아직 로그가 없어요.</div>}
               </div>
             </div>
           </div>
@@ -2823,9 +2826,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
         </div>
         <div ref={logBoxRef} style={{ background: C.logBg, color: C.logInk, borderRadius: 14, padding: "16px 18px", height: 520, overflowY: "auto", fontSize: 15, lineHeight: 1.8, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
           {logs.length ? logs.map((entry, i) => entry.type === "text"
-            ? <div key={i}>{entry.text}</div>
+            ? <div key={i}><span style={{ opacity: 0.45, marginRight: 6 }}>{logTs(entry.t)}</span>{entry.text}</div>
             : <div key={i} style={{ margin: "8px 0 12px" }}>
-                <div style={{ marginBottom: 5, fontWeight: 800 }}>📸 {entry.caption}</div>
+                <div style={{ marginBottom: 5, fontWeight: 800 }}><span style={{ opacity: 0.45, marginRight: 6, fontWeight: 400 }}>{logTs(entry.t)}</span>📸 {entry.caption}</div>
                 <img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(280px,100%)", maxHeight: 190, objectFit: "contain", borderRadius: 9, border: "1px solid rgba(255,255,255,.18)" }} />
               </div>
           ) : <div style={{ opacity: 0.5 }}>여기에 검색 → 진입 → 체류 → 액션 전 과정이 실시간으로 표시돼요.</div>}
@@ -2846,9 +2849,9 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", color: C.logInk, fontFamily: "'SF Mono','D2Coding',ui-monospace,monospace", fontSize: 15, lineHeight: 1.85, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
               {logs.length ? logs.map((entry, i) => entry.type === "text"
-                ? <div key={i}>{entry.text}</div>
+                ? <div key={i}><span style={{ opacity: 0.45, marginRight: 6 }}>{logTs(entry.t)}</span>{entry.text}</div>
                 : <div key={i} style={{ margin: "8px 0 12px" }}>
-                    <div style={{ marginBottom: 5, fontWeight: 800 }}>📸 {entry.caption}</div>
+                    <div style={{ marginBottom: 5, fontWeight: 800 }}><span style={{ opacity: 0.45, marginRight: 6, fontWeight: 400 }}>{logTs(entry.t)}</span>📸 {entry.caption}</div>
                     <img src={entry.dataUrl} alt={entry.caption} style={{ display: "block", width: "min(420px,100%)", maxHeight: 280, objectFit: "contain", borderRadius: 9, border: "1px solid rgba(255,255,255,.18)" }} />
                   </div>
               ) : <div style={{ opacity: 0.5 }}>아직 로그가 없어요.</div>}

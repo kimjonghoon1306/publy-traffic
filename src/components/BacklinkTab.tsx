@@ -274,7 +274,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
   }, [token, loadMyKey, isAdminKey]);
 
   const copyLogs = useCallback(() => {
-    navigator.clipboard.writeText(logs.map(l => `[${l.kind}] ${l.msg}`).join("\n")).then(() => setSentMsg("📋 로그를 복사했어요")).catch(() => {});
+    navigator.clipboard.writeText(logs.map(l => `${new Date(l.at).toLocaleTimeString("ko-KR", { hour12: false })}  [${l.kind}] ${l.msg}`).join("\n")).then(() => setSentMsg("📋 로그를 복사했어요")).catch(() => {});
     setTimeout(() => setSentMsg(""), 2500);
   }, [logs]);
 
@@ -282,7 +282,7 @@ export default function BacklinkTab({ theme, memberEmail, memberName }: { theme:
     setSending(true); setSentMsg("");
     try {
       const head = `[🔗 백링크] 도메인: ${cur?.target_domain || "-"} · 등급: ${PLAN_LABEL[cur?.plan || ""] || cur?.plan || "-"} · 누적 ${cur?.total_posted ?? 0} · 색인 ${cur?.indexed ?? 0}`;
-      const body = logs.map(l => `[${l.kind}] ${l.msg}`).join("\n");
+      const body = logs.map(l => `${new Date(l.at).toLocaleTimeString("ko-KR", { hour12: false })}  [${l.kind}] ${l.msg}`).join("\n");
       await sendTrafficLog(memberEmail || "", memberName || "", (head + "\n\n" + body).slice(0, 20000), "백링크");
       setSentMsg("✅ 관리자에게 로그를 보냈어요");
     } catch (e: any) { setSentMsg("전송 실패: " + (e?.message || e)); }
