@@ -5493,11 +5493,13 @@ export type InflowTarget =
   | { type: "blog"; blogId: string; logNo?: string }
   | { type: "store"; storeUrl: string; storeId?: string; productId?: string }; // 🛒 스마트스토어(네이버쇼핑) 상품
 
+// ★2026-09-26 플레이스/블로그 유입 "트래픽 감지·로봇 확인" 챌린지 원인 = UA/엔진 불일치.
+//   봇 엔진은 Chromium인데 UA를 아이폰 사파리로 속이면 네이버가 "거짓말=봇"으로 판단(스토어 429와 동일 원인).
+//   → 스토어처럼 UA를 실엔진(크롬)과 맞춘 안드로이드 크롬 모바일 UA로 통일해 봇감지 회피(플레이스·블로그 공통).
 const INFLOW_MOBILE_UA =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1";
-// 🛒 스토어 전용 = 안드로이드 크롬 모바일 UA. ★스마트스토어 429의 진짜 원인은 UA/엔진 불일치였음:
-//   봇 엔진은 Chromium인데 UA를 아이폰 사파리로 속이면 네이버가 "거짓말=봇"→429. UA를 실엔진(크롬)과
-//   맞추면 429 사라짐(실측: 사파리UA=429 / 크롬UA=200, residential 프록시로 상품페이지 도달 성공 2/2).
+  "Mozilla/5.0 (Linux; Android 14; SM-S918N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
+// 🛒 스토어 전용 = 안드로이드 크롬 모바일 UA. ★스마트스토어 429의 진짜 원인도 UA/엔진 불일치였음:
+//   UA를 실엔진(크롬)과 맞추면 429 사라짐(실측: 사파리UA=429 / 크롬UA=200, residential 프록시로 상품페이지 도달 성공 2/2).
 const INFLOW_STORE_UA =
   "Mozilla/5.0 (Linux; Android 14; SM-S928N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 const INFLOW_PC_UA =
