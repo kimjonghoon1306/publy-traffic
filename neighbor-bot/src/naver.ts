@@ -5771,6 +5771,58 @@ async function inflowDwellRead(page: any, log: (m: string) => void, shouldStop?:
 
 // 저장/공감 등 액션(로그인 필요). 셀렉터는 방어적 — 실패해도 유입 자체는 유효.
 type InflowActions = { save?: boolean; like?: boolean; neighbor?: boolean; share?: boolean; directions?: boolean; call?: boolean; booking?: boolean; talk?: boolean; review?: boolean; reviewText?: string; wish?: boolean; cart?: boolean; optionView?: boolean; rate?: number; loginAvailable?: boolean };
+// 🗺️ "네이버지도 앱 설치" 인터스티셜 처리 — 외부(구글·블로그·직접입력) referer로 place 직접 진입 시
+//   네이버가 실제 플레이스 대신 앱설치 전면 페이지를 씌워 길찾기·공유 버튼이 다 사라짐(외부 30% 방문만 손실).
+//   ① 실제 place 요소(길찾기/공유/탭)가 이미 있으면 인터스티셜 아님 → 통과
+//   ② 없고 앱설치 유도 신호가 보이면 → 닫기(웹으로 계속) 셀렉터 시도 → 안 되면 place home으로 재진입
+//   ③ 그래도 실제 요소가 없으면 실제 DOM(버튼/링크 텍스트·href)을 진단 로그로 덤프해 다음 실행에서 셀렉터 확정
+async function dismissMapAppInterstitial(page: any, target: InflowTarget, log: (m: string) => void): Promise<void> {
+  if (target.type !== "place") return;
+  // 실제 플레이스 화면인지 판정 — 길찾기/공유/전화 링크나 홈·메뉴 탭 중 하나라도 있으면 정상
+  const isRealPlace = async (): Promise<boolean> => await page.evaluate(() => {
+    const q = (s: string) => !!document.querySelector(s);
+    return q('a[href*="route"]') || q('a[href^="tel:"]') || q('a.spi_sns_share') ||
+      q('[class*="share"]') || !!Array.from(document.querySelectorAll('a,button')).find(e => /길찾기|공유|메뉴|리뷰/.test((e.textContent||"")));
+  }).catch(() => true);   // 판정 실패 시 통과(오탐으로 정상 방문 막지 않게)
+  if (await isRealPlace()) return;
+
+  // 앱설치 인터스티셜 신호 감지(텍스트/버튼)
+  const looksLikeAppLanding = await page.evaluate(() => {
+    const t = (document.body?.innerText || "");
+    return /네이버지도 앱|앱 설치|앱으로 보기|네이버지도에서 한 번에|지도 앱/.test(t);
+  }).catch(() => false);
+  if (!looksLikeAppLanding) return;   // 앱설치 화면도 아니고 정상도 아니면 그냥 둠(로딩 중일 수 있음)
+
+  log("  🗺️ [진단] '네이버지도 앱 설치' 안내 화면 감지 — 실제 플레이스로 전환 시도");
+  // ① 닫기/웹으로 계속 류 버튼을 JS로 직접 클릭(가시성 무관). 흔한 텍스트·클래스·aria 후보.
+  const closed = await page.evaluate(() => {
+    const els = Array.from(document.querySelectorAll('a,button,span,[role="button"]')) as any[];
+    const hit = els.find(e => {
+      const s = ((e.textContent||"") + " " + (e.getAttribute?.("aria-label")||"") + " " + (e.className||"")).toLowerCase();
+      return /닫기|close|웹으로|모바일웹|계속|나중에|취소|dismiss|skip|스킵/.test(s);
+    });
+    if (hit) { (hit as any).click(); return true; }
+    return false;
+  }).catch(() => false);
+  if (closed) { await page.waitForTimeout(inflowRndInt(900, 1800)); if (await isRealPlace()) { log("  🗺️ 앱설치 안내 닫고 실제 플레이스 진입 성공"); return; } }
+
+  // ② place home으로 재진입(네이버검색 폴백과 동일 URL — 검색경로에선 이 URL이 정상 place로 뜸)
+  const homeUrl = buildTargetDirectUrl(target, /\/\/m\./.test(String(page.url?.() || "")) || true);
+  if (homeUrl) {
+    log(`  🗺️ 실제 플레이스로 재진입 → ${homeUrl}`);
+    await page.goto(homeUrl, { referer: "https://m.search.naver.com/", waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(inflowRndInt(1200, 2400));
+    if (await isRealPlace()) { log("  🗺️ 재진입 성공 — 실제 플레이스 화면 확인"); return; }
+  }
+  // ③ 그래도 안 되면 실제 DOM 덤프(다음 실행에서 정확한 닫기 셀렉터 확정용)
+  try {
+    const items = await page.$$eval('a,button,[role="button"]', (els: any[]) => els.slice(0, 60).map((e: any) => ({
+      t: (e.textContent||"").trim().slice(0, 20), c: String(e.className||"").slice(0, 40), h: (e.getAttribute?.("href")||"").slice(0, 40)
+    })).filter((x: any) => x.t || x.h));
+    log("  🔎 [DOM진단] 앱설치화면 요소 " + items.length + "개: " + JSON.stringify(items.slice(0, 16)));
+  } catch {}
+}
+
 // 🔎 공유/더보기 버튼 못 찾을 때 실제 DOM의 후보 요소(text·class·aria)를 로그로 덤프 → 셀렉터 교정용
 async function dumpShareCandidates(page: any, log: (m: string) => void): Promise<void> {
   try {
@@ -6457,6 +6509,9 @@ export async function searchInflow(params: {
         }
       } else {
         await shot(entered, "🎯 대상 진입");
+        // 🗺️ 외부경로(구글·블로그·직접입력)로 place 직접 진입 시 뜨는 "네이버지도 앱 설치" 인터스티셜을
+        //   실제 플레이스로 전환(닫기→재진입). 이게 없으면 길찾기·공유 등 액션 신호가 다 유실됨(체류는 정상).
+        await dismissMapAppInterstitial(entered, curTarget, log);
         await inflowDwellRead(entered, log, params.shouldStop, params.dwellBaseSec ?? 60, params.dwellCustomSec ?? 0, curTarget.type);
         if (params.shouldStop?.()) { log("⏹️ 정지 요청 — 액션 전 중단"); break; }
         await inflowActions(entered, curTarget, { ...(params.actions || {}), rate: actionRate, loginAvailable: !!cookies }, log);
