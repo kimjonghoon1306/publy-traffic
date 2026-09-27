@@ -1573,15 +1573,37 @@ export default function InflowCenter({ showToast, theme: extTheme, userId, plan 
               </div>
               <input style={mInput} value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="예: 횡성시장맛집, 횡성한우" />
               <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 600, marginTop: 4, lineHeight: 1.5 }}>💡 직접 입력하거나, <b style={{ color: C.accent }}>🎯 추천 키워드 받기</b>를 누르면 위 대상 내용에 맞는 키워드를 찾아줘요. <b>대상과 관련된 키워드로 유입해야</b> 네이버가 관련성을 인정해 순위가 올라요(엉뚱한 키워드는 효과 없음).</div>
-              {kwSuggest.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
-                  {kwSuggest.map((k) => (
-                    <button key={k.keyword} onClick={() => addSuggestedKeyword(k.keyword)} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 9px", borderRadius: 7, border: `1px solid ${C.accent}`, background: C.panel, color: C.ink, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                      <span style={{ color: C.accent, fontWeight: 900 }}>＋</span>{k.keyword}{typeof k.vol === "number" && <span style={{ fontSize: 9.5, color: C.sub, fontWeight: 600 }}>·{k.vol >= 10000 ? (k.vol / 10000).toFixed(1) + "만" : k.vol.toLocaleString()}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {kwSuggest.length > 0 && (() => {
+                const hasVol = kwSuggest.some((k) => typeof k.vol === "number");
+                const compMeta = (comp?: string) =>
+                  comp === "낮음" ? { label: "빈틈", color: "#16a34a", bg: "rgba(22,163,74,.13)", icon: "🟢" }
+                  : comp === "높음" ? { label: "경쟁↑", color: "#dc2626", bg: "rgba(220,38,38,.11)", icon: "🔴" }
+                  : comp === "중간" ? { label: "보통", color: "#d97706", bg: "rgba(217,119,6,.13)", icon: "🟡" }
+                  : null;
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    {hasVol && (
+                      <div style={{ fontSize: 10.5, color: C.sub, fontWeight: 700, marginBottom: 7, lineHeight: 1.55, padding: "7px 10px", background: C.panel2, borderRadius: 9 }}>
+                        🔎 <b>월 검색량</b>·경쟁도 기준 <b style={{ color: "#16a34a" }}>🟢 빈틈(경쟁 약해 점화 잘 됨)</b>부터 줄세웠어요. <b style={{ color: "#dc2626" }}>🔴 경쟁↑</b>는 대기업이 지키는 벽이라 소량 트래픽으론 어려워요 — <b>빈틈부터 공략</b>하세요.
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {kwSuggest.map((k) => {
+                        const m = compMeta(k.comp);
+                        const volTxt = typeof k.vol === "number" ? (k.vol >= 10000 ? (k.vol / 10000).toFixed(1) + "만" : k.vol.toLocaleString()) : null;
+                        return (
+                          <button key={k.keyword} onClick={() => addSuggestedKeyword(k.keyword)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 10px", borderRadius: 9, border: `1.5px solid ${m ? m.color : C.accent}`, background: m ? m.bg : C.panel, color: C.ink, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>
+                            <span style={{ color: C.accent, fontWeight: 900 }}>＋</span>
+                            <span>{k.keyword}</span>
+                            {volTxt && <span style={{ fontSize: 10.5, color: C.sub, fontWeight: 700 }}>🔎{volTxt}</span>}
+                            {m && <span style={{ fontSize: 9.5, fontWeight: 800, color: m.color, background: C.panel, padding: "1.5px 5px", borderRadius: 5 }}>{m.icon}{m.label}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             <div style={mCard}>
               <h3 style={mH}><span style={mNum}>2</span> 방문 설정</h3>

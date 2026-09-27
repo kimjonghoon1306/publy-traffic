@@ -260,6 +260,18 @@ app.get("/api/place/resolve", async (req, res) => {
   }
 });
 
+// 🎯 빈틈 점수 — "찾는 사람 있는데(검색량↑) 경쟁 약한(comp↓)" 롱테일이 위로.
+//   로그스케일 검색량 × 경쟁 가중(낮음 1 / 중간 0.6 / 높음 0.3). 벽(빅키워드·경쟁 높음)은 아래로 밀린다.
+function gapScore(k: { vol?: number; comp?: string }): number {
+  const vol = k.vol || 0;
+  if (vol <= 0) return -1;
+  const w = k.comp === "낮음" ? 1 : k.comp === "중간" ? 0.6 : k.comp === "높음" ? 0.3 : 0.6;
+  return Math.log10(vol + 1) * w;
+}
+function sortByGap<T extends { vol?: number; comp?: string }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => gapScore(b) - gapScore(a));
+}
+
 /* ── 🎯 플레이스 키워드 발굴(자동완성+연관검색) — 계정 불필요 공개 소스 ── */
 app.get("/api/place/keywords", async (req, res) => {
   const { userId, seeds } = req.query as Record<string, string>;
@@ -275,7 +287,7 @@ app.get("/api/place/keywords", async (req, res) => {
     //   없으면 기존 자동완성/연관검색어로 폴백(검색량 없음).
     const vols = await getKeywordVolumes(seedList, 40).catch(() => null);
     if (vols && vols.length) {
-      const keywords = vols.map(v => ({ keyword: v.keyword, source: "검색광고", vol: v.total, comp: v.comp }));
+      const keywords = sortByGap(vols.map(v => ({ keyword: v.keyword, source: "검색광고", vol: v.total, comp: v.comp })));
       return res.json({ ok: true, keywords, hasVolume: true });
     }
     const keywords = await suggestPlaceKeywords({ seeds: seedList });
@@ -324,6 +336,8 @@ app.get("/api/inflow/keyword-suggest", async (req, res) => {
         const sortFn = (a: any, b: any) => { const cr = compRank(a.comp) - compRank(b.comp); return cr !== 0 ? cr : (b.vol || 0) - (a.vol || 0); };
         // 관련어(씨앗 포함) 우선 + 경쟁 낮음/중간 우선. 관련어가 부족하면 나머지도 뒤에 붙임.
         keywords = [...related.sort(sortFn), ...rest.sort(sortFn)];
+      } else {
+        keywords = sortByGap(keywords);   // 🎯 플레이스·블로그: 빈틈(검색량↑·경쟁↓)순으로 줄세움
       }
       return res.json({ ok: true, keywords, hasVolume: true, seeds, source });
     }
