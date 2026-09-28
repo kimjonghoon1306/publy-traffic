@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { saveSession, sessionExists, removeSession, crawlBlogIds, crawlBuddyPosts, analyzeBuddyKeywords, addNeighbors, NeighborResult, donePath, engageBlogs, EngageResult, engageDonePath, crawlMyPosts, crawlPublicPosts, replyToComments, crawlPlaceReviews, generatePlaceReviewReply, replyToPlaceReviews, crawlBlogStats, checkSelectedBlogExposure, pumasiEngage, crawlPumasiReport, pumasiPreview, updatePostTitle, checkProxy, analyzeBlogAuthenticity, fetchPostBody, crawlPostViews, sendWebmail, sendBlogComments, crawlPlaces, crawlPlaceBloggers, crawlPlaceDetail, crawlPlaceByUrl, suggestPlaceKeywords, suggestKeywordsFromTarget, parsePlaceUrl, resolvePlaceUrl, searchInflow, diagnosePlace, diagnoseStore, measurePlaceRank, measureBlogRank, measureStoreRank, collectPlaceReviews, InflowTarget } from "./naver";
+import { saveSession, sessionExists, removeSession, crawlBlogIds, crawlBuddyPosts, analyzeBuddyKeywords, addNeighbors, NeighborResult, donePath, engageBlogs, EngageResult, engageDonePath, crawlMyPosts, crawlPublicPosts, replyToComments, crawlPlaceReviews, generatePlaceReviewReply, replyToPlaceReviews, crawlBlogStats, checkSelectedBlogExposure, pumasiEngage, crawlPumasiReport, pumasiPreview, updatePostTitle, checkProxy, analyzeBlogAuthenticity, fetchPostBody, crawlPostViews, sendWebmail, sendBlogComments, crawlPlaces, crawlPlaceBloggers, crawlPlaceDetail, crawlPlaceByUrl, suggestPlaceKeywords, suggestKeywordsFromTarget, buildPlaceCandidates, extractRegions, parsePlaceUrl, resolvePlaceUrl, searchInflow, diagnosePlace, diagnoseStore, measurePlaceRank, measureBlogRank, measureStoreRank, collectPlaceReviews, InflowTarget } from "./naver";
 import { checkNeighborQuota, incrementNeighborQuota, getNeighborDailyUsage, incrementEngageQuota, getEngageDailyUsage, getUserPlan, checkMembershipAccess, NEIGHBOR_DAILY_LIMIT, ENGAGE_DAILY_LIMIT, REPLY_DAILY_LIMIT, getReplyDailyUsage, incrementReplyQuota, PLACE_REPLY_DAILY_LIMIT, getPlaceReplyDailyUsage, incrementPlaceReplyQuota, addNeighborHistory, addReplyHistory, addPlaceReplyHistory, addBlogscoreHistory, incrementPumasiQuota, TITLE_EDIT_DAILY_LIMIT, getTitleEditDailyUsage, incrementTitleEditQuota, getProxyForAccount, supabase, getOutreachSender, getOutreachSentToday, addOutreachLog, checkPlaceDetailQuota, incrementPlaceDetailQuota, checkInflowQuota, incrementInflowQuota, incrementInflowStat, inflowReviewAllowed, verifyInflowSession, verifyAdminSession, consumeInflowQuota, INFLOW_DAILY_LIMIT, getTrafficLicenseForTool, getKeywordVolumes } from "./supabase";
 import nodemailer from "nodemailer";
 import fs from "fs";
@@ -349,6 +349,94 @@ app.get("/api/inflow/keyword-suggest", async (req, res) => {
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e.message || "키워드 추천 실패" });
   }
+});
+
+/* ── 🎯 플레이스 작전지도 (SSE) ─────────────────────────────────────────────
+   로컬 플레이스는 '검색량'이 아니라 '지역 장악'으로 이긴다.
+   주소 하나 → 매장 긁기 → 지역앵커 키워드 생성 → 상위 후보의 내 순위·경쟁강도를 진단해
+   4구간(밀면뚫림/무경쟁밭/벽/이미상위)으로 나눠 스트리밍한다. 검색량은 숫자 주석용(정렬 X). */
+function classifyZone(a: { rank: number | null; topReview: number; myReview: number }): "push" | "plant" | "wall" | "vantage" {
+  // 상위 1위 업체 리뷰가 내 5배 이상이고 최소 50개↑면 '벽'(트래픽만으론 못 넘음)
+  const strongWall = a.topReview > 0 && a.topReview > Math.max(50, a.myReview * 5);
+  if (a.rank != null && a.rank <= 5) return "vantage";   // 이미 상위 — 방어만
+  if (a.rank != null && a.rank <= 15) return "push";     // 6~15위 — 밀면 뚫림(최우선)
+  if (strongWall) return "wall";                         // 상위 압도적 — 지금은 보류
+  return "plant";                                        // 무경쟁 밭 — 깔면 바로 1위
+}
+
+app.get("/api/inflow/place-battlemap", async (req, res) => {
+  const { userId, placeUrl } = req.query as Record<string, string>;
+  sseSetup(res);
+  try {
+    if (userId) {
+      const access = await checkMembershipAccess(userId, "place360");
+      if (!access.ok) { sseSend(res, { type: "error", msg: access.reason || "플레이스 360 이용권을 확인해주세요", membershipBlocked: true }); res.end(); return; }
+    }
+    if (!placeUrl?.trim()) { sseSend(res, { type: "error", msg: "플레이스 주소를 입력하세요" }); res.end(); return; }
+
+    // 1) 매장 통째로 긁기 → 매장카드
+    sseSend(res, { type: "log", msg: "🗺️ 매장 정보를 읽는 중…" });
+    const detail = await crawlPlaceByUrl({ placeUrl: placeUrl.trim(), ownerUserId: userId || null, onLog: (m) => sseSend(res, { type: "log", msg: m }) });
+    const myId = String(detail.placeId || "");
+    const myReview = detail.visitorReviewCount || 0;
+    sseSend(res, { type: "store", store: {
+      placeId: myId, name: detail.name, category: detail.category || "", address: detail.address || "",
+      region: extractRegions(String(detail.address || "")).primary,
+      visitorReviewCount: myReview, blogReviewCount: detail.blogReviewCount || 0, savedCount: detail.savedCount || 0,
+      placeUrl: detail.placeUrl,
+    } });
+
+    // 2) 지역앵커 후보 생성
+    const { region, candidates } = await buildPlaceCandidates({ detail, onLog: (m) => sseSend(res, { type: "log", msg: m }) });
+    if (!candidates.length) { sseSend(res, { type: "error", msg: "지역 키워드를 만들지 못했어요 — 주소에 시/군/구가 있는지 확인해주세요" }); res.end(); return; }
+
+    // 3) 검색량 주석(best-effort) — 대표 지역 시드로 볼륨 맵 생성 후 공백제거 매칭. 없으면 그냥 비움(롱테일은 원래 0).
+    const volMap = new Map<string, { vol: number; comp: string }>();
+    try {
+      const volSeeds = [region ? `${region}맛집` : "", ...candidates.slice(0, 5).map(c => c.keyword)].filter(Boolean);
+      const vols = await getKeywordVolumes(volSeeds, 60).catch(() => null);
+      if (vols) for (const v of vols) volMap.set(v.keyword.replace(/\s+/g, ""), { vol: v.total, comp: v.comp });
+    } catch { /* skip */ }
+    const withVol = candidates.map(c => { const m = volMap.get(c.keyword.replace(/\s+/g, "")); return { ...c, vol: m?.vol, comp: m?.comp }; });
+    sseSend(res, { type: "candidates", region, candidates: withVol });
+
+    // 4) 상위 8개 자동 진단(순차) — 한 키워드당 crawlPlaces 1회로 '내 순위 + 1위 경쟁 리뷰볼륨'을 함께 얻는다.
+    const AUTO = 8;
+    for (const c of withVol.slice(0, AUTO)) {
+      let rank: number | null = null, scanned = 0, topReview = 0;
+      try {
+        const list = await crawlPlaces({ accountId: "", query: c.keyword, count: 30, ownerUserId: userId || null });
+        scanned = list.length;
+        const idx = list.findIndex(p => String(p.placeId) === myId);
+        rank = idx >= 0 ? idx + 1 : null;
+        topReview = list[0]?.visitorReviewCount || 0;
+      } catch { /* 측정 실패 → rank null로 스트리밍 */ }
+      const zone = classifyZone({ rank, topReview, myReview });
+      sseSend(res, { type: "rank", keyword: c.keyword, rank, scanned, topReview, myReview, zone });
+    }
+    sseSend(res, { type: "done", auto: Math.min(AUTO, withVol.length), total: withVol.length });
+  } catch (e: any) {
+    sseSend(res, { type: "error", msg: e?.message || "작전지도 생성 실패" });
+  }
+  res.end();
+});
+
+/* ── 🎯 단일 키워드 진단 (온디맨드) — 작전지도에서 자동 진단 밖의 키워드를 클릭 측정 ── */
+app.get("/api/inflow/place-keyword-rank", async (req, res) => {
+  const { userId, placeUrl, keyword } = req.query as Record<string, string>;
+  if (!placeUrl?.trim() || !keyword?.trim()) return res.status(400).json({ ok: false, error: "placeUrl·keyword 필요" });
+  try {
+    const parsed = parsePlaceUrl(placeUrl) || await resolvePlaceUrl(placeUrl);
+    const myId = String(parsed?.placeId || "");
+    const list = await crawlPlaces({ accountId: "", query: keyword.trim(), count: 30, ownerUserId: userId || null });
+    const idx = myId ? list.findIndex(p => String(p.placeId) === myId) : -1;
+    const rank = idx >= 0 ? idx + 1 : null;
+    const topReview = list[0]?.visitorReviewCount || 0;
+    // myReview는 프론트가 이미 매장카드로 가지고 있으니 순위·경쟁만 돌려주고 zone은 프론트에서 합쳐도 되지만, 편의상 여기서 계산.
+    const myReview = Number(req.query.myReview) || 0;
+    const zone = classifyZone({ rank, topReview, myReview });
+    res.json({ ok: true, keyword: keyword.trim(), rank, scanned: list.length, topReview, myReview, zone });
+  } catch (e: any) { res.status(500).json({ ok: false, error: e?.message || "순위 측정 실패" }); }
 });
 
 /* ── 🗺️ 플레이스 업체 → 블로그 리뷰어 역추적 (SSE) ── */
