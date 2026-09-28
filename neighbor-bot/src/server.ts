@@ -368,10 +368,8 @@ app.get("/api/inflow/place-battlemap", async (req, res) => {
   const { userId, placeUrl } = req.query as Record<string, string>;
   sseSetup(res);
   try {
-    if (userId) {
-      const access = await checkMembershipAccess(userId, "place360");
-      if (!access.ok) { sseSend(res, { type: "error", msg: access.reason || "플레이스 360 이용권을 확인해주세요", membershipBlocked: true }); res.end(); return; }
-    }
+    // ★게이트 없음 — 이건 '키워드 추천/분석' 도구다(옛 keyword-suggest도 무게이트였음).
+    //   실제 유입 실행/쿼타만 라이선스로 막히지, 키워드 지도 그리기는 열려 있어야 한다(트래픽=tool_licenses라 place360 멤버십과 무관).
     if (!placeUrl?.trim()) { sseSend(res, { type: "error", msg: "플레이스 주소를 입력하세요" }); res.end(); return; }
 
     // 1) 매장 통째로 긁기 → 매장카드
