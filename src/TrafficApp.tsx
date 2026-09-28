@@ -146,13 +146,13 @@ export default function TrafficApp({ user, onLogout, onAdminLogin, theme, onThem
     catch (e: any) { showToast("삭제 실패: " + (e?.message || "오류"), "error"); }
   }
 
-  // 5회 탭 → 관리자 로그인(숨김 진입)
+  // T 로고 7회 탭 → 트래픽 관리자(컨트롤타워 padmin) 외부 브라우저로 열기(퍼블리 관리자 아님)
   const logoTap = useRef(0);
   const logoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onLogoTap = () => {
     logoTap.current += 1;
     if (logoTimer.current) clearTimeout(logoTimer.current);
-    if (logoTap.current >= 5) { logoTap.current = 0; onAdminLogin(); return; }
+    if (logoTap.current >= 7) { logoTap.current = 0; try { window.open("https://padmin.blogautopro.com", "_blank"); } catch {} return; }
     logoTimer.current = setTimeout(() => { logoTap.current = 0; }, 1400);
   };
 
