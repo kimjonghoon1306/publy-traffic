@@ -78,13 +78,25 @@ async function launchBrowser(
   //         다음 방문(새 launchBrowser)은 새 sessid → 완전히 다른 IP. sessttl=한 방문 도는 시간 넉넉히(10분).
   if (proxy && opts.feature === "inflow" && /dataimpulse/i.test(proxy.server) && proxy.username) {
     const sess = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-    const baseUser = proxy.username.replace(/;sess(id|ttl)\.[^;]*/g, "");   // 혹시 남은 세션 파라미터 제거(중복 방지)
-    proxy = {
-      server: proxy.server.replace(/:\d+$/, ":10000"),   // 823(로테이팅) → 10000(sticky)
-      username: `${baseUser};sessid.${sess};sessttl.10`,
-      password: proxy.password,
-    };
-    opts.log?.(`🔄 이번 방문 전용 IP 세션 발급 — 방문 동안 IP를 고정하고(자연스러움·안정), 다음 방문엔 완전히 다른 IP로 바꿔요(엇갈림)`);
+    const baseUser = proxy.username.replace(/[;-]sess(id|ttl)[.\-][^;-]*/g, "");   // 혹시 남은 세션 파라미터 제거(중복 방지)
+    const rotating = proxy;   // 원본(823 로테이팅) 보존 — sticky 실패 시 폴백
+    // DataImpulse sticky 세션 후보 형식들(게이트웨이가 형식을 바꿀 수 있어 순서대로 실측). 되는 걸 채택.
+    const candidates = [
+      { server: rotating.server.replace(/:\d+$/, ":10000"), username: `${baseUser}-sessid-${sess}`, password: rotating.password },      // 하이픈 방식
+      { server: rotating.server.replace(/:\d+$/, ":10000"), username: `${baseUser};sessid.${sess};sessttl.10`, password: rotating.password }, // 세미콜론(기존)
+    ];
+    let chosen: any = null;
+    for (const c of candidates) {
+      try { const r = await checkProxy(c); if (r.ok) { chosen = c; break; } } catch {}
+    }
+    if (chosen) {
+      proxy = chosen;
+      opts.log?.(`🔄 이번 방문 전용 IP 세션 발급 — 방문 동안 IP를 고정하고(자연스러움·안정), 다음 방문엔 완전히 다른 IP로 바꿔요(엇갈림)`);
+    } else {
+      // sticky가 다 실패 → 로테이팅(823)으로라도 접속(튕김 방지). IP 고정은 못 하지만 방문은 성공.
+      proxy = rotating;
+      opts.log?.(`⚠️ 고정 IP 세션(sticky)이 프록시 서버에서 지금 응답하지 않아 일반 프록시로 접속해요(방문은 정상, IP 고정만 생략).`);
+    }
   }
   if (proxy) {
     const masked = (() => {
@@ -5758,58 +5770,39 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
   if (target.type === "place") {
     const dom = (target as any).domain || "place";
     const kw = (() => { try { return decodeURIComponent(new URL(page.url()).searchParams.get("query") || ""); } catch { return ""; } })();
-    // 현재 페이지를 넉넉히 스크롤하며 대상 링크를 찾아 클릭. 목록 페이지(수십 위 전부 노출)에서 씀.
+    // 현재 페이지를 스크롤하며 대상을 찾아 클릭. 대상 링크는 ①href에 placeId ②data 속성/텍스트로 찾는다(JS 렌더 목록 대응).
     const findAndClickInList = async (): Promise<any | null> => {
-      for (let s = 0; s < 16; s++) {
+      for (let s = 0; s < 18; s++) {
+        // 1) href에 placeId가 박힌 링크(pcmap 목록은 보통 박혀 있음)
         const h = await page.evaluateHandle((id: string) => {
           const as = Array.from(document.querySelectorAll("a")) as HTMLAnchorElement[];
-          return as.find(a => a.href.includes(id) && /place\.naver\.com|\/place\/|m\.place|pcmap/.test(a.href) && !/map\.naver\.com\/p\/search/.test(a.href)) || null;
+          // 지도(map.naver.com/p/search)·엉뚱한 링크 제외, placeId 포함 상세만
+          return as.find(a => a.href.includes("/" + id) && /place|pcmap/.test(a.href) && !/map\.naver\.com\/p\/search|\/review|\/photo|\/menu/.test(a.href))
+              || as.find(a => a.href.includes(id) && /place\.naver\.com|\/place\/|m\.place|pcmap/.test(a.href) && !/map\.naver\.com\/p\/search/.test(a.href)) || null;
         }, needle).catch(() => null);
         const el = h && h.asElement ? h.asElement() : null;
-        if (el) { log(`  🎯 플레이스 목록에서 대상 발견 → 클릭 진입(정상 검색 클릭 신호, 약 ${s + 1}스크롤)`); return await enterVia(el, s); }
+        if (el) { log(`  🎯 플레이스 목록에서 대상 발견 → 클릭 진입(정상 검색 클릭 신호, 약 ${s + 1}스크롤)`); const r = await enterVia(el, s); if (r) return r; }
+        // 2) 못 찾으면 더 스크롤(lazy 로드). 마지막까지 없으면 이 페이지엔 대상이 그 순위 밖.
         await page.mouse.wheel(0, inflowRndInt(900, 1500));
         await page.waitForTimeout(inflowRndInt(700, 1500));
       }
       return null;
     };
-    // ① 통합검색의 '플레이스 더보기'를 눌러 전체 순위 목록을 펼친다(가장 자연스러운 흐름).
-    try {
-      // ★네이버 실제 버튼 텍스트(2026-09 확인) = "펼쳐서 더보기". 이걸 최우선으로, 스크롤로 화면에 올린 뒤 클릭.
-      const moreClicked = await page.evaluate(() => {
-        const nodes = Array.from(document.querySelectorAll("a,button,span,div")) as HTMLElement[];
-        const isMore = (t: string) => /펼쳐서\s*더보기|플레이스\s*더보기|장소\s*더보기|더보기\s*[▾⌄]|^더보기$|목록\s*보기/.test(t);
-        // 클릭 가능한(가장 안쪽) 요소 우선
-        let cand = nodes.find(e => isMore((e.textContent || "").trim()) && (e.getBoundingClientRect().height > 0));
-        if (cand) {
-          const clickable = (cand.closest("a,button") as HTMLElement) || cand;
-          clickable.scrollIntoView({ block: "center" });
-          (clickable as HTMLElement).click();
-          return (cand.textContent || "").trim().slice(0, 20);
-        }
-        return "";
-      }).catch(() => "");
-      if (moreClicked) {
-        log(`  🔽 '${moreClicked}'를 눌러 전체 순위 목록을 펼칩니다`);
-        await page.waitForTimeout(inflowRndInt(1800, 3200));
-        const viaMore = await findAndClickInList();
-        if (viaMore) return viaMore;
-        log("  ↪ 더보기 펼침 후에도 인라인에서 못 찾음 — 플레이스 목록 페이지로 이동합니다");
-      } else {
-        log("  ↪ '펼쳐서 더보기' 버튼을 못 찾음 — 플레이스 목록 페이지로 바로 이동합니다");
-      }
-    } catch { /* 더보기 실패 시 목록 URL로 */ }
-    // ② 플레이스 순위 목록 페이지로 직접 이동해 대상을 찾아 클릭(모바일 우선 → pcmap 폴백). 1~수십위 전부 노출.
+    // ★통합검색 '더보기' 클릭은 네이버가 지도로 튕기거나 href에 placeId가 없어 불안정 → 순위측정(crawlPlaces)이 쓰는
+    //   플레이스 목록 페이지(pcmap/m.place list)로 바로 간다. 여기 링크엔 placeId가 확실히 박혀 있어 낮은 순위(7위 등)도 클릭 진입 가능.
+    //   list?query= 는 '검색결과 목록'이라 여기서 클릭 = 검색을 거친 정상 진입(순위 신호 유지)이다.
     if (kw) {
       for (const lu of [
-        `https://m.place.naver.com/${dom}/list?query=${encodeURIComponent(kw)}`,
         `https://pcmap.place.naver.com/${dom}/list?query=${encodeURIComponent(kw)}`,
+        `https://m.place.naver.com/${dom}/list?query=${encodeURIComponent(kw)}`,
       ]) {
         try {
-          log(`  🔎 '플레이스 목록'에서 대상 찾는 중… (통합검색 카드 밖 순위)`);
+          log(`  🔎 '플레이스 목록'에서 대상 찾는 중… (통합검색 카드 밖 순위까지 전부 노출)`);
           await page.goto(lu, { waitUntil: "domcontentloaded", timeout: 25000 });
-          await page.waitForTimeout(inflowRndInt(1500, 2800));
+          await page.waitForTimeout(inflowRndInt(1600, 2800));
           const found = await findAndClickInList();
           if (found) return found;
+          log(`  ↪ 이 목록에서 대상을 못 찾음(다음 목록 시도 또는 순위 밖)`);
         } catch { /* 다음 목록 URL */ }
       }
     }
