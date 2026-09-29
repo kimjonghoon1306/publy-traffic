@@ -5774,20 +5774,28 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
     };
     // ① 통합검색의 '플레이스 더보기'를 눌러 전체 순위 목록을 펼친다(가장 자연스러운 흐름).
     try {
+      // ★네이버 실제 버튼 텍스트(2026-09 확인) = "펼쳐서 더보기". 이걸 최우선으로, 스크롤로 화면에 올린 뒤 클릭.
       const moreClicked = await page.evaluate(() => {
-        const nodes = Array.from(document.querySelectorAll("a,button")) as HTMLElement[];
-        const isMore = (t: string) => /플레이스\s*더보기|장소\s*더보기|더보기|목록\s*보기|더 보기/.test(t);
-        // place 섹션 안의 더보기 우선
-        let cand = nodes.find(e => isMore((e.textContent || "").trim()) && /place|플레이스|지도|장소/i.test((e.closest("section,div,li")?.textContent) || ""));
-        if (!cand) cand = nodes.find(e => /플레이스\s*더보기|장소\s*더보기/.test((e.textContent || "").trim()));
-        if (cand) { cand.click(); return true; }
-        return false;
-      }).catch(() => false);
+        const nodes = Array.from(document.querySelectorAll("a,button,span,div")) as HTMLElement[];
+        const isMore = (t: string) => /펼쳐서\s*더보기|플레이스\s*더보기|장소\s*더보기|더보기\s*[▾⌄]|^더보기$|목록\s*보기/.test(t);
+        // 클릭 가능한(가장 안쪽) 요소 우선
+        let cand = nodes.find(e => isMore((e.textContent || "").trim()) && (e.getBoundingClientRect().height > 0));
+        if (cand) {
+          const clickable = (cand.closest("a,button") as HTMLElement) || cand;
+          clickable.scrollIntoView({ block: "center" });
+          (clickable as HTMLElement).click();
+          return (cand.textContent || "").trim().slice(0, 20);
+        }
+        return "";
+      }).catch(() => "");
       if (moreClicked) {
-        log("  🔽 '플레이스 더보기'를 눌러 전체 순위 목록을 펼칩니다");
-        await page.waitForTimeout(inflowRndInt(1600, 3000));
+        log(`  🔽 '${moreClicked}'를 눌러 전체 순위 목록을 펼칩니다`);
+        await page.waitForTimeout(inflowRndInt(1800, 3200));
         const viaMore = await findAndClickInList();
         if (viaMore) return viaMore;
+        log("  ↪ 더보기 펼침 후에도 인라인에서 못 찾음 — 플레이스 목록 페이지로 이동합니다");
+      } else {
+        log("  ↪ '펼쳐서 더보기' 버튼을 못 찾음 — 플레이스 목록 페이지로 바로 이동합니다");
       }
     } catch { /* 더보기 실패 시 목록 URL로 */ }
     // ② 플레이스 순위 목록 페이지로 직접 이동해 대상을 찾아 클릭(모바일 우선 → pcmap 폴백). 1~수십위 전부 노출.
