@@ -5751,11 +5751,63 @@ async function inflowFindAndEnter(page: any, target: InflowTarget, log: (m: stri
     log(`  🛒 쇼핑결과에 이 상품이 안 보여요 — 이 방문은 건너뜁니다. 원인: ①이 키워드에서 노출 순위 밖 ②스마트스토어에서 '네이버쇼핑 노출'을 안 켰을 수 있어요(스토어 상품관리에서 노출 설정 확인) → 노출되는 키워드로 바꾸거나 노출을 켜면 유입됩니다.`);
     return null;   // 방문 무효 → 호출부가 다음 방문으로(로그인/직접진입 안 함)
   }
-  // 🏢 플레이스 폴백(B) — 검색결과에서 못 찾으면(또는 지도로만 뜨면) 플레이스 상세로 직접 진입
+  // 🏢 플레이스 폴백 — 통합검색 인라인 place 카드는 모바일 5개·PC 12개까지만 → 그 아래 순위(예: 7위)는 안 보인다.
+  //   ★핵심: 여기서 상세 URL(/home)로 '직접 진입'하면 '검색 안 거친 방문'이라 순위 신호(검색 클릭)가 0이다(테리 실측: 7위에서 안 오름).
+  //   → ①'플레이스 더보기'를 눌러 전체 순위 목록을 펼치고 ②그 목록에서 대상을 찾아 '진짜 클릭'한다(순위측정이 30위까지 찾는 그 목록과 동일).
+  //   목록에서 클릭 = 사용자가 순위를 훑고 선택한 정상 신호 → 낮은 순위도 순위 기여가 살아난다.
   if (target.type === "place") {
     const dom = (target as any).domain || "place";
+    const kw = (() => { try { return decodeURIComponent(new URL(page.url()).searchParams.get("query") || ""); } catch { return ""; } })();
+    // 현재 페이지를 넉넉히 스크롤하며 대상 링크를 찾아 클릭. 목록 페이지(수십 위 전부 노출)에서 씀.
+    const findAndClickInList = async (): Promise<any | null> => {
+      for (let s = 0; s < 16; s++) {
+        const h = await page.evaluateHandle((id: string) => {
+          const as = Array.from(document.querySelectorAll("a")) as HTMLAnchorElement[];
+          return as.find(a => a.href.includes(id) && /place\.naver\.com|\/place\/|m\.place|pcmap/.test(a.href) && !/map\.naver\.com\/p\/search/.test(a.href)) || null;
+        }, needle).catch(() => null);
+        const el = h && h.asElement ? h.asElement() : null;
+        if (el) { log(`  🎯 플레이스 목록에서 대상 발견 → 클릭 진입(정상 검색 클릭 신호, 약 ${s + 1}스크롤)`); return await enterVia(el, s); }
+        await page.mouse.wheel(0, inflowRndInt(900, 1500));
+        await page.waitForTimeout(inflowRndInt(700, 1500));
+      }
+      return null;
+    };
+    // ① 통합검색의 '플레이스 더보기'를 눌러 전체 순위 목록을 펼친다(가장 자연스러운 흐름).
+    try {
+      const moreClicked = await page.evaluate(() => {
+        const nodes = Array.from(document.querySelectorAll("a,button")) as HTMLElement[];
+        const isMore = (t: string) => /플레이스\s*더보기|장소\s*더보기|더보기|목록\s*보기|더 보기/.test(t);
+        // place 섹션 안의 더보기 우선
+        let cand = nodes.find(e => isMore((e.textContent || "").trim()) && /place|플레이스|지도|장소/i.test((e.closest("section,div,li")?.textContent) || ""));
+        if (!cand) cand = nodes.find(e => /플레이스\s*더보기|장소\s*더보기/.test((e.textContent || "").trim()));
+        if (cand) { cand.click(); return true; }
+        return false;
+      }).catch(() => false);
+      if (moreClicked) {
+        log("  🔽 '플레이스 더보기'를 눌러 전체 순위 목록을 펼칩니다");
+        await page.waitForTimeout(inflowRndInt(1600, 3000));
+        const viaMore = await findAndClickInList();
+        if (viaMore) return viaMore;
+      }
+    } catch { /* 더보기 실패 시 목록 URL로 */ }
+    // ② 플레이스 순위 목록 페이지로 직접 이동해 대상을 찾아 클릭(모바일 우선 → pcmap 폴백). 1~수십위 전부 노출.
+    if (kw) {
+      for (const lu of [
+        `https://m.place.naver.com/${dom}/list?query=${encodeURIComponent(kw)}`,
+        `https://pcmap.place.naver.com/${dom}/list?query=${encodeURIComponent(kw)}`,
+      ]) {
+        try {
+          log(`  🔎 '플레이스 목록'에서 대상 찾는 중… (통합검색 카드 밖 순위)`);
+          await page.goto(lu, { waitUntil: "domcontentloaded", timeout: 25000 });
+          await page.waitForTimeout(inflowRndInt(1500, 2800));
+          const found = await findAndClickInList();
+          if (found) return found;
+        } catch { /* 다음 목록 URL */ }
+      }
+    }
+    // ③ 최후 — 목록에서도 못 찾으면(구조 변경 등) 상세 직접 진입. 순위 신호는 약하지만 체류·액션은 남긴다.
     const url = `https://m.place.naver.com/${dom}/${needle}/home`;
-    log(`  🏢 검색결과에 플레이스 카드가 안 보여 상세로 직접 진입 → ${url}`);
+    log(`  🏢 목록에서도 못 찾아 최후로 상세 직접 진입 → ${url} (순위 신호 약함 — 키워드에서 노출 순위 밖일 수 있음)`);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(inflowRndInt(1200, 2400));
     return page;
